@@ -1,12 +1,16 @@
 pub mod alpha;
+pub mod automata;
+pub mod concrete;
 pub mod constellation;
 pub mod dep_graph;
 pub mod diagram;
 pub mod execution;
+pub mod interactive;
 pub mod polarised;
 pub mod subst;
 pub mod term;
 pub mod unify;
+pub mod viz;
 
 #[cfg(test)]
 mod engine_tests;

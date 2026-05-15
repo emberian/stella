@@ -1,0 +1,17 @@
+# Holmakefile for the stella HOL4 verification track.
+#
+# Build order (dependencies flow downward):
+#   stellaTermScript     -- first-order terms, vars, subst  (§B.1.2–B.1.8)
+#   stellaPolarisedScript -- polarised signature, rays, |·|  (§48.2–48.7)
+#   stellaMatchScript    -- matchability ⋈ and §49.9 checks  (§49.7–49.9)
+#                          alpha_unifiable_sym proved as THEOREM (no axiom)
+#   stellaDiagramScript  -- dependency graph D[Φ;C]          (§49.10–§49.14)
+#
+# Usage:  HOLDIR=~/dev/HOL ~/dev/HOL/bin/Holmake
+
+INCLUDES = $(HOLDIR)/src/finite_maps \
+           $(HOLDIR)/examples/generic_graphs
+
+# Default: build all theories in dependency order.
+all: stellaTermTheory.uo stellaPolarisedTheory.uo stellaMatchTheory.uo \
+     stellaDiagramTheory.uo
