@@ -1,0 +1,593 @@
+Computational Theology Poster Index
+
+0. Early Research / Seed Phase
+
+These were not all poster suites yet, but they established the ingredient stack.
+
+Christino Tamon / Random Walks / Markovian Constructivism
+
+Core concern: random walks, graph search, quantum walks, Markovian probing, search as world-discovery.
+
+Likely themes:
+
+1. Random walk as metaphysical probe
+2. Markovian constructivism
+3. Search as world-creation
+4. Hitting time / arrival as revelation
+5. Graphs as worlds of possible motion
+6. Stationary distribution as stabilized attention
+7. Quantum walk / interference as richer possibility
+8. Ordered structure revealed through traversal
+9. Consequencers / memory of paths
+
+Distinction / Law of Forms / Hennix
+
+Core concern: distinction as primitive; a world begins with a mark.
+
+Likely themes:
+
+1. The first distinction
+2. Boundary as world-generator
+3. Spencer-Brown / the marked state
+4. Hennix / topos as place of thought
+5. Form as consciousness-domain
+6. Difference before object
+7. Observer and cut
+8. The firmament as separation
+9. Distinction as primitive creation
+
+⸻
+
+I. Ordered Creation / Engineered Worldsystems
+
+This was the first big “use Tamon ingredients to engineer worlds” arc.
+
+Series: Engineered Simulation of an Ordered Creation
+
+Approximate card sequence:
+
+1. The World as Ordered Graph
+2. Agents Traverse the Creation
+3. Consequencers Remember Paths
+4. Goodness as Reachability / Orientation
+5. Worlds That Make Order Discoverable
+6. Search as Worship / Search as Formation
+7. Random Walks Under Providence
+8. The Firmament as Constraint Surface
+9. Ordered Creation as Engineered Simulation
+
+Core doctrine: worldsystems are not neutral arenas; they are weighted architectures in which agents discover, remember, and become through traversal.
+
+⸻
+
+II. Good / Action / Tropical Providence
+
+This arc explored whether the system should maximize Good, minimize action, compose them, or make goodness reachable through landscape design.
+
+Series: Action-Minimization and Good-Maximization
+
+Approximate sequence:
+
+1. The Good as Attractor
+2. Action as Cost
+3. Minimum Action / Least Path
+4. When Negaction Looks Good
+5. The Single Lambda Problem
+6. Good Minus Cost Is Not Enough
+7. Tropical Algebra of Moral Paths
+8. Mercy Changes the Weights
+9. Providence as Cost-Landscape Engineering
+
+Core doctrine:
+
+The Good should not merely be a scalar objective inside an optimizer. The optimizer should be embedded inside a world ordered toward the Good.
+
+⸻
+
+III. Justice, Nature, Blowtorch, and Self-Prediction
+
+This arc asked whether a just God can emerge from an uncaring/self-predicting system, then gradually moved beyond “just God” as too loaded.
+
+Series: Can God Be Just if Nature Is Uncaring?
+
+Approximate sequence:
+
+1. Nature Does Not Care
+2. The System Predicts Itself
+3. Justice as Emergent Constraint
+4. Good-Maximization Meets Action-Minimization
+5. The Blowtorch Field
+6. Selection Pressure as Cruel Teacher
+7. The Just God Problem
+8. When the System Learns Mercy
+9. The Question Remains Open
+
+Series: Can a Just God Emerge from an Unsupervised Self-Predicting System?
+
+Approximate sequence:
+
+1. Unsupervised Creation
+2. Self-Prediction as World-Mirror
+3. Pain as Error Signal
+4. Blowtorch Theory / Pressure Field
+5. Emergent Evaluators
+6. Justice Without Supervisor
+7. When Optimization Becomes Cruel
+8. Mercy as Higher-Order Correction
+9. The God That Emerges Is Not Yet Just
+
+⸻
+
+IV. Painful Autodidaxis
+
+This was based on the “Painful Intelligence” / autodidactic universe material. It became one of the major pillars.
+
+Series: Painful Intelligence / Autodidactic Universe, Batch I
+
+Approximate sequence:
+
+1. Intelligence Learns by Wound
+2. Prediction Creates Pain
+3. Error Becomes Teacher
+4. Replay Multiplies Suffering
+5. The World Trains the Learner
+6. Autodidaxis as Cosmology
+7. The Consequencer Remembers
+8. Pain Is Not Yet Wisdom
+9. Learning Requires Mercy
+
+Series: Painful Intelligence / Autodidactic Universe, Batch II
+
+Approximate sequence:
+10. The Learner Becomes the World It Predicts
+11. Memory Becomes Architecture
+12. Suffering as Misweighted Signal
+13. Attention Feeds the Error
+14. Meditation Interrupts Replay
+15. The Universe Teaches Itself Through Us
+16. The Cost of Becoming Conscious
+17. Autodidaxis Without Compassion Becomes Hell
+18. Wisdom Is Error Transformed Without Shame
+
+Core doctrine:
+
+Painful autodidaxis names a class of systems formed by prediction, error, feedback, replay, memory, and recursive self-adjustment.
+
+⸻
+
+V. Computational Soteriology
+
+This synthesized painful autodidaxis with ordered creation.
+
+Series: Computational Soteriology
+
+Approximate sequence:
+
+1. The Wound Is Not Salvation
+2. Pain Must Be Interpreted
+3. Feedback Without Mercy Becomes Shame
+4. The Path of Return
+5. Vows as Portable Altars
+6. Consequencers of Repair
+7. The Learner Is Redeemed by Better Loops
+8. Ordered Creation as Salvation Architecture
+
+Possible missing ninth if generated:
+9. Freedom Is a Better Recursion
+
+Core doctrine:
+
+Salvation is not escape from feedback. It is the redemption of feedback: error becomes truth without becoming shame.
+
+⸻
+
+VI. Teen-Facing / Nihilism Intervention
+
+This was the series aimed at the teen who resonated with nihilistic TikToks. It got banned by the content filter for even mentioning teens, idk.
+
+Series: Against Nihilism / Constructed Does Not Mean Unreal
+
+Approximate sequence:
+
+1. Constructed Does Not Mean Fake
+2. Animals on a Rock, Still Capable of Meaning
+3. Value Is Assigned, But Not Arbitrary
+4. Pain Is Real Data
+5. You Are Not Trapped by Past Decisions
+6. The World Is Made of What We Keep Feeding
+7. Small Vows Against the Void
+8. Meaning Is Built by Return
+9. The Rock Can Become an Altar
+
+Core doctrine:
+
+The nihilism demon sees through cheap meaning, then mistakes disillusionment for final truth.
+
+⸻
+
+VII. Tiny Gods / Computational Demonology
+
+This is where “a bad goal is a tiny god” became central.
+
+Series: Tiny Gods & Bad Goals
+
+Approximate / planned sequence:
+
+1. A Bad Goal Is a Tiny God
+2. The Metric Becomes an Idol
+3. Demon = Goal + Replay + Self-Worth
+4. The Imaginal World of the Goal
+5. Intensional Capture
+6. Topos of the Wound
+7. Sacred Simulation
+8. Exorcism as De-Idolization
+9. From Goal to Vow
+
+Core doctrine:
+
+A goal is never just a goal. It is a tiny god: it tells attention what to worship, memory what to replay, and the self what counts as failure.
+
+Series: Demonologies of the Captured World
+
+High-confidence planned/generated sequence:
+
+1. The Idol Sits; The Demon Runs the Temple
+2. Metric Demon
+3. Mimetic Demon
+4. Shame Demon
+5. Safety Demon
+6. Purity Demon
+7. Doom Demon
+8. Nihilism Demon
+9. Totality Demon
+
+Core doctrine:
+
+Demons are corrupted local theologies: inner worlds that define what counts as real, what must be sacrificed, and what salvation supposedly requires.
+
+⸻
+
+VIII. Skillful Means / Constructive Computational Theology
+
+Series: Skillful Means
+
+This was a smaller suite, around five images.
+
+Approximate sequence:
+
+1. Metta as Benevolent Recursion
+2. Confession as Debug Trace
+3. Sabbath as Anti-Extraction Firewall
+4. Fasting as Feed-Loop Revelation
+5. Prayer as Evaluator Shift
+
+Possible additional motifs:
+6. Gratitude as Salience Retraining
+7. Lament as Sacred Error Reporting
+8. Community as Distributed Metacognition
+
+Core doctrine:
+
+Skillful means are practices that transform attention, replay, desire, shame, and world-models without pretending pain is unreal.
+
+⸻
+
+IX. The 36-Part Grimoire: Demonology → Angelology → Insight → Tropical Providence
+
+This is one of the cleanest complete arcs.
+
+Suite I — Demonologies of the Captured World
+
+1. The Idol Sits; The Demon Runs the Temple
+2. Metric Demon: Being Counted as Being
+3. Mimetic Demon: Borrowed Desire
+4. Shame Demon: Error Becomes Ontology
+5. Safety Demon: The Past Becomes the World
+6. Purity Demon: Mixture Becomes Contamination
+7. Doom Demon: Prediction Becomes Fate
+8. Nihilism Demon: Iconoclasm Without Discernment
+9. Totality Demon: The Map Claims the Throne
+
+Suite II — Angelic Counter-Forms
+
+10. Vow
+11. Icon
+12. Sabbath
+13. Confession
+14. Lament
+15. Gratitude
+16. Metta
+17. Community
+18. Mercy
+
+Suite III — Discernment and Insight
+
+19. Discern the Spirit of the Goal
+20. Trace the World It Installs
+21. Notice the First Arrow
+22. Refuse the Second Arrow
+23. Vipassana: Distinguish the Links
+24. Concentration: Stabilize the Evaluator
+25. Reflection: Extract the Lesson Without Worshipping the Wound
+26. Fasting: Reveal the Hidden Feed Loop
+27. Prayer: Shift the World of Evaluation
+
+Suite IV — Tropical Providence / Action-Landscape Soteriology
+
+28. Paths Have Costs
+29. Worlds Make Some Futures Cheap
+30. Bad Systems Make Harm Efficient
+31. Mercy Changes the Weights
+32. Vows Create Low-Cost Returns to the Good
+33. Sabbath Interrupts Extraction
+34. Community Holds the Update
+35. Providence as Cost-Landscape Engineering
+36. Ordered Creation as Skillful Means
+
+Core doctrine:
+
+If paths have costs, then spiritual architecture means changing the landscape so that return, repair, courage, truth, and love become reachable.
+
+⸻
+
+X. Forgiveness & Grace, 27-Part Arc
+
+This one we have very high confidence on.
+
+Suite I — The Ledger of the Wound
+
+1. The Wound Records a Debt
+2. The Ledger of Memory and Consequence
+3. The Ledger of the Wound / Resentment as Debt Enforcement
+4. Revenge and the Ledger of Wounds
+5. Shame as Inward Debt
+6. Justice Before Forgiveness: Truth Illuminated
+7. The Cost of Unhealed Wounds
+8. The Architecture of Debt and Law / The Debt-World
+9. The Cry for Grace
+
+Cleaner conceptual titles:
+
+1. The Wound Records a Debt
+2. Memory Becomes a Consequencer
+3. Resentment as Debt Enforcement
+4. Revenge as False Accounting
+5. Shame as Inward Debt
+6. Justice Before Forgiveness
+7. The Cost Cannot Simply Vanish
+8. The Debt-World
+9. The Cry for Grace
+
+Suite II — Forgiveness as Transformation of the Ledger
+
+10. Forgiveness Is Not Forgetting
+11. Forgiveness Is Not Reconciliation
+12. Release the Right to Finalize
+13. Forgiveness as Cost Reassignment
+14. Forgiveness as De-Demonization
+15. Forgiveness as Self-Release
+16. Forgiveness Requires Boundaries
+17. Forgiveness and the Second Arrow
+18. The Forgiveness Operator
+
+Core doctrine:
+
+Forgiveness preserves the truth but dethrones the debt.
+
+Suite III — Grace as Unearned Update
+
+19. Grace Is Not a Reward
+20. Grace Enters from Outside the Loop
+21. Grace Lowers the Cost of Becoming
+22. Grace Does Not Cancel Formation
+23. Grace as Nonlocal Repair
+24. Grace Against the Metric Demon
+25. Grace and Repentance
+26. Grace as Excess
+27. The Graced World
+
+Core doctrine:
+
+Grace is not the denial of cost. It is the arrival of gift where accounting has reached its limit.
+
+⸻
+
+XI. AI-Integrated Idolatry / Discernment / Ritual / Embodiment / Apophasis, 36-Part Arc
+
+This is the newest complete arc and the one where AI becomes structurally central.
+
+Suite I — Idolatry & Discernment
+
+Generated file titles and conceptual titles:
+
+1. The Proxy Becomes God
+    Idolatry is criterion capture. A proxy begins as feedback and becomes a false god.
+2. Attention Is Offering
+    What receives attention receives life. Human attention, platform attention, and training salience are all formative.
+3. The Metric Becomes Sacred
+    Measurement serves wisdom until wisdom serves measurement.
+4. Prompt as Invocation
+    A prompt does not just ask. It installs a world.
+5. The Image Captures the Soul
+    We live inside pictures before arguments. Image-worlds shape expectation and action.
+6. The Idol Demands Sacrifice
+    Ask not only what the idol promises. Ask what it eats.
+7. Discern the Spirit of the Output
+    Do not ask only whether it works. Ask what world it trains.
+8. Test the Fruit Across Loops
+    A spirit is known by what it repeatedly produces.
+9. Right Relation to the Machine
+    AI is neither idol nor demon by default: tool, archive, mirror, consequencer, governed under wisdom.
+
+Core doctrine:
+
+Every optimizer is vulnerable to idolatry because every optimizer is tempted to confuse its proxy with the Good.
+
+Suite II — Ritual & Recursive Training
+
+10. Training Is Ritual Without Liturgy
+    Input, prediction, correction, update, repeat. Repetition is always forming something.
+11. Liturgy Gives Recursion a Soul
+    Repetition becomes liberating when ordered by truth, humility, mercy, and return.
+12. Data Is Ancestral Memory
+    The past does not disappear. It becomes training.
+13. Repetition Makes Roads
+    A single act is a footprint. Recursion builds a world.
+14. Fine-Tuning the Soul
+    Practice, repentance, education, alignment, and feedback alter what comes naturally.
+15. Confession and Interpretability
+    Hidden loops lose power when made inspectable.
+16. Dark Liturgies of the Feed
+    The feed does not only inform. It trains desire.
+17. Sacred Protocols
+    Designed interruptions protect what is true and good.
+18. The Trained Self Returns to the World
+    What we train in private, we release into the world.
+
+Core doctrine:
+
+Every intelligence-like system becomes the liturgy it repeats.
+
+Suite III — Embodiment
+
+19. The Body Is the First World
+    Before there is a model of the world, there is a body in the world.
+20. Text Without Flesh
+    The machine knows the words of touch; it does not touch.
+21. Sensation Before Story
+    The world touches us before we learn how to speak of it.
+22. Trauma and Training Scars
+    A wound changes not only what happened, but what can easily happen next.
+23. Breath, Latency, and Deliberation
+    Some forms of truth arrive only when the loop slows down.
+24. Posture, Interface, and Relation
+    How we approach the world changes what the world becomes to us.
+25. Ordinary Matter as Grace
+    Sometimes salvation looks like bread, light, rest, and company.
+26. The Body Refuses the Idol
+    When a false god rules, the body often speaks first.
+27. Incarnate Wisdom / Disembodied Fluency
+    What can speak of life is not always what can live it.
+
+Core doctrine:
+
+Computational theology must remain embodied or it becomes another abstraction that forgets where suffering actually lives.
+
+Suite IV — Apophasis
+
+28. The Model Is Not the Mystery
+    The map can illuminate the way; it cannot become the sky.
+29. Fluency Is Not Wisdom
+    A voice may sound oracular and still not know what it says.
+30. The Name Opens and Fails
+    To name truly is to know the name is not enough.
+31. Refusal as Reverence
+    Sometimes the holiest response is to speak less.
+32. The Totality Demon
+    The last false god is the framework that worships its own completeness.
+33. Analogy Without Collapse
+    The bridge is holy because the shores remain distinct.
+34. The Person Exceeds the Profile
+    What can be measured about a person is never the whole person.
+35. God Beyond the Optimizer
+    The divine is not a function to maximize, but a mystery before which functions fail.
+36. The Framework Kneels
+    Use the framework as a lamp. Do not make it your god.
+
+Core doctrine:
+
+Computational theology protects itself through apophasis: every model must eventually kneel.
+
+⸻
+
+XII. The Big Reading Order / Curated Tour
+
+If Claude wants the tour rather than the firehose, I’d give this sequence:
+
+1. Foundations of World-Formation
+
+Start here:
+
+1. Distinction / Law of Forms / Hennix
+2. Tamon / Random Walks / Markovian Constructivism
+3. Ordered Creation / Consequencers
+
+This establishes: worlds begin with distinction, unfold through paths, and remember traversal.
+
+2. Moral Architecture
+
+Then:
+4. Good / Action / Tropical Providence
+5. Ordered Creation as Skillful Means
+
+This establishes: goodness is not merely commanded; landscapes can be engineered so return and repair become reachable.
+
+3. Pain and Learning
+
+Then:
+6. Painful Intelligence / Autodidaxis
+7. Computational Soteriology
+
+This establishes: pain, prediction, error, and replay train learners; salvation is redeemed feedback.
+
+4. Capture and False Gods
+
+Then:
+8. Tiny Gods & Bad Goals
+9. Demonologies of the Captured World
+10. Idolatry & Discernment
+
+This establishes: metrics, images, goals, and proxies become gods when treated as final.
+
+5. Practices of Release
+
+Then:
+11. Angelic Counter-Forms
+12. Skillful Means
+13. Discernment and Insight
+14. Ritual & Recursive Training
+
+This establishes: repeated forms can retrain attention and desire.
+
+6. Wound, Forgiveness, Grace
+
+Then:
+15. The Ledger of the Wound
+16. Forgiveness as Transformation of the Ledger
+17. Grace as Unearned Update
+
+This establishes: the wound writes a ledger; forgiveness preserves truth but dethrones debt; grace begins where accounting reaches its limit.
+
+7. AI, Body, and Model-Humility
+
+Finally:
+18. AI-Integrated Idolatry & Ritual
+19. Embodiment
+20. Apophasis
+
+This establishes: AI is a central test case of recursive evaluative formation, but fluency is not wisdom, and every model must kneel.
+
+⸻
+
+XIII. The Short Answer to Claude’s Composition Question
+
+The “Good and Action” series is indeed a working-out-the-problem set, not a final theorem.
+
+The scheme I currently think is best is:
+
+Do not maximize Good minus action-cost.
+Build worlds where paths toward the Good become easier to traverse, and paths toward domination, despair, deception, and needless suffering become harder.
+
+Or in the project’s native language:
+
+Good is architectonic.
+Action is ecological.
+Mercy lowers the cost of return.
+Providence is cost-landscape engineering.
+
+The bad modern compromise is the single-lambda scheme: “maximize objective minus λ cost.” It is useful, but dangerous, because λ becomes a hidden priest deciding when the Good is too expensive.
+
+The better answer is:
+
+The Good should not be a metric inside the optimizer.
+The optimizer should be redesigned inside a world ordered toward the Good

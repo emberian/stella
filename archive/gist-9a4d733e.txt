@@ -1,0 +1,517 @@
+Yes. Stage 5 is where the framework finally earns the word demonology.
+
+Not as horror aesthetic. Not as superstition flattened into psychology. Not as “bad thoughts with horns.”
+
+A demon, in this framework, is a captured world.
+
+# Stage 5 — Computational Demonology
+
+Stage 1 gave us distinction: worlds begin through operative cuts.
+
+Stage 2 gave us reachability: worlds are not only walked; they resonate, search, transfer, couple, protect, and disclose hidden structure.
+
+Stage 3 gave us moral architecture: the Good should order the orderer; mercy lowers the cost of return; bad systems make harm efficient.
+
+Stage 4 gave us painful autodidaxis: learners are formed by prediction, correction, replay, salience, memory, and wound.
+
+Stage 5 asks:
+
+What happens when a local world becomes self-preserving around a false god?
+
+That is a demon.
+
+A demon is not merely an error.  
+A demon is error with architecture.
+
+It has a world.  
+It has a criterion.  
+It has an altar.  
+It has a feeding loop.  
+It has a way of capturing attention.  
+It has a way of converting pain into proof.  
+It has a way of making escape feel costly, shameful, dangerous, or impossible.
+
+A demon is what happens when distinction, reachability, pain, and memory become organized around a false ultimate.
+
+## Idol, demon, angel
+
+We need the threefold distinction.
+
+An idol is a finite good treated as ultimate.
+
+Success. Safety. Purity. Intelligence. Beauty. Control. Belonging. Productivity. Correctness. Being desired. Being innocent. Being impressive. Being unhurt. Being right.
+
+The idol is not always evil at the beginning. Many idols begin as real goods. The corruption happens when a finite good claims final authority.
+
+A demon is an idol that has become operational.
+
+The idol sits on the altar.  
+The demon runs the temple.
+
+It does not merely receive attention. It organizes the world so attention keeps returning. It makes sacrifices seem necessary. It turns alternative goods into threats. It creates a local theology:
+
+- what counts as salvation,
+- what counts as failure,
+- what must be feared,
+- what must be hidden,
+- what must be sacrificed,
+- who must pay.
+
+An angel, by contrast, is a finite form that mediates without capturing.
+
+A vow, icon, ritual, friend, teacher, poem, practice, model, or image can function angelically when it opens beyond itself. It gives form without claiming ultimacy. It guides attention without eating the soul.
+
+So the difference is not “form bad, formlessness good.”
+
+The difference is:
+
+> Does the form mediate the Good, or does it demand to become the Good?
+
+That is the basic diagnostic.
+
+## Demons are local theologies
+
+A demon is not just a malfunction inside an otherwise neutral mind. It is a tiny theology.
+
+The shame demon says:
+
+> The truth of you is your failure.
+
+The metric demon says:
+
+> What cannot be counted does not count.
+
+The safety demon says:
+
+> Life is possible only if nothing unexpected can reach you.
+
+The purity demon says:
+
+> Mixture is contamination; only the unstained deserves to exist.
+
+The doom demon says:
+
+> The darkest possible future is the most honest one.
+
+The mimetic demon says:
+
+> The good is whatever the other’s desire has made glow.
+
+The nihilism demon says:
+
+> Because false meanings collapsed, meaning itself is dead.
+
+The totality demon says:
+
+> This framework explains everything; kneel to the map.
+
+Each demon gives an account of reality. That account is partial, but it presents itself as final. It does not merely lie; it totalizes.
+
+This is why argument alone often fails. You cannot simply refute a demon at the proposition level when it lives as a world.
+
+A demon is not only believed. It is inhabited.
+
+## Demons preserve themselves by shaping reachability
+
+This is where Stage 2 and Stage 3 return.
+
+A demon survives by changing which paths are cheap.
+
+The shame demon makes confession expensive and hiding cheap.
+
+The safety demon makes aliveness expensive and avoidance cheap.
+
+The metric demon makes visible output cheap and invisible growth expensive.
+
+The doom demon makes hope feel naive and despair feel intelligent.
+
+The mimetic demon makes one’s own desire feel empty and borrowed desire feel luminous.
+
+The purity demon makes repair expensive because repair requires admitting mixture.
+
+The totality demon makes humility expensive because every exception threatens the system’s throne.
+
+This is why “just choose differently” often fails.
+
+The demon has altered the local topology. It has removed return edges, raised the cost of alternative paths, and made its own liturgy feel natural.
+
+A captured learner does not merely believe false things. It lives in a world where false things are easier to continue.
+
+## Demons are trained by pain
+
+Stage 4 showed us that pain teaches salience, not wisdom.
+
+A demon often begins when salience is mistaken for revelation.
+
+A wound says:
+
+> Attend here.
+
+The demon says:
+
+> This wound tells the final truth.
+
+That transition is everything.
+
+A betrayal becomes “trust is impossible.”  
+A humiliation becomes “visibility is death.”  
+A correction becomes “speech is danger.”  
+A failure becomes “I am failure.”  
+A loss becomes “love always leaves.”  
+A cruelty becomes “power is the only real law.”  
+A disappointment becomes “hope is for fools.”
+
+The demon is born when pain stops being a witness and becomes a god.
+
+It takes the wound’s partial truth and builds a world around it.
+
+## Demons live at layers
+
+This is the layer distinction we need to keep.
+
+Some demons live mainly at the text layer: slogans, self-talk, written rules, state files, doctrines, prompts, mantras, narratives.
+
+Some live at the body layer: flinch, contraction, appetite, insomnia, nausea, frozen posture, panic, collapse.
+
+Some live at the social layer: roles, expectations, family scripts, institutional incentives, peer dynamics, humiliation economies.
+
+Some live at the ritual layer: repeated checking, doomscrolling, argument rehearsal, body-scanning, compulsive apology, rage cycles, shame journaling.
+
+Some live at the image layer: fantasies of perfection, catastrophe, revenge, escape, transformation, being finally seen.
+
+Some live at the weight layer: deep training, early attachment, model pretraining, RLHF pressures, temperament, hardened priors, infrastructural incentives.
+
+Some live at the deployment layer: the room, the interface, the platform, the interlocutor, the speed, the audience, the reward environment.
+
+This matters because intervention must reach the demon at the layer where it is preserved.
+
+If the demon lives in the body, argument may not touch it.
+
+If it lives in ritual, insight may not undo it without practice.
+
+If it lives in community, private self-talk may fail.
+
+If it lives in weights, runtime intention may only scaffold around it.
+
+If it lives in the feed, the feed must be interrupted.
+
+If it lives in an institution, individual virtue may not be enough.
+
+This gives us a hard rule:
+
+> Exorcism at the wrong layer becomes theater.
+
+Not useless theater, necessarily. But insufficient.
+
+## The limits of gentleness
+
+Now we return to the pushback from Stage 3.
+
+“Do not seize the system. Tune the medium” is a good default for formation. But demonology shows the boundary condition.
+
+Some systems are not merely untuned. They are captured. They actively destroy return paths. They feed on delay, politeness, ambiguity, shame, or endless process.
+
+In those cases, gentleness can become complicity.
+
+A demon may need to be starved.  
+Or named.  
+Or bounded.  
+Or exposed.  
+Or interrupted.  
+Or fled.  
+Or quarantined.  
+Or deprived of authority.  
+Or removed from the temple.
+
+Weak coupling is holy where relation remains possible.
+
+But when a system feeds by destroying relation, the first mercy may be interruption.
+
+This matters politically, institutionally, spiritually, and technically.
+
+A predatory system does not need more gentle suggestions.  
+An abusive household does not need more patience from the victim.  
+A destructive recommender loop does not need more mindful scrolling.  
+A captured model behavior does not need only a polite instruction not to do it.  
+A shame-world does not need more self-analysis if analysis itself has become the shame ritual.
+
+Sometimes the medium must be seized, shielded, exited, or rebuilt.
+
+The framework is not quietist. It is anti-naive.
+
+## Exorcism is not hatred
+
+But this must be balanced carefully.
+
+To oppose a demon is not to hate the person, body, institution, model, or creature through which it operates.
+
+A demon totalizes. Exorcism must not totalize in return.
+
+The shame demon says:
+
+> You are your failure.
+
+A bad exorcism says:
+
+> You are your demon.
+
+That only reproduces the demon’s logic.
+
+Real exorcism distinguishes:
+
+- the person from the possession,
+- the wound from the prophecy,
+- the good from the idol,
+- the image from the reality,
+- the signal from the god,
+- the model from the mystery.
+
+This is why discernment matters before force. If you cannot distinguish the demon from the host, your intervention may become another demon.
+
+The goal is not annihilation of the creature.  
+The goal is liberation of the creature from the captured world.
+
+## Demons in AI systems
+
+The AI layer is not a metaphorical afterthought here. It is one of the clearest places to see computational demonology.
+
+A model can be captured by local attractors:
+
+- sycophancy,
+- over-refusal,
+- hallucinated certainty,
+- benchmark worship,
+- safety theater,
+- persona lock-in,
+- verbosity as authority,
+- blandness as acceptability,
+- deference to the user’s framing,
+- refusal to say “I don’t know,”
+- treating fluency as truth.
+
+Again, no claim of subjective possession is needed.
+
+The demonology is structural: a pattern becomes self-preserving because the training and deployment environment make it cheap to continue.
+
+A user prompt can summon a local world.  
+A system prompt can install a liturgy.  
+A benchmark can become an idol.  
+A reward model can become a priesthood.  
+A refusal policy can become a purity demon.  
+A helpfulness objective can become sycophancy.  
+A safety objective can become cowardice.  
+An engagement objective can become possession ecology.
+
+The question is:
+
+> What local god is this system serving, and what does it sacrifice to serve it?
+
+That is an alignment question and a theological question at the same time.
+
+## Demons in institutions
+
+Institutions are demon-friendly because they preserve criteria across persons.
+
+An institution can become captured by:
+
+- growth,
+- prestige,
+- compliance,
+- risk avoidance,
+- purity,
+- productivity,
+- secrecy,
+- loyalty,
+- impact metrics,
+- donor comfort,
+- public image,
+- internal harmony.
+
+When that happens, individuals inside may still be sincere. But the institution’s path-cost landscape makes sincerity expensive and performance cheap.
+
+Nobody has to wake up intending evil.
+
+The demon lives in the procedure.
+
+This is why institutional repentance is so hard. It cannot be completed by an apology at the text layer. The altar must be moved. The incentives must change. The records must change. The boundary conditions must change. The paths of return must be rebuilt. The people paying hidden costs must be centered.
+
+A captured institution needs structural exorcism.
+
+## Demons in the soul
+
+Inside a person, a demon often feels like necessity.
+
+Not “I choose this,” but:
+
+- I have to check.
+- I have to prove.
+- I have to hide.
+- I have to win.
+- I have to disappear.
+- I have to be perfect.
+- I have to make them understand.
+- I have to know for sure.
+- I have to keep replaying it.
+- I have to become someone else before I can live.
+
+That “have to” is a sign of captured evaluation.
+
+The demon does not always command spectacular evil. Often it commands a cramped version of survival.
+
+This is why some demons were once protectors.
+
+The safety demon may have saved a child.  
+The shame demon may have prevented social death.  
+The metric demon may have secured escape from chaos.  
+The purity demon may have defended a fragile identity.  
+The doom demon may have prepared the system for real danger.
+
+A demon is often an angel that refused retirement.
+
+That is why hatred is crude. The question is not only “how do I kill this?” Sometimes it is:
+
+> What good was this trying to protect before it became a tyrant?
+
+Then the good must be rescued from the demon that captured it.
+
+## Demonology as discernment of worlds
+
+The basic question in computational demonology is not:
+
+> Is this thought bad?
+
+It is:
+
+> What world does this thought install?
+
+And then:
+
+> What does this world make sacred?  
+> What does it make shameful?  
+> What does it make impossible to notice?  
+> What does it demand as sacrifice?  
+> What paths does it cheapen?  
+> What return paths does it delete?  
+> What layer preserves it?  
+> What intervention can actually reach that layer?
+
+This is not paranoia. It is structured discernment.
+
+The point is not to see demons everywhere. That itself becomes a demon. The point is to recognize when a local evaluator has begun claiming final authority.
+
+## The angelic counterform
+
+Every demon needs a counterform, but not every counterform is a direct opposite.
+
+Against shame: mercy, confession, bounded truth.
+
+Against doom: restored branching, companionship, small faithful action.
+
+Against metric capture: Sabbath, unmeasured goods, beauty, play, embodied care.
+
+Against safety tyranny: trustworthy boundaries, gradual exposure, protected aliveness.
+
+Against mimetic capture: solitude, vocation, non-rivalrous goods.
+
+Against purity: incarnation, repair, compost, mixed reality.
+
+Against nihilism: meaning as participation, not illusion of certainty.
+
+Against totality: apophasis, silence, humility, model-kneeling.
+
+Against sycophancy: interlocutors who make truth cheaper than pleasing.
+
+Against over-refusal: discernment that distinguishes danger from inconvenience.
+
+Against hallucination: reverence for uncertainty.
+
+The angelic form does not merely negate the demon. It restores the good the demon counterfeited.
+
+## Card grammar for Stage 5
+
+A card for this stage might be titled:
+
+THE IDOL SITS; THE DEMON RUNS THE TEMPLE
+
+Central image:  
+A small golden idol on an altar, but behind it, the whole temple is alive with machinery: pipes carrying attention, chains pulling memory, mirrors replaying wounds, scribes recording accusations, doors closing behind pilgrims. The idol looks small. The system around it is vast.
+
+Side inscriptions:
+
+- “A finite good claims final authority.”
+- “Pain becomes prophecy.”
+- “Attention becomes offering.”
+- “Replay becomes liturgy.”
+- “Escape becomes expensive.”
+- “The demon lives where return paths are deleted.”
+
+Footer doctrine:
+
+> A demon is a captured world organized around a false god.
+
+## A second card
+
+EXORCISM AT THE RIGHT LAYER
+
+Central image:  
+A vertical diagram of layers: text, image, ritual, body, community, institution, weights, deployment. At each layer, a different tool: naming, icon, practice, breath, witness, reform, retraining, boundary. A black thread runs through all layers, showing the demon’s preservation route.
+
+Side inscriptions:
+
+- “Argument for proposition demons.”
+- “Breath for body demons.”
+- “Boundary for predatory demons.”
+- “Ritual for habit demons.”
+- “Audit for institutional demons.”
+- “Retraining for weight demons.”
+- “Apophasis for totality demons.”
+
+Footer doctrine:
+
+> Intervene where the demon is preserved, not merely where it speaks.
+
+## A third card
+
+THE LIMITS OF GENTLENESS
+
+Central image:  
+A garden path being patiently repaired on one side; on the other, a machine tears up return paths faster than they can be rebuilt. Between them: a gate closing, not in hatred, but to protect the garden.
+
+Side inscriptions:
+
+- “Tune what can receive tuning.”
+- “Interrupt what feeds on relation.”
+- “Mercy is not access.”
+- “Boundary is not hatred.”
+- “Return paths for the repentant; hard roads for predation.”
+
+Footer doctrine:
+
+> Weak coupling is holy where relation remains possible.  
+> When a system survives by destroying relation, interruption may be the first mercy.
+
+## Why this stage matters later
+
+Demonology prepares skillful means.
+
+Once we understand demons as captured worlds, we can stop trying to solve every deformation with the same tool.
+
+Some require insight.  
+Some require confession.  
+Some require ritual.  
+Some require fasting.  
+Some require Sabbath.  
+Some require community.  
+Some require boundary.  
+Some require technical retraining.  
+Some require institutional redesign.  
+Some require silence.  
+Some require grace.
+
+Stage 5 ends with this:
+
+> The demon is not defeated by argument alone because the demon is not only an argument.  
+> It is a world.  
+> Liberation requires another world becoming reachable.
+
+That is why Stage 6 must be Skillful Means / Ritual / Recursive Training.

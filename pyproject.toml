@@ -1,0 +1,28 @@
+[project]
+name = "stella-rag"
+version = "0.1.0"
+description = "Local hybrid RAG over the stella reference corpus (marker extraction + Harrier-OSS-v1 dense + BM25 sparse + Qwen3 rerank)"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "marker-pdf==1.10.2",
+    "sentence-transformers>=5.0.0",
+    "transformers>=4.48.0",
+    "torch==2.9.1",
+    "qdrant-client[fastembed]>=1.12.0",
+    "huggingface-hub>=0.27.0",
+    "typer>=0.15.0",
+    "rich>=13.9.0",
+]
+
+[project.scripts]
+stella = "stella_rag.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/stella_rag"]
+
+[tool.uv]
+# Reproducible: project-local .venv, locked in uv.lock. Do not rely on ~/.venv.
