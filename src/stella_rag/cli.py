@@ -44,11 +44,13 @@ def ask(
     if not hits:
         console.print("[red]No results — is the index built?[/]")
         raise typer.Exit(1)
+    from rich.markup import escape
+
     for i, h in enumerate(hits, 1):
         console.print(
             Panel(
-                h.text,
-                title=f"{i}. {h.citation}",
+                escape(h.text),
+                title=escape(f"{i}. {h.citation}"),
                 subtitle=f"rerank={h.score:.3f}",
                 title_align="left",
             )

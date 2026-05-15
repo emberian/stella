@@ -1,5 +1,7 @@
 pub mod alpha;
+pub mod atm;
 pub mod automata;
+pub mod circuits;
 pub mod concrete;
 pub mod constellation;
 pub mod dep_graph;
@@ -10,6 +12,7 @@ pub mod pda;
 pub mod polarised;
 pub mod subst;
 pub mod term;
+pub mod tiles;
 pub mod tm;
 pub mod transducer;
 pub mod unify;

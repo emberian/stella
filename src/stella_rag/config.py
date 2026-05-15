@@ -15,7 +15,11 @@ COLLECTION = os.environ.get("STELLA_COLLECTION", "stella_refs")
 
 # Dense embeddings: Microsoft Harrier-OSS-v1 27B (MIT, decoder-only, last-token
 # pool + L2 norm). Queries take a one-sentence instruction; documents do not.
-DENSE_MODEL = os.environ.get("STELLA_DENSE_MODEL", "microsoft/harrier-oss-v1-27b")
+# 0.6b chosen over 27b: 27b measured at 54s/chunk on this M2 Max (~34h full
+# index) and ~50GB + 46s cold-load on every query. 0.6b: same Harrier family,
+# identical instruction-prompt recipe, snappy CLI; the reranker carries final
+# precision so dense only needs candidate-pool recall. Override via env.
+DENSE_MODEL = os.environ.get("STELLA_DENSE_MODEL", "microsoft/harrier-oss-v1-0.6b")
 DENSE_QUERY_INSTRUCTION = os.environ.get(
     "STELLA_DENSE_INSTRUCTION",
     "Retrieve passages from technical papers on logic, proof theory, and "
