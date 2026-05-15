@@ -5,10 +5,10 @@
 setup:
 	uv sync
 
-# 2. Pre-download the (large) models into the HF cache. Resumable.
+# 2. Pre-download the models into the HF cache. Resumable.
 fetch-models:
 	uv run python -c "from huggingface_hub import snapshot_download as d; \
-	d('microsoft/harrier-oss-v1-27b'); d('Qwen/Qwen3-Reranker-8B')"
+	d('microsoft/harrier-oss-v1-0.6b'); d('Qwen/Qwen3-Reranker-8B')"
 
 # 3. PDFs -> markdown + chunks (marker single model pass per paper).
 ingest:

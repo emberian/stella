@@ -27,11 +27,10 @@ class Hit:
 
     @property
     def citation(self) -> str:
-        pages = (
-            f"p.{self.page_start}"
-            if self.page_start == self.page_end
-            else f"pp.{self.page_start}-{self.page_end}"
-        )
+        # marker's printed page labels aren't monotonic in book-form PDFs, so
+        # first/last block pages can invert — display the true min..max span.
+        lo, hi = sorted((self.page_start, self.page_end))
+        pages = f"p.{lo}" if lo == hi else f"pp.{lo}-{hi}"
         sec = f" §{self.section}" if self.section else ""
         return f"[{self.paper} {pages}{sec}]"
 
