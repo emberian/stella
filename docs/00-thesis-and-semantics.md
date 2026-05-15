@@ -197,6 +197,10 @@ Then §56 NFA acceptance, with `open-hypergraphs-dot` visualization.
   instrument the loop uses to feel its own viability, so Phase 4 needs no kernel
   re-verification.
 
+### 5.x Known prototype deviations
+
+The Rust prototype's `expand_constellation` uses a fixed finite copy-supply (k copies of animist stars) as a finiteness cutoff; Eng's reference constellation is non-linear/infinite supply (§51.13); this is a prototype bound, not Eng semantics. The HOL4 track must implement the unbounded supply.
+
 ## 6. Pre-registered falsification (the nulls)
 
 Specified *before* the code, sharpened to the subjective/animist fragment. The
