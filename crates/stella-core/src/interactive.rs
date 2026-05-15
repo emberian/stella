@@ -47,7 +47,7 @@
 //! Given `Φ ⊢_C Ψ' + Ψ[i]` (select star `Ψ[i]` from interaction space),
 //! pick a coloured ray `(i, j) ∈ ±IdRays(Ψ)`. One step rewrites:
 //!
-//! ```
+//! ```text
 //! Φ ⊢_C Ψ' + Ψ[i]
 //!
 //!   (i,j)
@@ -258,7 +258,7 @@ fn self_interact(star: &Star, j: usize, j_prime: usize) -> Option<Star> {
 /// Given `Φ ⊢_C Ψ' + Ψ[i]`, select a coloured ray `(i, j)` of `Ψ[i]` and
 /// produce the new interaction space:
 ///
-/// ```
+/// ```text
 /// Ψ' + Σ_{(i_k,j_k)∈mat_Φ(Ψ[i][j])}  Ψ[i] ^{j,j_k}∇_α Φ[i_k]       (external fusions)
 ///      + Σ_{j_k∈mat_{Ψ[i]}(Ψ[i][j])}  ^{j,j_k}▷ Ψ[i]                 (self-interactions)
 /// ```
