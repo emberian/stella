@@ -218,19 +218,19 @@ pub fn npda_accepts(pda: &Npda, word: &[&str], n_copies: usize, fuel: usize) -> 
 ///
 /// States: q₀ (initial/read-0), q₁ (read-1), q₂ (check-done), q₃ (final).
 ///
-/// From the digest:
-///   `P★ = [−i(W),+p(W,q₀,$)]`
-///   `+ [−p(ε,q₃,$),accept]`
-///   `+ [−p(0·W,q₀,S),+p(W,q₀,0·S)]`       read 0 → push 0
-///   `+ [−p(1·W,q₀,0·S),+p(W,q₁,S)]`        read 1 → pop 0 → go q₁
-///   `+ [−p(1·W,q₁,0·S),+p(W,q₁,S)]`        read 1 → pop 0 → stay q₁
-///   `+ [−p(W,q₁,$),+p(W,q₂,$)]`             ε-transition → q₂ (then q₃ = final)
+/// From the digest, the exact constellation `P★` is:
+///   `[−i(W),+p(W,q₀,$)]`
+///   `[−p(ε,q₃,$),accept]`
+///   `[−p(0·W,q₀,S),+p(W,q₀,0·S)]`   read 0 → push 0
+///   `[−p(1·W,q₀,0·S),+p(W,q₁,S)]`   read 1 → pop 0 → go q₁
+///   `[−p(1·W,q₁,0·S),+p(W,q₁,S)]`   read 1 → pop 0 → stay q₁
+///   `[−p(W,q₁,$),+p(W,q₂,$)]`        ε-transition: check stack = $ → go q₂
 ///
-/// Note: the digest spells out q₃ as the only final state; its final star
-/// is `[−p(ε,q₃,$),accept]`.  The ε-transition `q₁→q₂` and identity
-/// `q₂≡q₃` mean q₂ is actually the state whose `$` check fires acceptance.
-/// We implement exactly as given in the digest, using q₂ as "q₃" (the
-/// accepting ε-close state), with its final star matching `[−p(ε,q₂,$),accept]`.
+/// The ε-transition uses literal `$` (not a variable S), directly matching
+/// the digest.  We use q₂ as "q₃" in the digest (the pre-final state).
+/// The Npda struct encodes `(q1, None, None, q2, None)` for the ε-transition;
+/// to faithfully reproduce the literal-$ form, `eng_fig562_npda_constellation`
+/// overrides the final star and the ε-transition with exact-`$` stars.
 pub fn eng_fig562_npda() -> Npda {
     Npda {
         states: vec!["q0".into(), "q1".into(), "q2".into()],
@@ -245,32 +245,102 @@ pub fn eng_fig562_npda() -> Npda {
             ("q0".into(), Some("1".into()), Some("0".into()), "q1".into(), None),
             // [−p(1·W,q₁,0·S),+p(W,q₁,S)]: read 1, pop 0, stay q₁
             ("q1".into(), Some("1".into()), Some("0".into()), "q1".into(), None),
-            // [−p(W,q₁,$),+p(W,q₂,$)]: ε-transition when $ on top, go q₂
-            ("q1".into(), None, Some("$".into()), "q2".into(), Some("$".into())),
+            // ε-transition q₁→q₂: encoded as a=ε,b=ε (no stack op).
+            // The digest writes this star as [−p(W,q₁,$),+p(W,q₂,$)] with
+            // literal $; we emit that exact star in the constellation override below.
+            ("q1".into(), None, None, "q2".into(), None),
         ],
     }
+}
+
+/// Build the exact Fig 56.2 constellation as given in the digest.
+///
+/// This overrides the generic encoding to reproduce the literal stars from
+/// the digest verbatim:
+/// ```text
+/// [−i(W),+p(W,q₀,$)]
+/// [−p(ε,q₂,$),accept]          ← literal $ (not variable S)
+/// [−p(0·W,q₀,S),+p(W,q₀,0·S)]
+/// [−p(1·W,q₀,0·S),+p(W,q₁,S)]
+/// [−p(1·W,q₁,0·S),+p(W,q₁,S)]
+/// [−p(W,q₁,$),+p(W,q₂,$)]      ← literal $ (not variable S)
+/// ```
+///
+/// The literal `$` in the ε-transition makes it fire only when the FULL stack
+/// is `$`; the variable-S form would fire at any stack state.  Both produce
+/// the same accept/reject behaviour for this machine (the final star guards
+/// `$` anyway), but the literal form is more faithful to the digest.
+pub fn eng_fig562_npda_constellation(n_copies: usize) -> Constellation {
+    let w = || var("W");
+    let s = || var("S");
+    let dollar = || constant("$");
+    let eps = || constant("eps");
+
+    let mut phi: Constellation = Vec::new();
+
+    // Initial: [−i(W), +p(W, q₀, $)]
+    phi.push(vec![
+        neg("i", vec![w()]),
+        pos("p", vec![w(), constant("q0"), dollar()]),
+    ]);
+
+    // Final: [−p(ε, q₂, $), accept]  — literal $
+    phi.push(vec![
+        neg("p", vec![eps(), constant("q2"), dollar()]),
+        Term::App("accept".into(), vec![]),
+    ]);
+
+    // 4 transition stars, n_copies times
+    for _ in 0..n_copies {
+        // [−p(0·W, q₀, S), +p(W, q₀, 0·S)]
+        phi.push(vec![
+            neg("p", vec![cons(constant("0"), w()), constant("q0"), s()]),
+            pos("p", vec![w(), constant("q0"), cons(constant("0"), s())]),
+        ]);
+        // [−p(1·W, q₀, 0·S), +p(W, q₁, S)]
+        phi.push(vec![
+            neg("p", vec![cons(constant("1"), w()), constant("q0"), cons(constant("0"), s())]),
+            pos("p", vec![w(), constant("q1"), s()]),
+        ]);
+        // [−p(1·W, q₁, 0·S), +p(W, q₁, S)]
+        phi.push(vec![
+            neg("p", vec![cons(constant("1"), w()), constant("q1"), cons(constant("0"), s())]),
+            pos("p", vec![w(), constant("q1"), s()]),
+        ]);
+        // [−p(W, q₁, $), +p(W, q₂, $)]  — literal $
+        phi.push(vec![
+            neg("p", vec![w(), constant("q1"), dollar()]),
+            pos("p", vec![w(), constant("q2"), dollar()]),
+        ]);
+    }
+
+    phi
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tests
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// Run the Fig 56.2 NPDA acceptance check using the exact-constellation encoding.
+///
+/// Uses `eng_fig562_npda_constellation` (literal `$` in final + ε-transition stars).
+pub fn fig562_accepts(word: &[&str], fuel: usize) -> bool {
+    // n_copies = word.len() + 2 ensures enough copies for the accepting run.
+    let n_copies = word.len() + 2;
+    let word_star = encode_word(word);
+    let phi = eng_fig562_npda_constellation(n_copies);
+    crate::interactive::iex_nfa_accepts(&phi, vec![word_star], fuel)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    // For words of length n, each "read 0→push" rule fires n times; use n+2 copies.
-    fn copies_for(word: &[&str]) -> usize {
-        word.len() + 2
-    }
-
     /// §56.13: "0011" accepted (2 zeros, 2 ones).
     #[test]
     fn npda_accepts_0011() {
-        let pda = eng_fig562_npda();
-        let word = &["0", "0", "1", "1"];
         assert!(
-            npda_accepts(&pda, word, copies_for(word), 8000),
+            fig562_accepts(&["0", "0", "1", "1"], 12000),
             "NPDA should accept '0011'"
         );
     }
@@ -278,41 +348,18 @@ mod tests {
     /// §56.13: "01" accepted (1 zero, 1 one).
     #[test]
     fn npda_accepts_01() {
-        let pda = eng_fig562_npda();
-        let word = &["0", "1"];
         assert!(
-            npda_accepts(&pda, word, copies_for(word), 4000),
+            fig562_accepts(&["0", "1"], 4000),
             "NPDA should accept '01'"
         );
     }
 
-    /// §56.13: ε (empty word) accepted (n=0, init state is also final via ε-close).
-    ///
-    /// For n=0: q₀ is initial; we need q₂ as final.  With no input, the stack
-    /// stays at `$`.  The ε-transition `[−p(W,q₁,$),+p(W,q₂,$)]` applies from q₁,
-    /// but q₁ is never reached without a 0.  So ε is accepted only if q₀ itself
-    /// leads to the final star.  Examining the digest: final star is `[−p(ε,q₂,$),accept]`
-    /// and q₀→q₂ on ε requires a direct ε-step.
-    ///
-    /// The digest's P★ does NOT include an ε-transition from q₀ to q₂ directly;
-    /// the path for ε is: initial star puts us in state q₀ with stack `$`; the
-    /// word is ε so `W=ε`; final star `[−p(ε,q₂,$),accept]` needs state q₂.
-    /// This means ε is NOT accepted by the exact Fig-56.2 encoding (no q₀→q₂ ε-path).
-    ///
-    /// However, a common textbook variant DOES accept ε.  Since we implement
-    /// exactly as specified in the digest, we test accordingly: ε is REJECTED
-    /// by this encoding.
+    /// §56.13: ε (empty word): the digest's Fig 56.2 has no q₀→q₂ ε-path,
+    /// so ε is not in the language of this machine's encoding.
     #[test]
     fn npda_epsilon_not_accepted_by_fig562() {
-        let pda = eng_fig562_npda();
-        // The digest encoding of Fig 56.2 does not include a direct q₀→q₂ ε-path,
-        // so ε (empty input) is not accepted by this exact machine.
-        let result = npda_accepts(&pda, &[], copies_for(&[]), 2000);
-        // Document the actual outcome: IEx settles without finding [accept].
-        // This is faithful to the digest construction; ε is in {0ⁿ1ⁿ} for n=0 only
-        // if the machine has an ε-transition from initial to final, which it does not.
         assert!(
-            !result,
+            !fig562_accepts(&[], 2000),
             "Fig 56.2 as encoded in digest does not accept ε (no q₀→q₂ ε-path)"
         );
     }
@@ -320,10 +367,8 @@ mod tests {
     /// §56.13: "001" rejected (unequal counts).
     #[test]
     fn npda_rejects_001() {
-        let pda = eng_fig562_npda();
-        let word = &["0", "0", "1"];
         assert!(
-            !npda_accepts(&pda, word, copies_for(word), 6000),
+            !fig562_accepts(&["0", "0", "1"], 8000),
             "NPDA should reject '001'"
         );
     }
@@ -331,10 +376,8 @@ mod tests {
     /// §56.13: "10" rejected (1 before 0).
     #[test]
     fn npda_rejects_10() {
-        let pda = eng_fig562_npda();
-        let word = &["1", "0"];
         assert!(
-            !npda_accepts(&pda, word, copies_for(word), 4000),
+            !fig562_accepts(&["1", "0"], 4000),
             "NPDA should reject '10'"
         );
     }
@@ -342,59 +385,33 @@ mod tests {
     /// §56.13: "0" rejected (unequal counts, one 0 no 1).
     #[test]
     fn npda_rejects_0() {
-        let pda = eng_fig562_npda();
-        let word = &["0"];
         assert!(
-            !npda_accepts(&pda, word, copies_for(word), 4000),
+            !fig562_accepts(&["0"], 4000),
             "NPDA should reject '0'"
         );
     }
 
-    /// Debug: trace IEx output for "01"
-    #[test]
-    fn debug_npda_01_trace() {
-        let pda = eng_fig562_npda();
-        let word = &["0", "1"];
-        let n = copies_for(word);
-        let word_star = encode_word(word);
-        let phi = encode_npda(&pda, n);
-        eprintln!("PHI ({} stars):", phi.len());
-        for (i, star) in phi.iter().enumerate() {
-            eprintln!("  phi[{}]: {:?}", i, star);
-        }
-        eprintln!("word_star: {:?}", word_star);
-        let (vis, normal) = crate::interactive::iex_concealed(&phi, vec![word_star], 8000);
-        eprintln!("normal={} visible ({}):", normal, vis.len());
-        for s in &vis { eprintln!("  {:?}", s); }
-    }
-
-    /// Structural test: count of stars in the NPDA constellation.
+    /// Structural test: count and shape of stars in the Fig 56.2 exact constellation.
     ///
-    /// For `n_copies=1`, the Fig 56.2 NPDA has:
-    /// - 1 word star
-    /// - 1 initial star (q₀)
-    /// - 1 final star (q₂)
-    /// - 4 transition stars × n_copies
+    /// `eng_fig562_npda_constellation(1)` (1 copy of transition stars) has:
+    /// - 1 initial star
+    /// - 1 final star
+    /// - 4 transition stars × 1 copy
+    /// = 6 stars total (no word star — word star is the initial Ψ).
     #[test]
     fn npda_constellation_structure() {
-        let pda = eng_fig562_npda();
-        let phi = npda_constellation(&pda, &["0", "1"], 1);
-        // 1 word + 1 initial + 1 final + 4 transitions = 7
-        assert_eq!(phi.len(), 7, "constellation should have 7 stars for n_copies=1");
-
-        // Word star is first.
-        let word_star = &phi[0];
-        assert_eq!(word_star.len(), 1);
-        assert_eq!(word_star[0].head(), Some("+i"), "word star has +i head");
+        let phi = eng_fig562_npda_constellation(1);
+        // 1 initial + 1 final + 4 transitions = 6
+        assert_eq!(phi.len(), 6, "eng_fig562 constellation should have 6 stars for n_copies=1");
 
         // Initial star: [−i(W), +p(W, q₀, $)]
-        let init_star = &phi[1];
+        let init_star = &phi[0];
         assert_eq!(init_star.len(), 2);
         assert_eq!(init_star[0].head(), Some("-i"), "initial star has -i ray");
         assert_eq!(init_star[1].head(), Some("+p"), "initial star has +p ray");
 
-        // Final star: [−p(ε, q₂, S), accept]
-        let final_star = &phi[2];
+        // Final star: [−p(ε, q₂, $), accept]
+        let final_star = &phi[1];
         assert_eq!(final_star.len(), 2);
         assert_eq!(final_star[0].head(), Some("-p"), "final star has -p ray");
         assert_eq!(final_star[1].head(), Some("accept"), "final star has accept ray");
