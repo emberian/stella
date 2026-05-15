@@ -33,7 +33,7 @@
 
 use crate::automata::encode_word;
 use crate::constellation::{Constellation, Star};
-use crate::interactive::{iex, iex_concealed};
+use crate::interactive::iex_concealed;
 use crate::polarised::Polarity;
 use crate::constellation::ray_polarity;
 use crate::term::Term;

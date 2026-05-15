@@ -475,7 +475,7 @@ pub fn trivial_accept_empty_tm() -> Ntm {
 /// Alphabet: {a, b, X, Y, blank}
 ///
 /// State transitions (simplified, deterministic):
-/// ```
+/// ```text
 /// q0, a → q1, X, R  (mark a, go find b)
 /// q0, Y → q3, Y, R  (all a's done, check b's)
 /// q0, □ → qa, □, S  (empty tape: n=0 → accept)
