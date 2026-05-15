@@ -1,0 +1,8 @@
+[package]
+name = "stella-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+open-hypergraphs = "=0.3.1"
+open-hypergraphs-dot = "=0.2.4"

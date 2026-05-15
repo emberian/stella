@@ -1,0 +1,13 @@
+# Python / uv
+.venv/
+__pycache__/
+*.pyc
+
+# RAG: derived/rebuildable artifacts (canonical source = refs/originals + scripts)
+refs/extracted/
+index/
+
+# HF model cache is large and machine-local (repopulated by `make fetch-models`)
+.cache/
+
+target/
