@@ -6,9 +6,12 @@ pub mod dep_graph;
 pub mod diagram;
 pub mod execution;
 pub mod interactive;
+pub mod pda;
 pub mod polarised;
 pub mod subst;
 pub mod term;
+pub mod tm;
+pub mod transducer;
 pub mod unify;
 pub mod viz;
 
