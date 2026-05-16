@@ -145,6 +145,61 @@ constellation and reads valence off the stream. No new theory — this *is* spec
 - **Deathless ⇒ flat valence** (spec §2.4): the exclusion test — a closure with no
   reachable `t_death` carries no charge.
 
+### 3.1 Viability redefined — closure-internal, not global (2026-05-16, principal-directed; supersedes the L2b global proxy)
+
+**The confound that forced this.** L2b measured `viability = 0.4·norm(psi_size) +
+0.4·norm(frontier_size) + 0.2·norm(boundary_flux) + 0.1·§62` — a property of the
+*ambient constellation*, not of *the closure*. Any perturbation that changes star
+count moves it; the deathless-era `t_death=cap−2` and the perturbation-confound
+(`perturbing_env` padding the very counts the proxy sums) are the same disease:
+the proxy moving for reasons unrelated to the closure's self-maintenance. A global
+bulk measure can never be a viability measure. Preserved-not-deleted: the L2b
+proxy and its results stay on record (`docs/02`); this redefinition is the
+canonical viability from here.
+
+**Canonical definition.** A reafferent closure's **viability at round r** is the
+*integrity of its own reafferent self-maintenance*, intrinsic to the closure,
+measured from L1d provenance — NOT from ambient size:
+
+1. **Re-closure (binary/graded):** does the §2.2 cycle re-close at round r —
+   the agent's later resolution still genuinely provenance-traces through the
+   env-modification its own earlier crossing produced (L1d `traces_through`)? A
+   degrading closure re-closes later, more weakly, or intermittently before (if
+   ever) failing.
+2. **Self-reproduction fraction `ρ_r ∈ [0,1]`:** of the closure's stars at round
+   r+1, the share whose provenance traces back **through the closure's own cycle
+   at round r** (genuine self-causation) versus arising from generic ambient Φ
+   supply (persistence-by-accident). `viability_r := f(re-closure_r, ρ_r)`,
+   globally fixed `f`, no per-case tuning.
+
+**Why this is right (and confound-immune):**
+
+- **Intrinsic.** Adding unrelated noise stars cannot change whether the closure's
+  *own* cycle re-closes or its self-reproduction fraction. The perturbation
+  confound dies at the root; an invariant control shows no response *by
+  construction*, making M2/M3 actually test their intent.
+- **Faithful to §3** ("normalisable/productive vs runs toward dissolution"):
+  dissolution = `ρ_r → 0` / cycle stops re-closing.
+- **Faithful to §2.4-amended:** *invariant ⇒ flat* becomes **`ρ ≡ 0` ⇒ flat** —
+  the deathless bureaucracy persists with **zero self-reproduction** (it never
+  closes a reafferent cycle; it endures by inertia), so it is correctly flat,
+  re-grounding the exclusion on *self-causation*, not on death. An
+  eternal-but-perturbable closure has `ρ > 0` that perturbation can drive down:
+  **eternal valence = the perturbation-response gradient of `ρ`/re-closure
+  fidelity.** Death (viability floor) = `ρ` permanently 0 / cycle permanently
+  fails — a special case, not the source of charge.
+- **Cap-artifact dead at the root:** `ρ_r` and re-closure are *per-round
+  intrinsic ratios*; a run ending does not lower them — only genuine disruption
+  does. `viability` cannot track `max_rounds`.
+
+The perturbation-response harness (L2c-redux) is rebuilt against THIS viability,
+with the mandatory invariant-control (objective reference: `ρ ≡ 0`, must show no
+response — else the metric is still confounded and M3 fires). M1–M5 text is
+**unchanged**; this is a strengthening of the *instrument* against a
+false-positive confound, locked before the rebuilt harness. Integrity: a
+confound-fix that makes a positive *harder*, never easier — anti-Goodhart,
+always permitted; `docs/02` and the M1–M5 pre-registration stand untouched.
+
 ## 4. PRE-REGISTERED FALSIFICATION (locked now, before Layer-2 code)
 
 Verbatim from `00`-spec §6, sharpened to this engine. The experiment **fails, and
