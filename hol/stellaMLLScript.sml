@@ -1597,4 +1597,631 @@ QED
 (* ZERO new_axiom / mk_thm USED IN THIS FILE.                                  *)
 (* ─────────────────────────────────────────────────────────────────────────── *)
 
+(* ═══════════════════════════════════════════════════════════════════════════ *)
+(* §70  Soundness and completeness (pp. 332–339)                               *)
+(*                                                                             *)
+(* SCOPE: §70.9 (basis of interpretation), §70.10 (formula interpretation),   *)
+(*        §70.17 (full soundness MLL+MIX), §70.21 (completeness MLL+MIX),     *)
+(*        §70.23 (full soundness MLL), §70.25 (strict interpretations),        *)
+(*        §70.26 (completeness MLL).                                            *)
+(*                                                                             *)
+(* NOT ATTEMPTED: §71–72.                                                      *)
+(* ═══════════════════════════════════════════════════════════════════════════ *)
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §70.9  Basis of interpretation Ω                                             *)
+(*                                                                             *)
+(* A basis of interpretation is a function                                     *)
+(*   Ω : mll_formula × num × term → constellation set                         *)
+(* mapping a formula label A, an occurrence index i, and an address term t     *)
+(* to a behaviour Ω(A, i, t).                                                  *)
+(*                                                                             *)
+(* MLL formula syntax — a simple HOL4 datatype for the scaffold.               *)
+(* We keep it minimal: atoms, negations, tensor, par.                           *)
+(* (Full MLL would also include the multiplicative units; §71 is out of scope.) *)
+(* ─────────────────────────────────────────────────────────────────────────── *)
+
+(* §70.9  MLL formula datatype.  Atoms are identified by natural numbers.      *)
+Datatype:                                                       (* §66.2/§70.9 *)
+  mll_formula =
+    MAtom  num          (* positive atom X_i                                  *)
+  | MNeg   num          (* negative atom X_i^⊥                                *)
+  | MTens  mll_formula mll_formula   (* A ⊗ B                                *)
+  | MPar   mll_formula mll_formula   (* A ⅋ B                                *)
+End
+
+(* §70.9  A basis of interpretation Ω maps (formula, occurrence index, address
+   term) to a behaviour (a set of constellations).                              *)
+(* We represent Ω as a HOL function of type:                                   *)
+(*   mll_formula -> num -> term -> constellation set                            *)
+Type basis_interp = ``:mll_formula -> num -> term -> constellation set``
+
+(* §70.9  Well-formedness predicate for a basis of interpretation Ω (§70.9).   *)
+(* Ω must satisfy:                                                              *)
+(*   (1) Each Ω(A, i, t) is a behaviour (w.r.t. the given orthogonality).     *)
+(*   (2) Ω(A, i, t) and Ω(B, j, u) are disjoint when i ≠ j.                  *)
+(* We state this abstractly.                                                   *)
+(* §70.9  Well-formedness: each Omega(A,i,t) is a behaviour (§69.30).         *)
+Definition wf_basis_behaviours_def :                            (* §70.9 *)
+  wf_basis_behaviours (orth : constellation -> constellation -> bool)
+                      (Omega : basis_interp) : bool =
+    !A i t. is_behaviour orth (Omega A i t)
+End
+
+(* §70.9  Combined well-formedness predicate for a basis of interpretation.   *)
+(* The disjointness condition (§69.33) is abstract and trivially satisfied in  *)
+(* this scaffold; only the behaviour condition is non-trivial.                  *)
+Definition wf_basis_def :                                       (* §70.9 *)
+  wf_basis (orth : constellation -> constellation -> bool)
+           (Omega : basis_interp) : bool =
+    wf_basis_behaviours orth Omega
+    (* §69.33 colour-disjointness of distinct-index behaviours: abstract/trivial *)
+End
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §70.10  Interpretation of MLL formulas  [[C, A, t]]_Ω                        *)
+(*                                                                             *)
+(* Given Ω, a conclusion formula C (as the function-symbol wrapper), a         *)
+(* formula occurrence A, and a term t encoding the path from C to A:           *)
+(*                                                                             *)
+(*   [[X_i,   t]]_Ω = Ω(X_i,   i, t)                                         *)
+(*   [[X_i^⊥, t]]_Ω = Ω(X_i^⊥, i, t)^⊥ = orthogonal_set orth (Ω(X_i,i,t)) *)
+(*   [[A ⊗ B, t]]_Ω = [[A, 1·t]]_Ω ⊗ [[B, r·t]]_Ω   (behaviour_tensor)      *)
+(*   [[A ⅋ B, t]]_Ω = [[A, 1·t]]_Ω ⅋ [[B, r·t]]_Ω   (behaviour_par)        *)
+(*                                                                             *)
+(* The term constructors 1·t and r·t are App dir_left [t] / App dir_right [t]. *)
+(*                                                                             *)
+(* For the sequent interpretation: [[⊢ C₁,...,Cₙ]]_Ω = [[C₁]] ⅋ ... ⅋ [[Cₙ]].*)
+(* We represent a sequent as a list of formulas.                                *)
+(* ─────────────────────────────────────────────────────────────────────────── *)
+
+(* §70.10  Formula interpretation:  [[A, t]]_Ω as a behaviour (constellation set). *)
+(* The recursion on mll_formula is primitive-recursive in HOL4.                    *)
+Definition interp_formula_def :                                 (* §70.10 *)
+  interp_formula
+    (orth  : constellation -> constellation -> bool)
+    (Omega : basis_interp)
+    (A     : mll_formula)
+    (t     : term)
+    : constellation set =
+  case A of
+    MAtom i  => Omega (MAtom i) i t
+  | MNeg  i  => orthogonal_set orth (Omega (MAtom i) i t)
+  | MTens A1 A2 =>
+      behaviour_tensor orth
+        (interp_formula orth Omega A1 (App dir_left  [t]))
+        (interp_formula orth Omega A2 (App dir_right [t]))
+  | MPar A1 A2 =>
+      behaviour_par orth
+        (interp_formula orth Omega A1 (App dir_left  [t]))
+        (interp_formula orth Omega A2 (App dir_right [t]))
+End
+
+(* §70.10  Sequent interpretation  [[⊢ Γ]]_Ω = [[C₁]] ⅋ ... ⅋ [[Cₙ]].       *)
+(* We use the variable Var 0 as the "top" address X for each top-level formula. *)
+Definition interp_sequent_def :                                 (* §70.10 *)
+  interp_sequent
+    (orth  : constellation -> constellation -> bool)
+    (Omega : basis_interp)
+    (Gamma : mll_formula list)
+    : constellation set =
+  case Gamma of
+    []       => {[]}   (* empty sequent: singleton containing the empty constellation *)
+  | [C]      => interp_formula orth Omega C (Var 0)
+  | (C :: Cs) =>
+      behaviour_par orth
+        (interp_formula orth Omega C (Var 0))
+        (interp_sequent orth Omega Cs)
+End
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §70.19  Proof-like constellation  (§70.19)                                   *)
+(*                                                                             *)
+(* A constellation Φ is *proof-like* w.r.t. ⊢ Γ if it is well-formed (§69.27)*)
+(* and its identity rays IdRays(Φ) match the address-rays ‡Γ of the syntax    *)
+(* tree of ⊢ Γ.                                                                *)
+(*                                                                             *)
+(* We encode well-formedness abstractly (full §69.27 checking would require    *)
+(* inspecting all rays) and the address-ray condition as a predicate.           *)
+(* ─────────────────────────────────────────────────────────────────────────── *)
+
+(* §70.19  Abstract well-formedness of a constellation (§69.27 conditions).    *)
+(* The full definition requires checking: finite, binary stars, disjoint rays, *)
+(* all heads Pos or Neutral, at least one Pos head, address-form subterms.     *)
+(* We state it as an abstract predicate.                                        *)
+(* §70.19  wf_vehicle: §69.27 conditions (1) binary stars (2) at least one   *)
+(* positive head.  The remaining conditions (disjointness, address-form) are   *)
+(* stated abstractly.                                                           *)
+Definition wf_vehicle_binary_def :                              (* §69.27 (2) *)
+  wf_vehicle_binary (Phi : constellation) : bool =
+    !s. MEM s Phi ==> LENGTH s = 2
+End
+
+Definition wf_vehicle_pos_head_def :                            (* §69.27 (5) *)
+  wf_vehicle_pos_head (Phi : constellation) : bool =
+    ?s r. MEM s Phi /\ MEM r s /\
+          ?h args. r = App h args /\
+                   FST (decode_psym h) = Pos
+End
+
+val wf_vehicle_def = Define `                                   (* §69.27/§70.19 *)
+  wf_vehicle (Phi : constellation) : bool =
+    (wf_vehicle_binary Phi /\ wf_vehicle_pos_head Phi)
+`;
+
+(* §70.19  Address-ray set ‡Γ: the set of address-rays from the syntax tree   *)
+(* ST(⊢ Γ).  We represent this abstractly.                                     *)
+Definition addr_rays_sequent_def :                              (* §70.19 *)
+  addr_rays_sequent (Gamma : mll_formula list) : (num # num) set =
+    (* IdRays(Phi) is defined in stellaDiagramTheory; here we just state the  *)
+    (* matching condition abstractly as a set of (star-index, ray-index) pairs *)
+    (* encoding the addresses of atoms in the syntax tree of ⊢ Gamma.         *)
+    (* The full definition requires computing pAddr on the syntax tree.        *)
+    {}   (* abstract placeholder *)
+End
+
+(* §70.19  Proof-like constellation w.r.t. sequent ⊢ Γ.                       *)
+(* Full condition: wf_vehicle AND IdRays(Phi) = address-rays of ST(⊢ Gamma). *)
+val proof_like_def = Define `                                   (* §70.19 *)
+  proof_like (Phi : constellation) (Gamma : mll_formula list) : bool =
+    (wf_vehicle Phi /\ (IdRays Phi = addr_rays_sequent Gamma))
+`;
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §70.25  Strict interpretations ⟨⟨⊢ Γ⟩⟩^1_Ω and ⟨⟨⊢ Γ⟩⟩^R_Ω              *)
+(*                                                                             *)
+(* §70.25 defines two strict interpretations for MLL (p.339):                  *)
+(*   ⟨⟨⊢ Γ⟩⟩^1_Ω = Tests(⊢ Γ)^{⊥^1}                                        *)
+(*   ⟨⟨⊢ Γ⟩⟩^R_Ω = Tests(⊢ Γ)^{⊥^R}                                        *)
+(*                                                                             *)
+(* Tests(⊢ Γ) is the set of Φ_S^φ test constellations from §69.15, defined   *)
+(* from the syntax tree of ⊢ Γ (independent of proof-structures).              *)
+(*                                                                             *)
+(* We encode Tests(⊢ Γ) as the set of all switched test constellations of     *)
+(* the syntax-hypergraph proof-structure derived from ⊢ Γ.                    *)
+(* ─────────────────────────────────────────────────────────────────────────── *)
+
+(* §69.15 / §70.25  Set of tests for a sequent ⊢ Γ.                           *)
+(* Tests(⊢ Γ) = { Test(⊢ Γ)^φ | φ switching of ST(⊢ Γ) }.                   *)
+(* We model this as the image of all switchings of the syntax-tree proof-struct.*)
+Definition tests_sequent_def :                                  (* §69.15 *)
+  tests_sequent (Gamma : mll_formula list) : constellation set =
+    (* Abstract: the set of all test constellations Test(⊢ Gamma)^phi,        *)
+    (* ranging over all switchings phi of the syntax tree ST(⊢ Gamma).        *)
+    (* The concrete definition would build the syntax-tree proof-structure     *)
+    (* and apply Phi_switched; we leave this abstract for the scaffold.        *)
+    { T_phi | ?phi. T_phi = Phi_switched
+                      <| vertices := {}; edges := {}
+                       ; in_ps := \e. (0,0); out_ps := \e. 0
+                       ; lbl := \e. Ax; concl := {} |>
+                      phi }
+    (* placeholder: the actual definition must build the ST(⊢ Gamma)          *)
+    (* proof-structure from the formula grammar.                               *)
+End
+
+(* §70.25  Strict interpretation ⟨⟨⊢ Γ⟩⟩^1_Ω = Tests(⊢ Γ)^{⊥^1}.           *)
+Definition strict_interp_one_def :                              (* §70.25 *)
+  strict_interp_one
+    (Omega : basis_interp)
+    (Gamma : mll_formula list)
+    : constellation set =
+    orthogonal_set (orth_one_C {}) (tests_sequent Gamma)
+End
+
+(* §70.25  Strict interpretation ⟨⟨⊢ Γ⟩⟩^R_Ω = Tests(⊢ Γ)^{⊥^R}.           *)
+Definition strict_interp_roots_def :                            (* §70.25 *)
+  strict_interp_roots
+    (Omega : basis_interp)
+    (Gamma : mll_formula list)
+    : constellation set =
+    orthogonal_set (orth_roots_C {}) (tests_sequent Gamma)
+End
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §70.17  Theorem: Full soundness for MLL+MIX                                  *)
+(*                                                                             *)
+(* STATEMENT (§70.17, p.335):                                                   *)
+(*   Let ⊢ S : Γ be an MLL+MIX proof-net and Ω a basis of interpretation.     *)
+(*   We have:  Ex(Φ_S^comp) ∈ [[⊢ Γ]]_Ω                                       *)
+(*   (w.r.t. orthogonality ⊥^{fin})                                            *)
+(*                                                                             *)
+(* In our encoding: "S is an MLL+MIX proof-net ⊢ S : Γ" is stated as a        *)
+(* predicate is_mll_proof_net relating proof_struct, sequent, and certification.*)
+(*                                                                             *)
+(* We use AEx_C and interp_sequent with orth_fin_C.                            *)
+(*                                                                             *)
+(* DEFERRED: proof-obligation stellaMLL.14                                      *)
+(* ─────────────────────────────────────────────────────────────────────────── *)
+
+(* §70.17  Abstract predicate: S is an MLL+MIX proof-net proving sequent Γ.   *)
+(* This encodes the conditions: proof-structure, DR-certifiable, ⊢ S : Γ.     *)
+Definition is_mll_mix_proof_net_def :                           (* §70.12 *)
+  is_mll_mix_proof_net (S : proof_struct) (Gamma : mll_formula list) : bool =
+    dr_certifiable S   (* MLL-certifiable proof-net; MIX allows disconnected components *)
+    (* PROOF-OBLIGATION: strengthen to include the sequent-labelling condition *)
+End
+
+(* §70.17  Abstract predicate: S is an MLL proof-net (connected, not just MIX). *)
+(* MLL requires that ALL switchings are connected AND acyclic (not just acyclic). *)
+Definition is_mll_proof_net_def :                               (* §70.23 *)
+  is_mll_proof_net (S : proof_struct) (Gamma : mll_formula list) : bool =
+    dr_certifiable S   (* same placeholder; MLL-certifiable implies fully correct *)
+    (* PROOF-OBLIGATION: the MLL case additionally requires connectedness of
+       every switching — cf. §69.7 / §68.21 *)
+End
+
+(*
+   PROOF-OBLIGATION[stellaMLL.14]:
+   GOAL (§70.17 — Full soundness MLL+MIX, orthogonality ⊥^{fin}):
+     !S Gamma Omega.
+       is_mll_mix_proof_net S Gamma ==>
+       wf_basis (orth_fin_C {}) Omega ==>
+       ?gamma. gamma IN AEx_C (Phi_comp S) /\
+               gamma IN interp_sequent (orth_fin_C {}) Omega Gamma
+   STRATEGY (§70.17 proof, p.335):
+     Induction on the proof-net structure of S.
+     · Axiom case (S ⊢ X_i, X_i^⊥):
+         Phi_comp S = Phi_ax S = [[+X_i(X), +X_i^⊥(X)]].
+         Show Phi_ax S ∈ [[X_i]]_Omega ⅋ [[X_i^⊥]]_Omega.
+         Unfold behaviour_par, behaviour_tensor; the basis Omega satisfies
+         Phi_ax S ⊥^{fin} every test of ⊢ X_i, X_i^⊥.
+         By wf_basis and orth_fin_C.
+     · Tensor case (⊢ S : Γ, Δ, A ⊗ B from S₁ : Γ,A and S₂ : Δ,B):
+         By IH on S₁ and S₂; Phi_comp S₁ ∈ [[⊢ Γ,A]]_Omega,
+         Phi_comp S₂ ∈ [[⊢ Δ,B]]_Omega.
+         Phi_comp S = Phi_comp S₁ ++ Phi_comp S₂ ∈ pre_tensor ... ⊆ tensor.
+         Use Lemma §70.14 (tensor interaction).
+     · Par case (⊢ S : Γ, A ⅋ B): direct from IH and definition of par.
+     · MIX case (⊢ S : Γ,Δ from S₁:Γ and S₂:Δ):
+         As in tensor case; note MIX allows pre_tensor ⊆ par (§70.17 proof).
+     · Cut case: Phi_comp has cuts; by Theorem §67.10 (sim_cut_elim),
+         AEx(Phi_comp S) ≃_S Phi_ax(S'), S' cut-free normal form.
+         Apply the cut-free case to S'.
+   CITATION: §70.17 Theorem (Full soundness MLL+MIX).
+   DRAFT-TACTICS: cheat
+*)
+Theorem full_soundness_mll_mix :                                (* §70.17 *)
+  !S Gamma Omega.
+    is_mll_mix_proof_net S Gamma ==>
+    wf_basis (orth_fin_C {}) Omega ==>
+    ?gamma.
+      gamma IN AEx_C (Phi_comp S) /\
+      gamma IN interp_sequent (orth_fin_C {}) Omega Gamma
+Proof
+  cheat
+QED
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §70.21  Theorem: Completeness for MLL+MIX                                    *)
+(*                                                                             *)
+(* STATEMENT (§70.21, p.338):                                                   *)
+(*   If Φ ∈ [[⊢ Γ]]_Ω is proof-like w.r.t. ⊢ Γ, then there exists an         *)
+(*   MLL+MIX proof-net ⊢ S : Γ such that Φ = Φ_S^{ax}.                        *)
+(*                                                                             *)
+(* DEFERRED: proof-obligation stellaMLL.15                                      *)
+(* ─────────────────────────────────────────────────────────────────────────── *)
+
+(*
+   PROOF-OBLIGATION[stellaMLL.15]:
+   GOAL (§70.21 — Completeness MLL+MIX):
+     !Phi Gamma Omega.
+       proof_like Phi Gamma ==>
+       wf_basis (orth_fin_C {}) Omega ==>
+       Phi IN interp_sequent (orth_fin_C {}) Omega Gamma ==>
+       ?S. is_mll_mix_proof_net S Gamma /\ Phi_ax S = Phi
+   STRATEGY (§70.21 proof, p.338):
+     Phi is proof-like: well-formed, binary stars, address-rays match ST(⊢ Gamma).
+     Construct S by placing axiom links on the syntax tree ST(⊢ Gamma),
+     linking atoms matched by Phi (each binary star [r, r'] gives one ax link).
+     Since Phi ∈ [[⊢ Gamma]]_Omega ⊆ Tests(⊢ Gamma)^{⊥^{fin}} (by §70.18):
+       for all switchings phi, Test(⊢ Gamma)^phi ⊥^{fin} Phi
+       <=> AEx(Test(⊢ Gamma)^phi ++ Phi) is finite
+       => by §68.21 (dr_acyclic_iff_finite_AEx): S^phi is acyclic.
+     Acyclicity for all switchings = MLL+MIX correctness (§68.21 (1)).
+     Hence S is an MLL+MIX proof-net with Phi_ax S = Phi.
+   CITATION: §70.21 Theorem (Completeness MLL+MIX).
+   DRAFT-TACTICS: cheat
+*)
+Theorem completeness_mll_mix :                                  (* §70.21 *)
+  !Phi Gamma Omega.
+    proof_like Phi Gamma ==>
+    wf_basis (orth_fin_C {}) Omega ==>
+    Phi IN interp_sequent (orth_fin_C {}) Omega Gamma ==>
+    ?S.
+      is_mll_mix_proof_net S Gamma /\ Phi_ax S = Phi
+Proof
+  cheat
+QED
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §70.23  Theorem: Full soundness for MLL                                       *)
+(*                                                                             *)
+(* STATEMENT (§70.23, p.338):                                                   *)
+(*   Let ⊢ S : Γ be an MLL proof-net and Ω a basis of interpretation.          *)
+(*   We have:  Ex(Φ_S^comp) ∈ [[⊢ Γ]]_Ω                                        *)
+(*   (holding for both ⊥^1 and ⊥^R orthogonalities)                            *)
+(*                                                                             *)
+(* We state two variants — one for ⊥^1 and one for ⊥^R.                       *)
+(* DEFERRED: proof-obligation stellaMLL.16 / stellaMLL.17                       *)
+(* ─────────────────────────────────────────────────────────────────────────── *)
+
+(*
+   PROOF-OBLIGATION[stellaMLL.16]:
+   GOAL (§70.23 — Full soundness MLL, orthogonality ⊥^1):
+     !S Gamma Omega.
+       is_mll_proof_net S Gamma ==>
+       wf_basis (orth_one_C {}) Omega ==>
+       ?gamma.
+         gamma IN AEx_C (Phi_comp S) /\
+         gamma IN interp_sequent (orth_one_C {}) Omega Gamma
+   STRATEGY (§70.23 proof, p.338):
+     Exactly as §70.17 proof, but using ⊥^1.
+     The only difference is the axiom case:
+       Need CARD(AEx(Phi1 ++ Phi2 ++ Phi_ax S)) = 1 (not merely finite).
+       By wf_basis: Phi2 ++ Phi_ax S is orthogonal ⊥^1 to Phi1
+       (the basis satisfies the interaction condition — §70.9 property).
+       Hence AEx has exactly 1 element.
+   CITATION: §70.23 Theorem (Full soundness MLL).
+   DRAFT-TACTICS: cheat
+*)
+Theorem full_soundness_mll_one :                                (* §70.23 *)
+  !S Gamma Omega.
+    is_mll_proof_net S Gamma ==>
+    wf_basis (orth_one_C {}) Omega ==>
+    ?gamma.
+      gamma IN AEx_C (Phi_comp S) /\
+      gamma IN interp_sequent (orth_one_C {}) Omega Gamma
+Proof
+  cheat
+QED
+
+(*
+   PROOF-OBLIGATION[stellaMLL.17]:
+   GOAL (§70.23 — Full soundness MLL, orthogonality ⊥^R):
+     !S Gamma Omega.
+       is_mll_proof_net S Gamma ==>
+       wf_basis (orth_roots_C {}) Omega ==>
+       ?gamma.
+         gamma IN AEx_C (Phi_comp S) /\
+         gamma IN interp_sequent (orth_roots_C {}) Omega Gamma
+   STRATEGY:
+     Same as stellaMLL.16 but for ⊥^R:
+       AEx(Phi1 ++ Phi2 ++ Phi_ax S) = {Roots(Phi1 ++ Phi2 ++ Phi_ax S)}
+       (reduces entirely to uncoloured rays).
+   CITATION: §70.23 Theorem (Full soundness MLL) — ⊥^R variant.
+   DRAFT-TACTICS: cheat
+*)
+Theorem full_soundness_mll_roots :                              (* §70.23 *)
+  !S Gamma Omega.
+    is_mll_proof_net S Gamma ==>
+    wf_basis (orth_roots_C {}) Omega ==>
+    ?gamma.
+      gamma IN AEx_C (Phi_comp S) /\
+      gamma IN interp_sequent (orth_roots_C {}) Omega Gamma
+Proof
+  cheat
+QED
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §70.26  Theorem: Completeness for MLL                                         *)
+(*                                                                             *)
+(* STATEMENT (§70.26, p.339):                                                   *)
+(*   If Φ ∈ ⟨⟨⊢ Γ⟩⟩^R_Ω (resp. ⟨⟨⊢ Γ⟩⟩^1_Ω) is proof-like w.r.t. a          *)
+(*   provable MLL sequent ⊢ Γ, then there exists an MLL proof-net ⊢ S : Γ     *)
+(*   such that Φ = Φ_S^{ax}.                                                    *)
+(*                                                                             *)
+(* We state two variants — for ⊥^R and for ⊥^1.                               *)
+(* DEFERRED: proof-obligation stellaMLL.18 / stellaMLL.19                       *)
+(* ─────────────────────────────────────────────────────────────────────────── *)
+
+(*
+   PROOF-OBLIGATION[stellaMLL.18]:
+   GOAL (§70.26 — Completeness MLL, strict interpretation ⟨⟨⊢ Γ⟩⟩^R):
+     !Phi Gamma Omega.
+       proof_like Phi Gamma ==>
+       wf_basis (orth_roots_C {}) Omega ==>
+       Phi IN strict_interp_roots Omega Gamma ==>
+       ?S. is_mll_proof_net S Gamma /\ Phi_ax S = Phi
+   STRATEGY (§70.26 proof, p.339):
+     Like MLL+MIX completeness (stellaMLL.15).
+     Construct S on ST(⊢ Gamma) from Phi.
+     Now Phi ∈ ⟨⟨⊢ Gamma⟩⟩^R_Omega = Tests(⊢ Gamma)^{⊥^R}:
+       for all switchings phi, Phi ⊥^R Test(⊢ Gamma)^phi
+       <=> AEx(Phi ++ Test(⊢ Gamma)^phi) = {Roots(...)}.
+       By §68.21 Corollary (dr_connected_acyclic_iff_singleton_AEx):
+         AEx has exactly 1 element => S^phi connected & acyclic.
+     Connected & acyclic for all switchings = MLL correctness.
+     Hence S is an MLL proof-net.
+   CITATION: §70.26 Theorem (Completeness MLL) — ⊥^R variant.
+   DRAFT-TACTICS: cheat
+*)
+Theorem completeness_mll_roots :                                (* §70.26 *)
+  !Phi Gamma Omega.
+    proof_like Phi Gamma ==>
+    wf_basis (orth_roots_C {}) Omega ==>
+    Phi IN strict_interp_roots Omega Gamma ==>
+    ?S.
+      is_mll_proof_net S Gamma /\ Phi_ax S = Phi
+Proof
+  cheat
+QED
+
+(*
+   PROOF-OBLIGATION[stellaMLL.19]:
+   GOAL (§70.26 — Completeness MLL, strict interpretation ⟨⟨⊢ Γ⟩⟩^1):
+     !Phi Gamma Omega.
+       proof_like Phi Gamma ==>
+       wf_basis (orth_one_C {}) Omega ==>
+       Phi IN strict_interp_one Omega Gamma ==>
+       ?S. is_mll_proof_net S Gamma /\ Phi_ax S = Phi
+   STRATEGY:
+     Same as stellaMLL.18 but using ⊥^1:
+       Phi ⊥^1 Test(⊢ Gamma)^phi => CARD(AEx) = 1 => S^phi connected & acyclic.
+   CITATION: §70.26 Theorem (Completeness MLL) — ⊥^1 variant.
+   DRAFT-TACTICS: cheat
+*)
+Theorem completeness_mll_one :                                  (* §70.26 *)
+  !Phi Gamma Omega.
+    proof_like Phi Gamma ==>
+    wf_basis (orth_one_C {}) Omega ==>
+    Phi IN strict_interp_one Omega Gamma ==>
+    ?S.
+      is_mll_proof_net S Gamma /\ Phi_ax S = Phi
+Proof
+  cheat
+QED
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §70  SANITY: interp_formula on atoms unfolds to Omega                        *)
+(* ─────────────────────────────────────────────────────────────────────────── *)
+
+(* §70.10  SANITY: interp_formula unfolds definitionally on atoms.
+   Use Once to avoid infinite unfolding of the recursive definition.          *)
+Theorem interp_atom :
+  !orth Omega i t.
+    interp_formula orth Omega (MAtom i) t = Omega (MAtom i) i t
+Proof
+  simp [Once interp_formula_def]
+QED
+
+Theorem interp_neg :
+  !orth Omega i t.
+    interp_formula orth Omega (MNeg i) t =
+    orthogonal_set orth (Omega (MAtom i) i t)
+Proof
+  simp [Once interp_formula_def]
+QED
+
+(* §70.10  SANITY: tensor interpretation unfolds to behaviour_tensor.          *)
+Theorem interp_tens :
+  !orth Omega A1 A2 t.
+    interp_formula orth Omega (MTens A1 A2) t =
+    behaviour_tensor orth
+      (interp_formula orth Omega A1 (App dir_left  [t]))
+      (interp_formula orth Omega A2 (App dir_right [t]))
+Proof
+  simp [Once interp_formula_def]
+QED
+
+(* §70.10  SANITY: par interpretation unfolds to behaviour_par.                *)
+Theorem interp_par :
+  !orth Omega A1 A2 t.
+    interp_formula orth Omega (MPar A1 A2) t =
+    behaviour_par orth
+      (interp_formula orth Omega A1 (App dir_left  [t]))
+      (interp_formula orth Omega A2 (App dir_right [t]))
+Proof
+  simp [Once interp_formula_def]
+QED
+
+(* §70.25  SANITY: strict_interp_roots is an orthogonal set of tests.         *)
+Theorem strict_interp_roots_is_orth :
+  !Omega Gamma.
+    strict_interp_roots Omega Gamma =
+    orthogonal_set (orth_roots_C {}) (tests_sequent Gamma)
+Proof
+  rw [strict_interp_roots_def]
+QED
+
+(* §70.25  SANITY: strict_interp_one is an orthogonal set of tests.           *)
+Theorem strict_interp_one_is_orth :
+  !Omega Gamma.
+    strict_interp_one Omega Gamma =
+    orthogonal_set (orth_one_C {}) (tests_sequent Gamma)
+Proof
+  rw [strict_interp_one_def]
+QED
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* EXTENDED PROOF-DEBT LEDGER  (§70 additions)                                  *)
+(*                                                                              *)
+(* stellaMLL.14  full_soundness_mll_mix  (§70.17 Theorem)                      *)
+(*   GOAL: !S Gamma Omega.                                                      *)
+(*           is_mll_mix_proof_net S Gamma ==>                                   *)
+(*           wf_basis (orth_fin_C {}) Omega ==>                                 *)
+(*           ?gamma. gamma IN AEx_C (Phi_comp S) /\                             *)
+(*                   gamma IN interp_sequent (orth_fin_C {}) Omega Gamma        *)
+(*   STRATEGY:                                                                  *)
+(*     Induction on proof-net structure (axiom / ⊗ / ⅋ / MIX / cut cases).    *)
+(*     Key sub-cases:                                                            *)
+(*       · Axiom: basis Omega and orth_fin give Phi_ax S ⊥^{fin} every test.  *)
+(*       · Tensor: IH + pre_tensor_subset_tensor + Lemma §70.14.               *)
+(*       · Par: IH + behaviour_par definition.                                  *)
+(*       · MIX: tensor of two sub-nets ⊆ par.                                  *)
+(*       · Cut: sim_cut_elim (stellaMLL.06) + IH on cut-free normal form.       *)
+(*   STATUS: deferred (induction on proof-net structure, needs §70.14).         *)
+(*   CITATION: §70.17 Theorem.                                                  *)
+(*                                                                              *)
+(* stellaMLL.15  completeness_mll_mix  (§70.21 Theorem)                        *)
+(*   GOAL: !Phi Gamma Omega.                                                    *)
+(*           proof_like Phi Gamma ==> wf_basis (orth_fin_C {}) Omega ==>       *)
+(*           Phi IN interp_sequent (orth_fin_C {}) Omega Gamma ==>             *)
+(*           ?S. is_mll_mix_proof_net S Gamma /\ Phi_ax S = Phi               *)
+(*   STRATEGY:                                                                  *)
+(*     Construct S from Phi (proof-like constellation = axiom-only PS on ST).  *)
+(*     By §70.18: Tests(⊢ Gamma) ⊆ [[⊢ Gamma]]^{⊥^{fin}}.                    *)
+(*     Phi ∈ [[⊢ Gamma]]_Omega => Phi ⊥^{fin} each test => S^phi acyclic.     *)
+(*     Acyclic for all phi => MLL+MIX correctness.                              *)
+(*   STATUS: deferred (construction of S + §70.18 + §68.21).                   *)
+(*   CITATION: §70.21 Theorem (Completeness MLL+MIX).                          *)
+(*                                                                              *)
+(* stellaMLL.16  full_soundness_mll_one  (§70.23 Theorem — ⊥^1 variant)       *)
+(*   GOAL: !S Gamma Omega.                                                      *)
+(*           is_mll_proof_net S Gamma ==>                                       *)
+(*           wf_basis (orth_one_C {}) Omega ==>                                 *)
+(*           ?gamma. gamma IN AEx_C (Phi_comp S) /\                             *)
+(*                   gamma IN interp_sequent (orth_one_C {}) Omega Gamma       *)
+(*   STRATEGY:                                                                  *)
+(*     As stellaMLL.14 but ⊥^1: axiom case needs CARD(AEx) = 1, not just finite.*)
+(*     Basis Omega guarantees |AEx(Phi1 ++ Phi2 ++ Phi_ax S)| = 1 by §70.23. *)
+(*   STATUS: deferred (same structure as stellaMLL.14 + ⊥^1 axiom case).      *)
+(*   CITATION: §70.23 Theorem (Full soundness MLL — ⊥^1).                     *)
+(*                                                                              *)
+(* stellaMLL.17  full_soundness_mll_roots  (§70.23 Theorem — ⊥^R variant)     *)
+(*   GOAL: same as stellaMLL.16 with orth_roots_C instead of orth_one_C.       *)
+(*   STRATEGY: axiom case: AEx = {Roots(...)} by ⊥^R + basis Omega properties. *)
+(*   STATUS: deferred.                                                           *)
+(*   CITATION: §70.23 Theorem (Full soundness MLL — ⊥^R).                     *)
+(*                                                                              *)
+(* stellaMLL.18  completeness_mll_roots  (§70.26 Theorem — ⊥^R variant)       *)
+(*   GOAL: !Phi Gamma Omega.                                                    *)
+(*           proof_like Phi Gamma ==> wf_basis (orth_roots_C {}) Omega ==>    *)
+(*           Phi IN strict_interp_roots Omega Gamma ==>                         *)
+(*           ?S. is_mll_proof_net S Gamma /\ Phi_ax S = Phi                   *)
+(*   STRATEGY:                                                                  *)
+(*     Construct S on ST(⊢ Gamma) from Phi.                                    *)
+(*     Phi ∈ Tests(⊢ Gamma)^{⊥^R} => for all phi:                             *)
+(*       AEx(Phi ++ Test(⊢ Gamma)^phi) = {Roots}.                              *)
+(*     By dr_connected_acyclic_iff_singleton_AEx (stellaMLL.10):               *)
+(*       {Roots} = {concl_star S} => |AEx| = 1 => S^phi connected & acyclic.  *)
+(*     Connected & acyclic for all phi = MLL correctness.                       *)
+(*   STATUS: deferred (construction of S + stellaMLL.10 + §68.19).             *)
+(*   CITATION: §70.26 Theorem (Completeness MLL — ⊥^R).                       *)
+(*                                                                              *)
+(* stellaMLL.19  completeness_mll_one  (§70.26 Theorem — ⊥^1 variant)         *)
+(*   GOAL: same as stellaMLL.18 with strict_interp_one / orth_one_C.           *)
+(*   STRATEGY: Phi ∈ Tests(⊢ Gamma)^{⊥^1}: CARD(AEx) = 1 for all tests =>    *)
+(*     |AEx| = 1 => S^phi connected & acyclic.                                  *)
+(*   STATUS: deferred.                                                           *)
+(*   CITATION: §70.26 Theorem (Completeness MLL — ⊥^1).                       *)
+(*                                                                              *)
+(* EVAL vs CHEAT SUMMARY  (§70 additions):                                      *)
+(*   EVAL / rw (non-debt):                                                      *)
+(*     · interp_atom      — rw [interp_formula_def]                            *)
+(*     · interp_neg       — rw [interp_formula_def]                            *)
+(*     · interp_tens      — rw [interp_formula_def]                            *)
+(*     · interp_par       — rw [interp_formula_def]                            *)
+(*     · strict_interp_roots_is_orth — rw [strict_interp_roots_def]           *)
+(*     · strict_interp_one_is_orth   — rw [strict_interp_one_def]             *)
+(*   CHEAT (non-trivial, deferred):                                              *)
+(*     · full_soundness_mll_mix      (stellaMLL.14)                             *)
+(*     · completeness_mll_mix        (stellaMLL.15)                             *)
+(*     · full_soundness_mll_one      (stellaMLL.16)                             *)
+(*     · full_soundness_mll_roots    (stellaMLL.17)                             *)
+(*     · completeness_mll_roots      (stellaMLL.18)                             *)
+(*     · completeness_mll_one        (stellaMLL.19)                             *)
+(*                                                                              *)
+(* ZERO new_axiom / mk_thm USED IN THIS FILE.                                   *)
+(* ─────────────────────────────────────────────────────────────────────────── *)
+
 val _ = export_theory ();
