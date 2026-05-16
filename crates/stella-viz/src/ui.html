@@ -32,7 +32,7 @@
     overflow: hidden;
   }
   .sidebar {
-    width: 280px;
+    width: 290px;
     flex-shrink: 0;
     background: #161b22;
     border-right: 1px solid #30363d;
@@ -47,6 +47,17 @@
     letter-spacing: 0.08em;
     padding: 12px 14px 6px;
     border-bottom: 1px solid #21262d;
+  }
+  .sidebar .section-label {
+    font-size: 0.68rem;
+    color: #58a6ff;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding: 8px 14px 4px;
+    background: #0d1117;
+    border-bottom: 1px solid #21262d;
+    border-top: 2px solid #1f3352;
+    margin-top: 4px;
   }
   .preset-btn {
     display: block;
@@ -64,6 +75,9 @@
   }
   .preset-btn:hover { background: #21262d; }
   .preset-btn.active { background: #1f3352; color: #58a6ff; }
+  .preset-btn.curated { border-left: 2px solid #388bfd44; }
+  .preset-btn.curated:hover { background: #192035; }
+  .preset-btn.curated.active { background: #1a2540; border-left-color: #58a6ff; }
   .preset-btn .preset-name { font-weight: 600; }
   .preset-btn .preset-desc {
     margin-top: 4px;
@@ -107,6 +121,11 @@
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .toolbar .kbd-hint {
+    font-size: 0.68rem;
+    color: #484f58;
     white-space: nowrap;
   }
   .toolbar button#btn-reset {
@@ -173,6 +192,7 @@
     font-size: 0.78rem;
     color: #c9d1d9;
     line-height: 1.7;
+    width: 100%;
   }
   .step-entry {
     margin-bottom: 10px;
@@ -180,14 +200,23 @@
     background: #21262d;
     border-radius: 6px;
     border-left: 3px solid #30363d;
+    cursor: pointer;
+    transition: background 0.1s;
   }
+  .step-entry:hover { background: #2a313b; }
   .step-entry.current {
     border-left-color: #58a6ff;
     background: #1f3352;
   }
+  .step-entry.current:hover { background: #1f3d65; }
   .step-entry.final-step {
     border-left-color: #3fb950;
     background: #1b2d1f;
+  }
+  .step-entry.final-step:hover { background: #1f3525; }
+  .step-entry.current.final-step {
+    border-left-color: #3fb950;
+    background: #1a3025;
   }
   .step-label {
     font-weight: 600;
@@ -220,12 +249,36 @@
     color: #e6edf3;
     margin-bottom: 4px;
   }
-  .step-ray {
-    font-size: 0.71rem;
+  .step-stars .star {
+    display: block;
+    padding: 2px 0;
+  }
+  .step-stars .star .ray-pos  { color: #56d364; }
+  .step-stars .star .ray-neg  { color: #f85149; }
+  .step-stars .star .ray-neu  { color: #c9d1d9; }
+  /* Active matchable ray-pair highlight */
+  .step-ray-block {
+    margin-top: 5px;
+    padding: 5px 8px;
+    background: #2a1f0a;
+    border: 1px solid #7d4e0055;
+    border-left: 3px solid #f0883e;
+    border-radius: 4px;
+    font-size: 0.70rem;
     color: #f0883e;
     font-style: italic;
+    line-height: 1.5;
   }
-  .step-ray:empty { display: none; }
+  .step-ray-block .ray-label {
+    font-style: normal;
+    font-weight: 600;
+    font-size: 0.65rem;
+    color: #d29922;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 2px;
+  }
+  .step-ray-block:empty { display: none; }
 
   /* Active ray highlight in dep-graph panel header */
   #graph-panel-header .active-info {
@@ -234,6 +287,9 @@
     text-transform: none;
     letter-spacing: 0;
     margin-top: 2px;
+  }
+  #graph-panel-header .active-info.normal-form {
+    color: #3fb950;
   }
 </style>
 </head>
@@ -246,23 +302,24 @@
 
 <div class="main">
   <div class="sidebar" id="sidebar">
-    <h2>Presets</h2>
+    <h2>Constellations</h2>
     <div id="preset-list"><span class="loading" style="padding:14px;display:block;">Loading presets…</span></div>
   </div>
 
   <div class="content">
     <div class="toolbar">
-      <button id="btn-reset" title="Reset to step 0">↺ Reset</button>
-      <button id="btn-prev" disabled title="Previous step (◀)">◀ Prev</button>
-      <button id="btn-next" disabled title="Next step (▶)">Next ▶</button>
+      <button id="btn-reset" title="Reset to step 0">&#x21BA; Reset</button>
+      <button id="btn-prev" disabled title="Previous step">&#9664; Prev</button>
+      <button id="btn-next" disabled title="Next step">Next &#9654;</button>
       <span class="step-info" id="step-info">Select a preset to begin.</span>
+      <span class="kbd-hint">&#8592;&#8594; / click step</span>
     </div>
 
     <div class="panels">
       <!-- Left panel: rendered dep-graph at current step -->
       <div class="panel" style="flex:2;">
         <div class="panel-header" id="graph-panel-header">
-          Interaction space Ψ — dep-graph D[Ψ; C] at current step
+          Interaction space &#936; &mdash; dep-graph D[&#936;; C] at current step
           <div class="active-info" id="active-ray-info"></div>
         </div>
         <div class="panel-body" id="graph-panel-body">
@@ -271,8 +328,8 @@
       </div>
 
       <!-- Right panel: step trace -->
-      <div class="panel" style="flex:1; min-width:240px;">
-        <div class="panel-header">IEx step trace — Ψ at each step</div>
+      <div class="panel" style="flex:1; min-width:250px;">
+        <div class="panel-header">IEx step trace &mdash; &#936; at each step</div>
         <div class="panel-body text" id="exec-panel">
           <span class="loading">Select a preset to see the execution trace.</span>
         </div>
@@ -292,6 +349,9 @@ let gPresets = [];         // [{id, name, description}]
 let gSteps = [];           // Current preset's step snapshots from /api/steps/<n>
 let gCurrentPresetIdx = -1;
 let gStepIndex = 0;        // Current step index into gSteps
+
+// Indices 0-2 are "original" presets; 3+ are curated additions.
+const CURATED_START = 3;
 
 // ── Viz.js init ────────────────────────────────────────────────────────────────
 async function initViz() {
@@ -325,9 +385,18 @@ async function loadPresets() {
 function renderPresetList() {
   const el = document.getElementById("preset-list");
   el.innerHTML = "";
+
   gPresets.forEach((p, i) => {
+    // Insert section label before curated presets
+    if (i === CURATED_START) {
+      const lbl = document.createElement("div");
+      lbl.className = "section-label";
+      lbl.textContent = "Curated examples";
+      el.appendChild(lbl);
+    }
+
     const btn = document.createElement("button");
-    btn.className = "preset-btn";
+    btn.className = "preset-btn" + (i >= CURATED_START ? " curated" : "");
     btn.innerHTML = `<div class="preset-name">${esc(p.name)}</div><div class="preset-desc">${esc(p.description)}</div>`;
     btn.addEventListener("click", () => selectPreset(i));
     el.appendChild(btn);
@@ -346,6 +415,7 @@ async function selectPreset(idx) {
     `<span class="loading">Loading…</span>`;
   document.getElementById("step-info").textContent = "Loading step trace…";
   document.getElementById("active-ray-info").textContent = "";
+  document.getElementById("active-ray-info").className = "active-info";
 
   try {
     // Load step-by-step trace from /api/steps/<idx>
@@ -367,9 +437,18 @@ async function renderCurrentStep() {
   // Render DOT for the current step's Ψ dep-graph
   await renderDot(snap.dot);
 
-  // Show active ray info
-  document.getElementById("active-ray-info").textContent =
-    snap.active_ray ? `Next fire: ${snap.active_ray}` : (snap.is_final ? "Normal form reached." : "");
+  // Show active ray info in panel header
+  const rayInfoEl = document.getElementById("active-ray-info");
+  if (snap.active_ray) {
+    rayInfoEl.textContent = "Next fire: " + snap.active_ray;
+    rayInfoEl.className = "active-info";
+  } else if (snap.is_final) {
+    rayInfoEl.textContent = "Normal form — no more interactions possible.";
+    rayInfoEl.className = "active-info normal-form";
+  } else {
+    rayInfoEl.textContent = "";
+    rayInfoEl.className = "active-info";
+  }
 
   // Render step trace panel
   renderTracePanel();
@@ -381,7 +460,7 @@ async function renderCurrentStep() {
 async function renderDot(dotSrc) {
   const container = document.getElementById("graph-svg-container");
   if (!dotSrc || dotSrc.trim() === "" || dotSrc.includes("// empty")) {
-    container.innerHTML = `<span style="color:#8b949e; font-size:0.82rem;">Ψ is empty (no stars).</span>`;
+    container.innerHTML = `<span style="color:#8b949e; font-size:0.82rem;">&#936; is empty (no stars).</span>`;
     return;
   }
   if (gViz) {
@@ -402,9 +481,45 @@ async function renderDot(dotSrc) {
   }
 }
 
+// ── Coloured ray rendering ─────────────────────────────────────────────────────
+// Classify a ray string by its leading character to apply colour.
+function classifyRay(ray) {
+  const s = ray.trim();
+  if (s.startsWith("+")) return "ray-pos";
+  if (s.startsWith("-")) return "ray-neg";
+  return "ray-neu";
+}
+
+function renderStarHtml(starStr) {
+  // starStr is like "[+add(0,Y,Y), -foo(X)]"
+  // Strip outer brackets and split on top-level commas.
+  const inner = starStr.replace(/^\[/, "").replace(/\]$/, "").trim();
+  if (!inner) return `<span style="color:#8b949e;">&#8709;</span>`;
+  const rays = splitTopLevel(inner);
+  return rays
+    .map(r => `<span class="ray ${classifyRay(r)}">${esc(r.trim())}</span>`)
+    .join(`, `);
+}
+
+// Split a comma-separated list respecting nested parentheses.
+function splitTopLevel(s) {
+  const parts = [];
+  let depth = 0;
+  let cur = "";
+  for (const ch of s) {
+    if (ch === "(") { depth++; cur += ch; }
+    else if (ch === ")") { depth--; cur += ch; }
+    else if (ch === "," && depth === 0) { parts.push(cur); cur = ""; }
+    else { cur += ch; }
+  }
+  if (cur) parts.push(cur);
+  return parts;
+}
+
 function renderTracePanel() {
   const panel = document.getElementById("exec-panel");
   let html = `<div class="step-panel">`;
+
   gSteps.forEach((s, i) => {
     const isCurrent = (i === gStepIndex);
     let cls = "step-entry";
@@ -412,11 +527,21 @@ function renderTracePanel() {
     if (s.is_final) cls += " final-step";
 
     const badgeText = s.is_final ? "normal form" : `step ${s.step}`;
-    const badgeCls = s.is_final ? "badge final" : "badge";
+    const badgeCls  = s.is_final ? "badge final"  : "badge";
 
+    // Render each star with coloured rays
     const starsHtml = s.psi_stars.length > 0
-      ? s.psi_stars.map(st => `<div>${esc(st)}</div>`).join("")
-      : `<div style="color:#8b949e;">∅ (empty interaction space)</div>`;
+      ? s.psi_stars.map(st => `<div class="star">[${renderStarHtml(st)}]</div>`).join("")
+      : `<div style="color:#8b949e;">&#8709; (empty interaction space)</div>`;
+
+    // Active ray block — show the matchable ray pair clearly
+    let rayBlockHtml = "";
+    if (s.active_ray) {
+      rayBlockHtml = `<div class="step-ray-block">
+        <div class="ray-label">Next interaction</div>
+        ${esc(s.active_ray)}
+      </div>`;
+    }
 
     html += `<div class="${cls}" data-step="${i}">
       <div class="step-label">
@@ -424,9 +549,10 @@ function renderTracePanel() {
         <span class="${badgeCls}">${badgeText}</span>
       </div>
       <div class="step-stars">${starsHtml}</div>
-      <div class="step-ray">${esc(s.active_ray)}</div>
+      ${rayBlockHtml}
     </div>`;
   });
+
   html += `</div>`;
   panel.innerHTML = html;
 
@@ -439,7 +565,6 @@ function renderTracePanel() {
         await renderCurrentStep();
       }
     });
-    el.style.cursor = "pointer";
   });
 
   // Scroll current step into view
@@ -478,17 +603,22 @@ document.getElementById("btn-next").addEventListener("click", async () => {
   }
 });
 
-// Keyboard navigation: arrow keys
+// Keyboard navigation: arrow keys (also works when panel is focused)
 document.addEventListener("keydown", async (e) => {
-  if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+  if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" ||
+      e.target.tagName === "SELECT") return;
   if (e.key === "ArrowRight" || e.key === "ArrowDown") {
     if (gStepIndex < gSteps.length - 1) { gStepIndex++; await renderCurrentStep(); }
+    e.preventDefault();
   } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
     if (gStepIndex > 0) { gStepIndex--; await renderCurrentStep(); }
+    e.preventDefault();
   } else if (e.key === "Home") {
     gStepIndex = 0; await renderCurrentStep();
+    e.preventDefault();
   } else if (e.key === "End") {
     gStepIndex = gSteps.length - 1; await renderCurrentStep();
+    e.preventDefault();
   }
 });
 
