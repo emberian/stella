@@ -11,6 +11,7 @@ pub mod diagram;
 pub mod index;
 pub mod execution;
 pub mod mll;
+pub mod mll2i;
 pub mod strategy;
 pub mod interactive;
 pub mod pda;
