@@ -44,8 +44,8 @@
 use std::collections::HashSet;
 
 use crate::ch9::{saturation_profile, ConstellationClass};
-use crate::constellation::{Constellation, Star};
-use crate::dep_graph::{all_colours, DepGraph};
+use crate::constellation::{star_kind, Constellation, Star, StarKind};
+use crate::dep_graph::{all_colours, DepEdge, DepGraph};
 use crate::polarised::{matchable, ray_polarity, Polarity, PolarisedCompat};
 use crate::subst::Substitution;
 use crate::term::{mk_var_interned, Var, Term};
@@ -267,6 +267,85 @@ fn find_gen_step(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// L1c: Agent/environment cut types
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// A caller-supplied designation of which star indices (in the current `Ψ_k`)
+/// belong to the candidate *agent* sub-constellation.
+///
+/// The cut is **structural**: a partition of star-occurrence indices in the
+/// dep-graph.  No ray is ever hand-tagged motor/sensor.  Layer 2 will later
+/// *solve for* the correct agent designation by detecting the reafferent-closure
+/// fixed point; L1c only provides the instrument to evaluate any given
+/// candidate cut.
+pub type AgentSet = HashSet<usize>;
+
+/// Classification of a single dep-graph edge under an agent/environment cut.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum EdgeKind {
+    /// Both endpoint stars are in the agent sub-constellation.
+    AgentInternal,
+    /// Both endpoint stars are in the environment partition.
+    EnvInternal,
+    /// One endpoint is in the agent, the other in the environment — a
+    /// cross-cut edge (crosses the agent/environment boundary).
+    CrossCut,
+}
+
+/// A dep-graph edge together with its cut classification.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct LabelledEdge {
+    pub edge: DepEdge,
+    pub kind: EdgeKind,
+}
+
+/// The agent/environment cut view of `D[Ψ_k; C]` for a given `AgentSet`.
+///
+/// Computed by `Step::cut_view(agent_stars)`.  Pure structural analysis of the
+/// existing dep-graph under the caller-supplied partition — no ray hand-tagging,
+/// no reafference detection (that is L2a).
+///
+/// # Cross-cut edges and boundary flux
+///
+/// A *cross-cut edge* connects one star in the agent sub-constellation to one
+/// star in the environment partition.  Each such edge represents a potential
+/// interaction crossing the boundary.  The *boundary flux* counts how many such
+/// edges exist in this step's dep-graph snapshot — a per-step measure of how
+/// much the agent and environment are currently coupled.
+#[derive(Debug, Clone)]
+pub struct CutView {
+    /// Dep-graph edges whose both endpoints lie inside the agent sub-constellation.
+    pub agent_internal_edges: Vec<LabelledEdge>,
+    /// Dep-graph edges whose both endpoints lie outside the agent (i.e. inside the environment).
+    pub env_internal_edges: Vec<LabelledEdge>,
+    /// Dep-graph edges that cross the agent/environment boundary (one endpoint in each).
+    pub cross_cut_edges: Vec<LabelledEdge>,
+    /// Number of cross-cut edges (boundary flux count for this step).
+    ///
+    /// Zero iff the agent and environment are fully decoupled in `D[Ψ_k; C]` at
+    /// this step.  Non-zero iff at least one cross-boundary interaction is
+    /// structurally available.
+    pub boundary_flux: usize,
+}
+
+/// Candidacy-gating data exposed by `Step::subjective_profile()`.
+///
+/// Used by Layer 2 to determine whether the step's `Ψ_k` is in the
+/// subjective/animist fragment (where reafferent closure can self-organise)
+/// vs the objective/dead fragment (no charge, flat valence).
+#[derive(Debug, Clone)]
+pub struct SubjectiveProfile {
+    /// Number of *subjective* rays in `Ψ_k`: coloured rays with at least one
+    /// coloured argument (§48.7).
+    pub n_subjective_rays: usize,
+    /// Number of *animist* stars in `Ψ_k` (§48.10): stars that contain both
+    /// positive and negative rays.
+    pub n_animist_stars: usize,
+    /// Ch9 §62 structural class of `Ψ_k` (reused from the step's `ch9_class`).
+    pub ch9_class: ConstellationClass,
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Step (the yielded item)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -319,6 +398,118 @@ pub struct Step {
     /// (a) terminate (if no more matchable Φ-stars exist for the next round), or
     /// (b) advance to the next §49.52 round (incrementing `round`) with fresh Φ supply.
     pub is_normal_form: bool,
+}
+
+impl Step {
+    // ─────────────────────────────────────────────────────────────────────────
+    // L1c: cut_view — markable agent/environment cut over dep_graph
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// Classify dep-graph edges under a caller-supplied agent/environment cut.
+    ///
+    /// # Arguments
+    ///
+    /// `agent_stars` — a set of star indices (positions in `self.psi`) that
+    /// the caller designates as the candidate *agent* sub-constellation.
+    /// Star indices NOT in the set form the *environment* partition.
+    ///
+    /// # Returns
+    ///
+    /// A [`CutView`] partitioning `self.dep_graph.edges` into:
+    /// - `agent_internal_edges`: both endpoint stars in `agent_stars`
+    /// - `env_internal_edges`: both endpoint stars outside `agent_stars`
+    /// - `cross_cut_edges`: one endpoint in each partition
+    /// - `boundary_flux`: `cross_cut_edges.len()`
+    ///
+    /// # Faithfulness
+    ///
+    /// Pure structural analysis — no ray is hand-tagged, no substitution is
+    /// applied.  The dep-graph snapshot is taken as-is from `self.dep_graph`.
+    /// Calling this method does NOT alter the stream or any Step field.
+    pub fn cut_view(&self, agent_stars: &AgentSet) -> CutView {
+        let mut agent_internal_edges = Vec::new();
+        let mut env_internal_edges = Vec::new();
+        let mut cross_cut_edges = Vec::new();
+
+        for edge in &self.dep_graph.edges {
+            let (si, sj) = edge.star_indices();
+            let si_agent = agent_stars.contains(&si);
+            let sj_agent = agent_stars.contains(&sj);
+
+            let kind = match (si_agent, sj_agent) {
+                (true, true) => EdgeKind::AgentInternal,
+                (false, false) => EdgeKind::EnvInternal,
+                _ => EdgeKind::CrossCut,
+            };
+
+            let labelled = LabelledEdge { edge: edge.clone(), kind };
+            match kind {
+                EdgeKind::AgentInternal => agent_internal_edges.push(labelled),
+                EdgeKind::EnvInternal   => env_internal_edges.push(labelled),
+                EdgeKind::CrossCut      => cross_cut_edges.push(labelled),
+            }
+        }
+
+        let boundary_flux = cross_cut_edges.len();
+        CutView {
+            agent_internal_edges,
+            env_internal_edges,
+            cross_cut_edges,
+            boundary_flux,
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // L1c: subjective_profile — candidacy gating data (§62 + §48.7/§48.10)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// Compute candidacy-gating data for Layer 2.
+    ///
+    /// Returns a [`SubjectiveProfile`] with:
+    /// - `n_subjective_rays`: count of rays in `Ψ_k` that are coloured AND
+    ///   have at least one coloured argument (the §48.7 definition of a
+    ///   subjective ray).
+    /// - `n_animist_stars`: count of stars in `Ψ_k` that are animist (§48.10):
+    ///   contain both positive and negative rays.
+    /// - `ch9_class`: the §62 structural class (reused from `self.ch9_class`).
+    ///
+    /// # Faithfulness
+    ///
+    /// Pure read of `self.psi` and `self.ch9_class` — no stream mutation.
+    pub fn subjective_profile(&self) -> SubjectiveProfile {
+        use crate::term::{get, TermData};
+
+        let mut n_subjective_rays = 0usize;
+        let mut n_animist_stars = 0usize;
+
+        for star in &self.psi {
+            // Count animist stars.
+            if star_kind(star) == StarKind::Animist {
+                n_animist_stars += 1;
+            }
+
+            // Count subjective rays: coloured head with ≥1 coloured argument.
+            for &ray in star.iter() {
+                if let TermData::App(sym, ref args) = get(ray) {
+                    if sym.pol != Polarity::Neutral {
+                        // Coloured head — check if any argument is coloured.
+                        let has_coloured_arg = args.iter().any(|&arg| {
+                            matches!(get(arg), TermData::App(s, _) if s.pol != Polarity::Neutral)
+                        });
+                        if has_coloured_arg {
+                            n_subjective_rays += 1;
+                        }
+                    }
+                }
+            }
+        }
+
+        SubjectiveProfile {
+            n_subjective_rays,
+            n_animist_stars,
+            ch9_class: self.ch9_class,
+        }
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1057,5 +1248,197 @@ mod tests {
         let _ = &first.dep_graph;
         let _ = first.ch9_class;
         let _ = first.round;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // L1c: cut_view tests
+    //
+    // Tiny constellation: 3 stars, star 0 and 1 in agent; star 2 in environment.
+    // dep_graph has:
+    //   edge (0, 1) — agent-internal (0∈agent, 1∈agent)
+    //   edge (1, 2) — cross-cut     (1∈agent, 2∉agent)
+    //
+    // We construct this directly using a small matchable constellation:
+    //   star 0 = [+p(A)]
+    //   star 1 = [-p(B), +q(B)]
+    //   star 2 = [-q(C)]
+    //
+    // D[Ψ;C] edges: (0,1) from +p(A)⋈-p(B); (1,2) from +q(B)⋈-q(C).
+    // agent_stars = {0, 1}.
+    // Expected: agent_internal=[(0,1)], cross_cut=[(1,2)], env_internal=[].
+    // boundary_flux = 1.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// cut_view correctly classifies a known agent-internal edge vs cross-cut edge.
+    #[test]
+    fn cut_view_classifies_internal_vs_cross_cut() {
+        // Ψ = [+p(A)], [-p(B), +q(B)], [-q(C)]
+        // star 0 ∈ agent; star 1 ∈ agent; star 2 ∈ environment
+        let psi0: Vec<Star> = vec![
+            vec![pos_ray("p", vec![var("A")])],
+            vec![neg_ray("p", vec![var("B")]), pos_ray("q", vec![var("B")])],
+            vec![neg_ray("q", vec![var("C")])],
+        ];
+
+        // Use empty Φ (no supply); just drive one step to get a dep-graph snapshot.
+        // Actually: use Ψ directly as its own psi0 with empty phi so the dep-graph
+        // is built over the 3 stars as-is at step 0.
+        let phi: Constellation = vec![];
+        let step0 = subjective_stream(&phi, psi0)
+            .next()
+            .expect("must yield at least one step");
+
+        // Verify dep_graph has the expected edge structure.
+        // D[Ψ;C] should contain edges (0,1) and (1,2).
+        let edges = &step0.dep_graph.edges;
+        let has_01 = edges.iter().any(|e| {
+            let (si, sj) = e.star_indices(); (si == 0 && sj == 1) || (si == 1 && sj == 0)
+        });
+        let has_12 = edges.iter().any(|e| {
+            let (si, sj) = e.star_indices(); (si == 1 && sj == 2) || (si == 2 && sj == 1)
+        });
+        assert!(has_01, "dep_graph must contain edge (0,1); edges={:?}", edges);
+        assert!(has_12, "dep_graph must contain edge (1,2); edges={:?}", edges);
+
+        // Now apply cut: agent = {0, 1}, env = {2}.
+        let agent_stars: AgentSet = [0usize, 1].iter().copied().collect();
+        let cv = step0.cut_view(&agent_stars);
+
+        assert_eq!(cv.agent_internal_edges.len(), 1,
+            "must have exactly 1 agent-internal edge; got {:?}", cv.agent_internal_edges);
+        assert_eq!(cv.env_internal_edges.len(), 0,
+            "must have 0 env-internal edges; got {:?}", cv.env_internal_edges);
+        assert_eq!(cv.cross_cut_edges.len(), 1,
+            "must have exactly 1 cross-cut edge; got {:?}", cv.cross_cut_edges);
+        assert_eq!(cv.boundary_flux, 1,
+            "boundary_flux must be 1; got {}", cv.boundary_flux);
+
+        // Verify the agent-internal edge is (0,1).
+        let ai_edge = &cv.agent_internal_edges[0];
+        assert_eq!(ai_edge.kind, EdgeKind::AgentInternal);
+        let (si, sj) = ai_edge.edge.star_indices();
+        assert!(
+            (si == 0 && sj == 1) || (si == 1 && sj == 0),
+            "agent-internal edge must be (0,1); got ({si},{sj})"
+        );
+
+        // Verify the cross-cut edge is (1,2).
+        let cc_edge = &cv.cross_cut_edges[0];
+        assert_eq!(cc_edge.kind, EdgeKind::CrossCut);
+        let (si, sj) = cc_edge.edge.star_indices();
+        assert!(
+            (si == 1 && sj == 2) || (si == 2 && sj == 1),
+            "cross-cut edge must be (1,2); got ({si},{sj})"
+        );
+    }
+
+    /// boundary_flux is zero when agent and environment have no shared dep-graph edges.
+    #[test]
+    fn cut_view_boundary_flux_zero_when_no_cross_cut() {
+        // Ψ = [+p(A)], [-p(B)], [+q(X)], [-q(Y)]
+        // D[Ψ;C] edges: (0,1) from +p/-p; (2,3) from +q/-q.
+        // agent = {0, 1}, env = {2, 3}: no cross-cut edges → boundary_flux = 0.
+        let psi0: Vec<Star> = vec![
+            vec![pos_ray("p", vec![var("A")])],
+            vec![neg_ray("p", vec![var("B")])],
+            vec![pos_ray("q", vec![var("X")])],
+            vec![neg_ray("q", vec![var("Y")])],
+        ];
+        let phi: Constellation = vec![];
+        let step0 = subjective_stream(&phi, psi0)
+            .next()
+            .expect("must yield step");
+
+        let agent_stars: AgentSet = [0usize, 1].iter().copied().collect();
+        let cv = step0.cut_view(&agent_stars);
+
+        assert_eq!(cv.boundary_flux, 0,
+            "no cross-cut edges ⇒ boundary_flux must be 0; got {}", cv.boundary_flux);
+        assert_eq!(cv.cross_cut_edges.len(), 0);
+        assert_eq!(cv.agent_internal_edges.len(), 1,
+            "edge (0,1) must be agent-internal");
+        assert_eq!(cv.env_internal_edges.len(), 1,
+            "edge (2,3) must be env-internal");
+    }
+
+    /// boundary_flux is nonzero exactly when a cross-cut interaction exists.
+    #[test]
+    fn cut_view_boundary_flux_nonzero_iff_cross_cut_present() {
+        // Same 3-star constellation as cut_view_classifies_internal_vs_cross_cut.
+        // Varies the cut: agent = {0} only → edge (0,1) becomes cross-cut.
+        let psi0: Vec<Star> = vec![
+            vec![pos_ray("p", vec![var("A")])],
+            vec![neg_ray("p", vec![var("B")]), pos_ray("q", vec![var("B")])],
+            vec![neg_ray("q", vec![var("C")])],
+        ];
+        let phi: Constellation = vec![];
+        let step0 = subjective_stream(&phi, psi0)
+            .next()
+            .expect("must yield step");
+
+        // agent = {0}: both edges (0,1) and nothing else; (0,1) is cross-cut.
+        let agent_stars: AgentSet = [0usize].iter().copied().collect();
+        let cv = step0.cut_view(&agent_stars);
+
+        assert!(cv.boundary_flux > 0,
+            "with agent={{0}}, edge (0,1) must be cross-cut ⇒ boundary_flux > 0; got {}",
+            cv.boundary_flux);
+
+        // agent = {} (empty): all edges are env-internal → boundary_flux = 0.
+        let empty_agent: AgentSet = HashSet::new();
+        let cv2 = step0.cut_view(&empty_agent);
+        assert_eq!(cv2.boundary_flux, 0,
+            "empty agent ⇒ all edges env-internal ⇒ boundary_flux = 0; got {}", cv2.boundary_flux);
+        assert_eq!(cv2.agent_internal_edges.len(), 0);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // L1c: subjective_profile tests
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// subjective_profile counts subjective rays and animist stars correctly.
+    #[test]
+    fn subjective_profile_counts_subjective_rays_and_animist_stars() {
+        // Ψ = { [-f(+g(X)), +h(Y)] }   ← animist star (has + and -)
+        //       ray -f(+g(X)) is subjective: negative head, coloured argument +g(X)
+        //       ray +h(Y) is NOT subjective: no coloured argument (Y is a variable)
+        // Expected: n_subjective_rays=1, n_animist_stars=1
+        let psi0: Vec<Star> = vec![
+            vec![
+                neg_ray("f", vec![pos_ray("g", vec![var("X")])]),  // -f(+g(X)) — subjective
+                pos_ray("h", vec![var("Y")]),                       // +h(Y) — not subjective (Y is Var)
+            ],
+        ];
+        let phi: Constellation = vec![];
+        let step0 = subjective_stream(&phi, psi0)
+            .next()
+            .expect("must yield step");
+
+        let profile = step0.subjective_profile();
+        assert_eq!(profile.n_subjective_rays, 1,
+            "must count 1 subjective ray; got {}", profile.n_subjective_rays);
+        assert_eq!(profile.n_animist_stars, 1,
+            "must count 1 animist star; got {}", profile.n_animist_stars);
+    }
+
+    /// subjective_profile returns zero counts for a purely objective constellation.
+    #[test]
+    fn subjective_profile_zero_for_objective_constellation() {
+        // Ψ = { [+a], [-b] } — two objective/subjective (but not animist) stars,
+        // no subjective rays (no coloured arguments).
+        let psi0: Vec<Star> = vec![
+            vec![pos_ray("a", vec![])],
+            vec![neg_ray("b", vec![])],
+        ];
+        let phi: Constellation = vec![];
+        let step0 = subjective_stream(&phi, psi0)
+            .next()
+            .expect("must yield step");
+
+        let profile = step0.subjective_profile();
+        assert_eq!(profile.n_subjective_rays, 0,
+            "no subjective rays expected; got {}", profile.n_subjective_rays);
+        assert_eq!(profile.n_animist_stars, 0,
+            "no animist stars expected; got {}", profile.n_animist_stars);
     }
 }
