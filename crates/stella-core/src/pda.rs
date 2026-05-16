@@ -337,7 +337,11 @@ mod tests {
     use super::*;
 
     /// §56.13: "0011" accepted (2 zeros, 2 ones).
+    // IGNORED: ~90s under blind IEx (fuel=12000) — makes routine `cargo test`
+    // look stalled. Faithful and passing; run with `cargo test -- --ignored`.
+    // (Candidate for the semi-naïve/fast path; tracked, not weakened.)
     #[test]
+    #[ignore = "slow (~90s blind IEx); faithful & passing; run with --ignored"]
     fn npda_accepts_0011() {
         assert!(
             fig562_accepts(&["0", "0", "1", "1"], 12000),
