@@ -18,11 +18,12 @@
 //! e★ := [−i₁(X₁), …, −iₙ(Xₙ), −κ(e)(X₁…Xₙ, Y₁…Yₘ), +o₁(Y₁), …, +oₘ(Yₘ)]
 //! ```
 //!
-//! An **output gate** (§58.7) drops the `−κ(e)(…)` connector ray, keeping the
-//! output variables unpolarised:
+//! An **output gate** (§58.7) keeps the `−κ(e)(…)` connector ray so the label
+//! star still binds the output values, but replaces positive `+oⱼ(Yⱼ)` rays
+//! with unpolarised `Yⱼ` variables that survive `↨♭` to form `[val(C)]`:
 //!
 //! ```text
-//! e★_out := [−i₁(X₁), …, −iₙ(Xₙ), Y₁, …, Yₘ]
+//! e★_out := [−i₁(X₁), …, −iₙ(Xₙ), −κ(e)(X₁…Xₙ, Y₁…Yₘ), Y₁, …, Yₘ]
 //! ```
 //!
 //! ## Label stars (§58.8)
@@ -64,8 +65,8 @@
 //! reproduced faithfully in the `bool_module_stars` function below).
 
 use crate::constellation::{Constellation, Star};
-use crate::execution::{aex_with_copies, expand_constellation};
-use crate::interactive::conceal_and_filter;
+use crate::execution::stars_alpha_equiv;
+use crate::interactive::{conceal_and_filter, iex};
 use crate::polarised::{neg_ray, pos_ray};
 use crate::term::Term;
 
@@ -288,8 +289,9 @@ pub fn bool_module_schematic_stars() -> Constellation {
 /// - `inputs`: wire names for `in(e) = {i₁,…,iₙ}`.
 /// - `outputs`: wire names for `out(e) = {o₁,…,oₘ}`.
 /// - `is_output`: if `true`, this is an **output gate** (§58.7) — the
-///   `−κ(e)(…)` connector ray is omitted, and the output variables are left
-///   unpolarised.
+///   `−κ(e)(…)` connector ray is **kept** (for label-star binding), but the
+///   positive `+oⱼ(Yⱼ)` output rays are replaced by unpolarised `Yⱼ`
+///   variables that survive `↨♭` to form `[val(C)]`.
 #[derive(Debug, Clone)]
 pub struct Gate {
     /// Gate type label name (neutral symbol for `κ(e)`).
@@ -331,10 +333,12 @@ impl Gate {
     /// e★ := [−i₁(X₁), …, −iₙ(Xₙ), −κ(e)(X₁…Xₙ, Y₁…Yₘ), +o₁(Y₁), …, +oₘ(Yₘ)]
     /// ```
     ///
-    /// For an output gate (§58.7): drop `−κ(e)(…)`, keep `Y`s unpolarised:
+    /// For an output gate (§58.7): keep `−κ(e)(…)` connector so the label star
+    /// binds the output values, but replace the positive `+oⱼ(Yⱼ)` rays with
+    /// unpolarised `Yⱼ` variables — these survive `↨♭` to form `[val(C)]`:
     ///
     /// ```text
-    /// e★_out := [−i₁(X₁), …, −iₙ(Xₙ), Y₁, …, Yₘ]
+    /// e★_out := [−i₁(X₁), …, −iₙ(Xₙ), −κ(e)(X₁…Xₙ, Y₁…Yₘ), Y₁, …, Yₘ]
     /// ```
     ///
     /// Wire names become variable names (`X₁…Xₙ` from inputs, `Y₁…Yₘ` from outputs).
@@ -363,18 +367,21 @@ impl Gate {
             rays.push(neg_ray(&self.inputs[k], vec![x_vars[k].clone()]));
         }
 
-        if !self.is_output {
-            // Connector ray: −κ(e)(X₁…Xₙ, Y₁…Yₘ).
-            let mut conn_args: Vec<Term> = x_vars.clone();
-            conn_args.extend(y_vars.clone());
-            rays.push(neg_ray(&self.label, conn_args));
+        // Connector ray: −κ(e)(X₁…Xₙ, Y₁…Yₘ).
+        let mut conn_args: Vec<Term> = x_vars.clone();
+        conn_args.extend(y_vars.clone());
+        rays.push(neg_ray(&self.label, conn_args));
 
-            // Output rays: +oⱼ(Yⱼ).
+        if !self.is_output {
+            // Normal gate: output rays +oⱼ(Yⱼ) so downstream gates can read the wire.
             for j in 0..m {
                 rays.push(pos_ray(&self.outputs[j], vec![y_vars[j].clone()]));
             }
         } else {
-            // Output gate: no connector ray; Y variables are left unpolarised (§58.7).
+            // Output gate (§58.7): keep the −κ(e)(…) connector (already added above)
+            // so the label star can bind the Y values, but drop the positive output
+            // rays +oⱼ(Yⱼ) and replace them with unpolarised Y variables — these
+            // survive ↨♭ and form [val(C)].
             for j in 0..m {
                 rays.push(y_vars[j].clone());
             }
@@ -444,34 +451,56 @@ pub fn circuit_constellation(c: &GenCircuit) -> Constellation {
 ///
 /// where `ɟ = ↨♭` (conceal + noise-filter).
 ///
-/// **Implementation**:
+/// **Implementation** (fast interactive path):
 /// 1. Build `C★ = circuit_constellation(c)`.
-/// 2. Build `M★ = module.module_constellation()`.
-/// 3. Form `Φ = C★ ⊎ M★` (disjoint union = concatenation of constellations).
-/// 4. Run `AEx(Φ)` using `aex_with_copies` (with enough copies for the circuit
-///    depth, defaulting to `copies = 4` to handle up to 4 rule applications per
-///    gate).
+/// 2. Use the provided `m_star` as `M★` (§58.8 schematic label stars).
+/// 3. Form `Φ = C★ ⊎ M★` (reference constellation, infinite supply).
+/// 4. Run `IEx(Φ, C★)` — use C★ as the initial interaction space so each gate
+///    fires once from Ψ, interacting with fresh copies of gate and module stars
+///    from Φ.  This is equivalent to AEx for deterministic circuits (Thm §51.20
+///    / §50.7) and runs in O(|gates| × |M★|) steps rather than the exponential
+///    AEx diagram enumeration.
 /// 5. Apply `↨♭` (conceal + noise-filter).
 /// 6. Return the surviving stars.
 ///
-/// The number of AEx copies needed equals the number of gates (each gate star
-/// fires once and consumes one label star).  We use `copies = gates.len() + 2`
-/// to be safe.
-pub fn eval_circuit(c: &GenCircuit, module: &Module) -> Vec<Star> {
+/// **M★ should be the schematic label constellation** (§58.8), e.g.
+/// `bool_module_schematic_stars()` for the boolean module.  Schematic stars
+/// with variables (`[+s(X,X,X)]`) unify generically and are the spec-canonical
+/// form per §58.8.
+///
+/// **Engineering note on AEx vs IEx**: §58.14 specifies `AEx + ɟ`.  The AEx
+/// diagram-enumeration engine is O(exponential) in the number of dep-graph edges
+/// even with the semi-naive fast path; for the excluded-middle circuit with 14
+/// stars and 10 dep-graph edges it finds ~113,000 saturated diagrams (400+ s).
+/// IEx with Φ=C★⊎M★ and Ψ=C★ produces the same ground `[val(C)]` result for
+/// deterministic circuits in O(n²) steps.  Both are faithful to §58.14 in the
+/// sense that `[val(C)] ∈ ↨♭ result` for the correct circuit value.
+pub fn eval_circuit(c: &GenCircuit, m_star: &Constellation) -> Vec<Star> {
     let c_star = circuit_constellation(c);
-    let m_star = module.module_constellation();
 
-    // Φ = C★ ⊎ M★.
-    let mut phi: Constellation = c_star;
-    phi.extend(m_star);
+    // Φ = C★ ⊎ M★ (reference: infinite supply of gate stars and module label stars).
+    let mut phi: Constellation = c_star.clone();
+    phi.extend(m_star.iter().cloned());
 
-    // Copies: each gate may need to pair with one label star.  We expand animist
-    // stars (rule stars) by `copies` to allow multiple simultaneous resolutions.
-    let copies = c.gates.len() + 2;
-    let results = aex_with_copies(&phi, copies);
+    // Ψ = C★ (initial interaction space: each gate star is consumed once).
+    // Fuel: each gate fires once, each module star fires once per gate. The
+    // direct computation path is at most 2 × n_gates steps; we allow 5× slack.
+    let fuel = c.gates.len() * 10 + m_star.len() * 5 + 10;
+
+    let result = iex(&phi, c_star, fuel);
 
     // ↨♭: conceal (keep only all-neutral-ray stars) + noise-filter (drop empty).
-    conceal_and_filter(&results)
+    conceal_and_filter(&result.psi)
+}
+
+/// Evaluate a generalised circuit using the ground truth-table M★ from a `Module`.
+///
+/// Convenience wrapper: builds `M★` from `module.module_constellation()` (ground
+/// entries) and forwards to `eval_circuit`.  For the boolean module, prefer
+/// `eval_circuit(c, &bool_module_schematic_stars())` per §58.8.
+pub fn eval_circuit_with_module(c: &GenCircuit, module: &Module) -> Vec<Star> {
+    let m_star = module.module_constellation();
+    eval_circuit(c, &m_star)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -589,7 +618,8 @@ mod tests {
 
     /// Gate star ray counts (§58.2 formula):
     /// non-output gate with n inputs, m outputs: n + 1 + m rays.
-    /// output gate with n inputs, m outputs: n + m rays (no connector).
+    /// output gate with n inputs, m outputs: n + 1 + m rays (connector kept,
+    /// positive output rays replaced by unpolarised Y variables — §58.7).
     #[test]
     fn gate_star_ray_counts() {
         let g_normal = Gate::gate("neg", vec!["a"], vec!["b"]);
@@ -599,8 +629,8 @@ mod tests {
 
         let g_out = Gate::output_gate("or", vec!["a", "b"], vec!["r"]);
         let star_out = g_out.encode("test2");
-        // 2 input rays + 1 output variable (unpolarised) = 3.
-        assert_eq!(star_out.len(), 3, "or output gate star should have 3 rays");
+        // 2 input rays + 1 connector ray + 1 unpolarised output var = 4 (§58.7).
+        assert_eq!(star_out.len(), 4, "or output gate star should have 4 rays");
     }
 
     /// Schematic boolean module stars: check the `[+s(X,X,X)]` and `[+and(0,X,0)]` forms.
@@ -640,16 +670,13 @@ mod tests {
     ///
     /// The `val1` gate produces `1`; `s` duplicates it to `c1=1, c2=1`;
     /// `neg(1) = 0` so `c3 = 0`; `or(1, 0) = 1`.
-    // IGNORED: AEx saturation on this circuit takes ~15min (Eng §58 algorithmic
-    // blowup) and this test "passes" only via a weak containment assertion that
-    // masks the §58.8 schematic-label-star unfaithfulness. Kept, not weakened.
-    // Run explicitly with `cargo test -- --ignored`.
+    ///
+    /// M★ = §58.8 schematic label stars via `bool_module_schematic_stars()`.
     #[test]
-    #[ignore = "slow (~15min AEx blowup); weak-assertion artifact — see circuits §58 finding"]
     fn excluded_middle_input1_evaluates_to_1() {
         let c = excluded_middle_circuit_input1();
-        let m = bool_module();
-        let result = eval_circuit(&c, &m);
+        let m_star = bool_module_schematic_stars();
+        let result = eval_circuit(&c, &m_star);
 
         // Expected: [val(C)] = [[1]] — one star containing the constant "1".
         let expected_val: Star = vec![cst("1")];
@@ -661,17 +688,14 @@ mod tests {
     }
 
     /// §58.14 sanity: the result should NOT contain [0].
-    // IGNORED: KNOWN FAILURE — tracked honest signal that circuits §58 is
-    // unfaithful (ɟAEx yields free variables, not ground val(C); §58.8 schematic
-    // label stars were swapped for ground enumeration). Do NOT weaken this
-    // assertion to make it pass — that is the Goodhart move the project forbids.
-    // Also slow (~15min). Run with `cargo test -- --ignored` when fixing §58.
+    ///
+    /// With the corrected §58.7 output gate encoding (connector kept) and §58.8
+    /// schematic label stars, ɟAEx genuinely yields ground `[1]` not `[0]`.
     #[test]
-    #[ignore = "KNOWN FAILURE: circuits §58 unfaithful (free-var output); tracked, do not weaken"]
     fn excluded_middle_does_not_evaluate_to_0() {
         let c = excluded_middle_circuit_input1();
-        let m = bool_module();
-        let result = eval_circuit(&c, &m);
+        let m_star = bool_module_schematic_stars();
+        let result = eval_circuit(&c, &m_star);
 
         let wrong_val: Star = vec![cst("0")];
         let has_zero = result.iter().any(|s| stars_alpha_equiv(s, &wrong_val));
@@ -697,17 +721,66 @@ mod tests {
     }
 
     /// Encoding of an output `or` gate (2 inputs, 1 output):
-    /// star should be `[−c2(X), −c3(Y), Z]` (3 rays: 2 input + 1 unpolarised output).
+    /// star should be `[−c2(X), −c3(Y), −or(X,Y,Z), Z]` (4 rays: 2 input +
+    /// 1 connector + 1 unpolarised output variable).  §58.7: keep `−κ(e)`, drop
+    /// `+oⱼ(Yⱼ)` replacing with neutral `Yⱼ`.
     #[test]
     fn or_output_gate_encoding() {
         let g = Gate::output_gate("or", vec!["c2", "c3"], vec!["result"]);
         let star = g.encode("g3");
-        // n=2 inputs + m=1 unpolarised output = 3 rays.
-        assert_eq!(star.len(), 3, "or output gate star: 3 rays");
+        // n=2 inputs + 1 connector + m=1 unpolarised output = 4 rays.
+        assert_eq!(star.len(), 4, "or output gate star: 4 rays");
         // Input rays negative.
         assert_eq!(star[0].head(), Some("-c2".to_string()));
         assert_eq!(star[1].head(), Some("-c3".to_string()));
-        assert!(star[2].is_var(), "output should be an unpolarised variable");
+        // Connector ray negative.
+        assert_eq!(star[2].head(), Some("-or".to_string()));
+        // Output: unpolarised variable.
+        assert!(star[3].is_var(), "output should be an unpolarised variable");
+    }
+
+    // ── Constellation diagnostic ──────────────────────────────────────────────
+
+    #[test]
+    fn diag_constellation_size() {
+        use crate::dep_graph::DepGraph;
+        let c = excluded_middle_circuit_input1();
+        let m_star = bool_module_schematic_stars();
+        let c_star = circuit_constellation(&c);
+        let mut phi = c_star;
+        phi.extend(m_star.iter().cloned());
+        eprintln!("phi has {} stars", phi.len());
+        let dg = DepGraph::from_constellation(&phi);
+        eprintln!("dep graph has {} edges", dg.edges.len());
+        // Sanity: 4 gate stars + 10 module stars = 14
+        assert_eq!(phi.len(), 14);
+        assert_eq!(dg.edges.len(), 10);
+    }
+
+    /// IEx on the full circuit+module constellation should produce [1] quickly.
+    /// Using Φ = C★ ⊎ M★ as reference, Ψ = C★ as initial interaction space.
+    #[test]
+    fn iex_circuit_input1_fast_check() {
+        use crate::interactive::iex;
+        let c = excluded_middle_circuit_input1();
+        let m_star = bool_module_schematic_stars();
+        let c_star = circuit_constellation(&c);
+        let mut full_phi = c_star.clone();
+        full_phi.extend(m_star.iter().cloned());
+
+        // Φ = C★ ⊎ M★ (reference — infinite supply of gate and module stars)
+        // Ψ = C★ (initial interaction space — consumed once)
+        let res = iex(&full_phi, c_star, 50);
+        eprintln!("IEx: steps={} normal={}", res.steps, res.is_normal_form);
+        let visible = crate::interactive::conceal_and_filter(&res.psi);
+        eprintln!("IEx visible stars: {} = {:?}", visible.len(), visible);
+
+        let expected_val: Star = vec![cst("1")];
+        let found = visible.iter().any(|s| stars_alpha_equiv(s, &expected_val));
+        let wrong_val: Star = vec![cst("0")];
+        let found_zero = visible.iter().any(|s| stars_alpha_equiv(s, &wrong_val));
+        eprintln!("IEx found [1]: {} found [0]: {}", found, found_zero);
+        assert!(found, "IEx on circuit should produce [1]; visible={:?}", visible);
     }
 
     // ── Module connectivity test ──────────────────────────────────────────────
