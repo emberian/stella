@@ -64,6 +64,31 @@ fragment. Not a terminated normal form — a (possibly infinite) **trajectory**.
   agree with the existing verified-against-Eng `aex`/`iex` (reference oracle): a
   subjective engine that gets the dead fragment wrong is wrong. Property-tested.
 
+### 2.1 L1b converged operational semantics (2026-05-16, with principal)
+
+The §49.50/§49.52 inference — adjudicated, now canonical, not open:
+
+- **(1) New polarised-ray creation is NOT a new rule.** It is standard fusion +
+  substitution where (i) bare-variable rays are *retained* in stars (never
+  dropped), and (ii) matchability is *recomputed every step*, so a variable ray
+  that a subjective fusion's substitution binds to a coloured term *enters the
+  matchable frontier*. Grounded verbatim in Eng §49.50's example
+  (`[−f(+g(X))] ⋈ [X,+f(X)]` ⟹ `θ={X↦+g(X)}` ⟹ residual `X` becomes `+g(X)`).
+  Implementation = ensure the engine does (i)+(ii); "bare `Var` non-matchable"
+  means *until substituted to a coloured term*, NOT *dropped*.
+- **(2) The semaphore is emergent, not a primitive.** `+g(X)` is unavailable
+  until `+f/−f` interact *because it does not exist as a surface ray until the
+  f-fusion's substitution creates it*. Ordering is automatic under (1). No locking
+  mechanism is designed or needed.
+- **(3) Proper-time tick (the one real inference, adjudicated):** ONE tick of the
+  agent's proper time (spec §2.6) := one Eng §49.52 iterated-execution round
+  (`AEx^n → AEx^{n+1}`) in which the agent's subjective rays cross the
+  agent/environment cut and the modified environment feeds back so the §2.2
+  reafference cycle-property closes once. Faithful to both §49.52's iteration
+  structure and spec §2.6 (proper time = reafferent-cycle count, never substrate
+  steps). The `Step` stream exposes both the substrate step index (witness clock)
+  and the reafferent-round index (the agent's proper time).
+
 ## 3. Layer 2 — the valence probe (spec §2 foundation, verbatim)
 
 Couples a candidate **agent** sub-constellation to a partner **environment**
