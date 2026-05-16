@@ -153,11 +153,11 @@ pub fn cex_full(phi: &Constellation) -> Vec<Star> {
 ///
 /// A ray is *uncoloured* if its head symbol is in `F₀` (neutral polarity).
 pub fn conceal(phi: &[Star]) -> Vec<Star> {
-    use crate::constellation::ray_polarity;
+    use crate::polarised::ray_polarity;
     use crate::polarised::Polarity;
     phi.iter()
         .filter(|star| {
-            star.iter().all(|r| ray_polarity(r) == Polarity::Neutral)
+            star.iter().all(|&r| ray_polarity(r) == Polarity::Neutral)
         })
         .cloned()
         .collect()
@@ -189,9 +189,9 @@ mod tests {
     use crate::polarised::{neg_ray, pos_ray};
     use crate::term::Term;
 
-    fn var(x: &str) -> Term { Term::Var(x.into()) }
-    fn app(f: &str, args: Vec<Term>) -> Term { Term::App(f.into(), args) }
-    fn c(name: &str) -> Term { Term::App(name.into(), vec![]) }
+    fn var(x: &str) -> Term { crate::term::mk_var(x) }
+    fn app(f: &str, args: Vec<Term>) -> Term { crate::term::mk_app_str(f, args) }
+    fn c(name: &str) -> Term { crate::term::mk_app_str(name, vec![]) }
 
     fn nat(n: usize) -> Term {
         let mut t = c("0");
@@ -286,7 +286,7 @@ mod tests {
         let phi: Vec<Star> = vec![
             vec![pos_ray("a", vec![])],              // coloured → hidden
             vec![c("foo"), c("bar")],                // all neutral → kept
-            vec![Term::Var("X".into())],             // variable (neutral) → kept
+            vec![crate::term::mk_var("X")],             // variable (neutral) → kept
             vec![neg_ray("b", vec![]), c("x")],     // mixed coloured → hidden
         ];
         let concealed = conceal(&phi);

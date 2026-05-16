@@ -74,11 +74,11 @@ use crate::term::Term;
 // ─────────────────────────────────────────────────────────────────────────────
 
 fn var(x: &str) -> Term {
-    Term::Var(x.into())
+    crate::term::mk_var(x)
 }
 
 fn cst(name: &str) -> Term {
-    Term::App(name.into(), vec![])
+    crate::term::mk_app_str(&name, vec![])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -538,7 +538,7 @@ mod tests {
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
-    fn cst(name: &str) -> Term { Term::App(name.into(), vec![]) }
+    fn cst(name: &str) -> Term { crate::term::mk_app_str(&name, vec![]) }
 
     // ── Structural tests ─────────────────────────────────────────────────────
 
@@ -609,25 +609,24 @@ mod tests {
         let stars = bool_module_schematic_stars();
         // s star: [+s(X,X,X)] — all three args are the same variable.
         let s_star = stars.iter().find(|st| {
-            st.len() == 1 && matches!(&st[0], Term::App(f, _) if f == "+s")
+            st.len() == 1 && st[0].head() == Some("+s".to_string())
         });
         assert!(s_star.is_some(), "should find +s schematic star");
-        let s_ray = &s_star.unwrap()[0];
-        if let Term::App(_, args) = s_ray {
-            assert_eq!(args.len(), 3);
-            // All three should be the same variable.
-            assert!(matches!(&args[0], Term::Var(_)));
-            assert_eq!(args[0], args[1], "s star: first two args equal");
-            assert_eq!(args[1], args[2], "s star: last two args equal");
-        }
+        let s_ray = s_star.unwrap()[0];
+        let s_args = s_ray.args();
+        assert_eq!(s_args.len(), 3);
+        assert!(s_args[0].is_var(), "s star: first arg should be var");
+        assert_eq!(s_args[0], s_args[1], "s star: first two args equal");
+        assert_eq!(s_args[1], s_args[2], "s star: last two args equal");
 
         // and star [+and(0,X,0)]: first and third arg are cst "0", middle is var.
+        let zero = cst("0");
         let and0_star = stars.iter().find(|st| {
-            st.len() == 1 && matches!(&st[0], Term::App(f, args)
-                if f == "+and"
-                && matches!(&args[0], Term::App(n, _) if n == "0")
-                && matches!(&args[2], Term::App(n, _) if n == "0")
-            )
+            if st.len() != 1 { return false; }
+            let r = st[0];
+            if r.head() != Some("+and".to_string()) { return false; }
+            let args = r.args();
+            args.len() == 3 && args[0] == zero && args[2] == zero
         });
         assert!(and0_star.is_some(), "should find +and(0,X,0) schematic star");
     }
@@ -693,15 +692,8 @@ mod tests {
         // n=0 inputs + 1 connector + 1 output = 2 rays.
         assert_eq!(star.len(), 2, "val1 gate star: 2 rays");
         // First ray: −val1(Y).
-        assert!(
-            matches!(&star[0], Term::App(f, _) if f == "-val1"),
-            "first ray should be -val1(…)"
-        );
-        // Second ray: +c0(Y).
-        assert!(
-            matches!(&star[1], Term::App(f, _) if f == "+c0"),
-            "second ray should be +c0(…)"
-        );
+        assert_eq!(star[0].head(), Some("-val1".to_string()), "first ray should be -val1(…)");
+        assert_eq!(star[1].head(), Some("+c0".to_string()), "second ray should be +c0(…)");
     }
 
     /// Encoding of an output `or` gate (2 inputs, 1 output):
@@ -713,10 +705,9 @@ mod tests {
         // n=2 inputs + m=1 unpolarised output = 3 rays.
         assert_eq!(star.len(), 3, "or output gate star: 3 rays");
         // Input rays negative.
-        assert!(matches!(&star[0], Term::App(f, _) if f == "-c2"));
-        assert!(matches!(&star[1], Term::App(f, _) if f == "-c3"));
-        // Output ray unpolarised (variable).
-        assert!(matches!(&star[2], Term::Var(_)), "output should be an unpolarised variable");
+        assert_eq!(star[0].head(), Some("-c2".to_string()));
+        assert_eq!(star[1].head(), Some("-c3".to_string()));
+        assert!(star[2].is_var(), "output should be an unpolarised variable");
     }
 
     // ── Module connectivity test ──────────────────────────────────────────────
@@ -729,9 +720,9 @@ mod tests {
         // Label star ray: +neg(1, 0).
         let label_ray = pos_ray("neg", vec![cst("1"), cst("0")]);
         // Connector ray from gate: −neg(X, Y) with X ground = 1, Y free.
-        let conn_ray = neg_ray("neg", vec![cst("1"), Term::Var("Y".into())]);
+        let conn_ray = neg_ray("neg", vec![cst("1"), crate::term::mk_var("Y")]);
         assert!(
-            matchable(&label_ray, &conn_ray),
+            matchable(label_ray, conn_ray),
             "+neg(1,0) should be matchable with -neg(1,Y)"
         );
     }

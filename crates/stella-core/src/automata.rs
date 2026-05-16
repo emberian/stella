@@ -56,22 +56,22 @@ use crate::term::Term;
 
 /// Build the constant term `name` (zero-arity application).
 fn constant(name: &str) -> Term {
-    Term::App(name.into(), vec![])
+    crate::term::mk_app_str(name, vec![])
 }
 
 /// Build `+sym(args)`.
 fn pos(neutral: &str, args: Vec<Term>) -> Term {
-    Term::App(format!("+{neutral}"), args)
+    crate::term::mk_app_str(&format!("+{neutral}"), args)
 }
 
 /// Build `−sym(args)`.
 fn neg(neutral: &str, args: Vec<Term>) -> Term {
-    Term::App(format!("-{neutral}"), args)
+    crate::term::mk_app_str(&format!("-{neutral}"), args)
 }
 
 /// Build a variable term.
 fn var(name: &str) -> Term {
-    Term::Var(name.into())
+    crate::term::mk_var(name)
 }
 
 /// Build the right-associative cons chain `c1 · c2 · … · cn · base`.
@@ -83,7 +83,7 @@ fn cons_chain(chars: &[Term], base: Term) -> Term {
     chars
         .iter()
         .rev()
-        .fold(base, |acc, c| Term::App("cons".into(), vec![c.clone(), acc]))
+        .fold(base, |acc, c| crate::term::mk_app_str("cons", vec![*c, acc]))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -146,7 +146,7 @@ pub fn encode_nfa(nfa: &Nfa) -> Constellation {
     for qf in &nfa.finals {
         c.push(vec![
             neg("a", vec![constant("eps"), constant(qf)]),
-            Term::App("accept".into(), vec![]),
+            crate::term::mk_app_str("accept", vec![]),
         ]);
     }
 
@@ -172,7 +172,7 @@ fn build_transition_star(from: &str, sym_opt: Option<&str>, to: &str) -> Star {
         Some(c) => {
             // Reading symbol c: [−a(c·W, q), +a(W, q')]
             let w = var("W");
-            let cw = Term::App("cons".into(), vec![constant(c), w.clone()]);
+            let cw = crate::term::mk_app_str("cons", vec![constant(c), w]);
             vec![
                 neg("a", vec![cw, constant(from)]),
                 pos("a", vec![w.clone(), constant(to)]),
@@ -209,7 +209,7 @@ pub fn nfa_constellation(nfa: &Nfa, word: &[&str], extra_copies: usize) -> Const
     for qf in &nfa.finals {
         c.push(vec![
             neg("a", vec![constant("eps"), constant(qf)]),
-            Term::App("accept".into(), vec![]),
+            crate::term::mk_app_str("accept", vec![]),
         ]);
     }
 
@@ -236,7 +236,7 @@ pub fn nfa_accepts(nfa: &Nfa, word: &[&str], extra_copies: usize) -> bool {
     let phi = nfa_constellation(nfa, word, extra_copies);
     let dg = DepGraph::from_constellation(&phi);
     let results = aex(&phi, &dg);
-    let accept_star: Star = vec![Term::App("accept".into(), vec![])];
+    let accept_star: Star = vec![crate::term::mk_app_str("accept", vec![])];
     results.iter().any(|s| s == &accept_star)
 }
 
@@ -336,7 +336,7 @@ mod tests {
         assert_eq!(word_star.len(), 1);
         assert_eq!(
             word_star[0].head(),
-            Some("+i"),
+            Some("+i".to_string()),
             "word star should have +i head"
         );
     }
@@ -346,15 +346,12 @@ mod tests {
     fn encode_word_structure() {
         let star = encode_word(&["0", "0"]);
         assert_eq!(star.len(), 1);
-        let ray = &star[0];
+        let ray = star[0];
         // Should be: +i(cons(0, cons(0, eps)))
-        assert_eq!(ray.head(), Some("+i"));
+        assert_eq!(ray.head(), Some("+i".to_string()));
         // The argument should be a cons application.
-        if let Term::App(_, args) = ray {
-            assert_eq!(args.len(), 1);
-            assert_eq!(args[0].head(), Some("cons"));
-        } else {
-            panic!("expected App");
-        }
+        let args = ray.args();
+        assert_eq!(args.len(), 1);
+        assert_eq!(args[0].head(), Some("cons".to_string()));
     }
 }

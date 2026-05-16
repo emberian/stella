@@ -14,9 +14,9 @@ mod engine_tests {
 
     // ── helpers ──────────────────────────────────────────────────────────────
 
-    fn var(x: &str) -> Term { Term::Var(x.into()) }
-    fn app(f: &str, args: Vec<Term>) -> Term { Term::App(f.into(), args) }
-    fn c(name: &str) -> Term { Term::App(name.into(), vec![]) }
+    fn var(x: &str) -> Term { crate::term::mk_var(x) }
+    fn app(f: &str, args: Vec<Term>) -> Term { crate::term::mk_app_str(f, args) }
+    fn c(name: &str) -> Term { crate::term::mk_app_str(name, vec![]) }
 
     /// Build s(s(…s(0)…)) with n applications.
     fn nat(n: usize) -> Term {
@@ -369,7 +369,7 @@ mod engine_tests {
         // |+f(-g(X))| should be f(g(X))
         let expected_underlying = app("f", vec![app("g", vec![var("X")])]);
         assert_eq!(
-            underlying_term(&ray),
+            underlying_term(ray),
             expected_underlying,
             "underlying_term must strip polarity prefix at every node (§48.7)"
         );
@@ -377,16 +377,16 @@ mod engine_tests {
         // Also: |neutral| = neutral (§48.7: |f| = f for f ∈ F₀)
         let neutral_ray = app("h", vec![var("Y")]);
         assert_eq!(
-            underlying_term(&neutral_ray),
-            neutral_ray.clone(),
+            underlying_term(neutral_ray),
+            neutral_ray,
             "underlying_term must leave neutral symbols unchanged"
         );
 
         // Variables are unchanged.
         let var_ray = var("Z");
         assert_eq!(
-            underlying_term(&var_ray),
-            var_ray.clone(),
+            underlying_term(var_ray),
+            var_ray,
             "underlying_term must leave variables unchanged"
         );
 
@@ -415,9 +415,9 @@ mod engine_tests {
 
         // Build a diagram with two vertices connected by that edge.
         // vertex 0 → star 0, vertex 1 → star 1; edge uses ray 0 at each vertex.
-        let mut vem0 = std::collections::HashMap::new();
+        let mut vem0 = rustc_hash::FxHashMap::default();
         vem0.insert(0usize, 0usize); // edge 0 uses ray 0 at vertex 0
-        let mut vem1 = std::collections::HashMap::new();
+        let mut vem1 = rustc_hash::FxHashMap::default();
         vem1.insert(0usize, 0usize); // edge 0 uses ray 0 at vertex 1
         let diag = Diagram {
             vertex_star: vec![0, 1],

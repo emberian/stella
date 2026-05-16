@@ -71,14 +71,14 @@ mod unification_tests {
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     fn var(x: &str) -> Term { Term::var(x) }
-    fn app(f: &str, args: Vec<Term>) -> Term { Term::App(f.into(), args) }
+    fn app(f: &str, args: Vec<Term>) -> Term { crate::term::mk_app_str(f, args) }
     fn c(name: &str) -> Term { Term::constant(name) }
 
     fn eq(l: Term, r: Term) -> Equation { Equation::new(l, r) }
 
     // Check that applying the substitution to lhs and rhs makes them equal.
     fn check_unifier(sigma: &Substitution, lhs: &Term, rhs: &Term) -> bool {
-        sigma.apply(lhs) == sigma.apply(rhs)
+        sigma.apply(*lhs) == sigma.apply(*rhs)
     }
 
     // ── A. Terms ─────────────────────────────────────────────────────────────
@@ -88,8 +88,8 @@ mod unification_tests {
         // vars(f(X, g(Y, X))) = {X, Y}
         let t = app("f", vec![var("X"), app("g", vec![var("Y"), var("X")])]);
         let vs = t.vars();
-        assert!(vs.contains("X"));
-        assert!(vs.contains("Y"));
+        assert!(vs.contains(&crate::term::Var::intern("X")));
+        assert!(vs.contains(&crate::term::Var::intern("Y")));
         assert_eq!(vs.len(), 2);
     }
 
@@ -103,7 +103,7 @@ mod unification_tests {
             ("Y".into(), c("c")),
         ]);
         let t = app("f", vec![var("X"), var("Y")]);
-        assert_eq!(theta.apply(&t), app("f", vec![c("c"), c("c")]));
+        assert_eq!(theta.apply(t), app("f", vec![c("c"), c("c")]));
     }
 
     #[test]
@@ -114,7 +114,7 @@ mod unification_tests {
         let theta2 = Substitution::from_pairs([("X".into(), app("f", vec![var("Y")]))]);
         let theta1 = Substitution::from_pairs([("Y".into(), c("c"))]);
         let composed = Substitution::compose(&theta1, &theta2);
-        assert_eq!(composed.apply(&var("X")), app("f", vec![c("c")]));
+        assert_eq!(composed.apply(var("X")), app("f", vec![c("c")]));
     }
 
     // ── C. Martelli-Montanari rules ───────────────────────────────────────────
@@ -126,7 +126,7 @@ mod unification_tests {
         assert!(result.is_some());
         let s = result.unwrap();
         // X maps to itself (or is absent from the substitution).
-        assert_eq!(s.apply(&var("X")), var("X"));
+        assert_eq!(s.apply(var("X")), var("X"));
     }
 
     /// Open rule: `{f(t₁,t₂) =? f(u₁,u₂)} → {t₁=?u₁, t₂=?u₂}`.
@@ -139,7 +139,7 @@ mod unification_tests {
         assert!(result.is_some());
         let s = result.unwrap();
         // X must be mapped to g(Y).
-        assert_eq!(s.apply(&var("X")), app("g", vec![var("Y")]));
+        assert_eq!(s.apply(var("X")), app("g", vec![var("Y")]));
     }
 
     /// Orient rule makes `{f(X) =? Y}` become `{Y =? f(X)}`, then Replace.
@@ -149,7 +149,7 @@ mod unification_tests {
         let result = unify(vec![eq(app("f", vec![c("c")]), var("Y"))]);
         assert!(result.is_some());
         let s = result.unwrap();
-        assert_eq!(s.apply(&var("Y")), app("f", vec![c("c")]));
+        assert_eq!(s.apply(var("Y")), app("f", vec![c("c")]));
     }
 
     /// Replace rule propagates a binding.
@@ -162,7 +162,7 @@ mod unification_tests {
         ]);
         assert!(result.is_some());
         let s = result.unwrap();
-        assert_eq!(s.apply(&var("X")), c("c"));
+        assert_eq!(s.apply(var("X")), c("c"));
     }
 
     /// Multi-equation successful unification.
@@ -215,7 +215,7 @@ mod unification_tests {
         // t1 = a0 and t2 = f(b0), unification gives a0 ↦ f(b0). Should succeed.
         let t1 = var("X");
         let t2 = app("f", vec![var("Y")]);
-        assert!(alpha_unify(&t1, &t2).is_some());
+        assert!(alpha_unify(t1, t2).is_some());
     }
 
     /// Two terms sharing a variable name: α-unification renames them apart first.
@@ -226,7 +226,7 @@ mod unification_tests {
         // These are plainly unifiable only if f = g.  Here f ≠ g: should fail.
         let t1 = app("f", vec![var("X")]);
         let t2 = app("g", vec![var("X")]);
-        assert!(alpha_unify(&t1, &t2).is_none());
+        assert!(alpha_unify(t1, t2).is_none());
     }
 
     /// α-unifiable when terms share a variable name but ARE structurally compatible.
@@ -237,7 +237,7 @@ mod unification_tests {
         // Succeeds with a0 ↦ b0 (or b0 ↦ a0).
         let t1 = app("f", vec![var("X")]);
         let t2 = app("f", vec![var("X")]);
-        assert!(alpha_unify(&t1, &t2).is_some());
+        assert!(alpha_unify(t1, t2).is_some());
     }
 
     // ── E. Polarised signature & matchability (§49.9 examples) ───────────────
@@ -248,7 +248,7 @@ mod unification_tests {
         // +c(X) is a positive ray; -c(0) is a negative ray; same neutral symbol c.
         let r  = pos_ray("c", vec![var("X")]);
         let rp = neg_ray("c", vec![c("0")]);
-        assert!(matchable(&r, &rp), "+c(X) ⋈ -c(0) should hold");
+        assert!(matchable(r, rp), "+c(X) ⋈ -c(0) should hold");
     }
 
     /// §49.9: `−d(X) ⋈ +d(f(X))` holds.
@@ -259,7 +259,7 @@ mod unification_tests {
         // decompose → a0 =? f(b0): solved.
         let r  = neg_ray("d", vec![var("X")]);
         let rp = pos_ray("d", vec![app("f", vec![var("X")])]);
-        assert!(matchable(&r, &rp), "-d(X) ⋈ +d(f(X)) should hold");
+        assert!(matchable(r, rp), "-d(X) ⋈ +d(f(X)) should hold");
     }
 
     /// §49.9: NOT `+c(X) ⋈ f(Y)` — `f(Y)` is an unpolarised (neutral) ray,
@@ -269,8 +269,8 @@ mod unification_tests {
     fn not_matchable_pos_c_unpolarised_f() {
         // +c(X) has neutral name "c", f(Y) has neutral name "f".  |c| ≠ |f|.
         let r  = pos_ray("c", vec![var("X")]);
-        let rp = Term::App("f".into(), vec![var("Y")]);
-        assert!(!matchable(&r, &rp), "+c(X) should not match f(Y)");
+        let rp = crate::term::mk_app_str("f", vec![var("Y")]);
+        assert!(!matchable(r, rp), "+c(X) should not match f(Y)");
     }
 
     /// §49.9: NOT `+c(X) ⋈ −d(X)` — different underlying symbols.
@@ -278,7 +278,7 @@ mod unification_tests {
     fn not_matchable_different_underlying() {
         let r  = pos_ray("c", vec![var("X")]);
         let rp = neg_ray("d", vec![var("X")]);
-        assert!(!matchable(&r, &rp), "+c(X) should not match -d(X)");
+        assert!(!matchable(r, rp), "+c(X) should not match -d(X)");
     }
 
     /// §49.9: NOT `+c(X) ⋈ +c(f(Y))` — same polarity, not opposite.
@@ -286,7 +286,7 @@ mod unification_tests {
     fn not_matchable_same_polarity() {
         let r  = pos_ray("c", vec![var("X")]);
         let rp = pos_ray("c", vec![app("f", vec![var("Y")])]);
-        assert!(!matchable(&r, &rp), "+c(X) should not match +c(f(Y)) (same polarity)");
+        assert!(!matchable(r, rp), "+c(X) should not match +c(f(Y)) (same polarity)");
     }
 
     /// §49.9: NOT `+c(f(X)) ⋈ −c(g(Y))` — terms not α-unifiable (f ≠ g clash).
@@ -294,7 +294,7 @@ mod unification_tests {
     fn not_matchable_terms_not_alpha_unifiable() {
         let r  = pos_ray("c", vec![app("f", vec![var("X")])]);
         let rp = neg_ray("c", vec![app("g", vec![var("Y")])]);
-        assert!(!matchable(&r, &rp), "+c(f(X)) should not match -c(g(Y))");
+        assert!(!matchable(r, rp), "+c(f(X)) should not match -c(g(Y))");
     }
 
     // ── §49.8: anti-reflexivity and anti-transitivity of ⋈ ──────────────────
@@ -306,13 +306,13 @@ mod unification_tests {
     #[test]
     fn matchable_anti_reflexive_positive() {
         let r = pos_ray("c", vec![var("X")]);
-        assert!(!matchable(&r, &r), "⋈ is anti-reflexive");
+        assert!(!matchable(r, r), "⋈ is anti-reflexive");
     }
 
     #[test]
     fn matchable_anti_reflexive_negative() {
         let r = neg_ray("d", vec![var("Y")]);
-        assert!(!matchable(&r, &r), "⋈ is anti-reflexive");
+        assert!(!matchable(r, r), "⋈ is anti-reflexive");
     }
 
     /// §49.8: anti-transitive — `r₁ ⋈ r₂` and `r₂ ⋈ r₃` do not imply `r₁ ⋈ r₃`.
@@ -329,9 +329,9 @@ mod unification_tests {
         let r1 = pos_ray("c", vec![var("X")]);
         let r2 = neg_ray("c", vec![var("Y")]);
         let r3 = pos_ray("c", vec![var("Z")]);
-        assert!(matchable(&r1, &r2), "r1 ⋈ r2 should hold");
-        assert!(matchable(&r2, &r3), "r2 ⋈ r3 should hold");
-        assert!(!matchable(&r1, &r3), "⋈ is anti-transitive: r1 ⋈ r3 must fail");
+        assert!(matchable(r1, r2), "r1 ⋈ r2 should hold");
+        assert!(matchable(r2, r3), "r2 ⋈ r3 should hold");
+        assert!(!matchable(r1, r3), "⋈ is anti-transitive: r1 ⋈ r3 must fail");
     }
 
     /// §49.8: symmetry — `r ⋈ r′` iff `r′ ⋈ r`.
@@ -339,6 +339,6 @@ mod unification_tests {
     fn matchable_symmetric() {
         let r  = pos_ray("c", vec![var("X")]);
         let rp = neg_ray("c", vec![var("Y")]);
-        assert_eq!(matchable(&r, &rp), matchable(&rp, &r), "⋈ is symmetric");
+        assert_eq!(matchable(r, rp), matchable(rp, r), "⋈ is symmetric");
     }
 }

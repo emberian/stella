@@ -92,29 +92,29 @@ use crate::term::Term;
 
 /// Build a zero-arity constant term (e.g. a glue colour name or a numeral).
 fn con(name: &str) -> Term {
-    Term::App(name.into(), vec![])
+    crate::term::mk_app_str(name, vec![])
 }
 
 /// Build a variable term.
 fn var(name: &str) -> Term {
-    Term::Var(name.into())
+    crate::term::mk_var(name)
 }
 
 /// Build `+sym(args…)`.
 fn pos(neutral: &str, args: Vec<Term>) -> Term {
-    Term::App(format!("+{neutral}"), args)
+    crate::term::mk_app_str(&format!("+{neutral}"), args)
 }
 
 /// Build `−sym(args…)`.
 fn neg(neutral: &str, args: Vec<Term>) -> Term {
-    Term::App(format!("-{neutral}"), args)
+    crate::term::mk_app_str(&format!("-{neutral}"), args)
 }
 
 /// Build a Peano numeral `s^n(0)`.
 fn nat(n: usize) -> Term {
     let mut t = con("0");
     for _ in 0..n {
-        t = Term::App("s".into(), vec![t]);
+        t = crate::term::mk_app_str("s", vec![t]);
     }
     t
 }
@@ -131,10 +131,9 @@ fn nat(n: usize) -> Term {
 ///
 /// For Wang tiles (strength = 0): `gl(g)(X) = dot(g(X), 0)`.
 fn glue_term(colour: &str, pos_var: &str, strength: usize) -> Term {
-    let colour_applied = Term::App(colour.into(), vec![var(pos_var)]);
+    let colour_applied = crate::term::mk_app_str(colour, vec![var(pos_var)]);
     let str_val = nat(strength);
-    // dot(g(X), str(g))
-    Term::App("dot".into(), vec![colour_applied, str_val])
+    crate::term::mk_app_str("dot", vec![colour_applied, str_val])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -341,12 +340,12 @@ pub fn env_constellation(tau: usize, glue_colours: &[&str]) -> Constellation {
         // Horizontal glue-match star.
         phi.push(vec![
             neg("temp", vec![var("T_gm")]),
-            neg("h", vec![Term::App("dot".into(), vec![
-                Term::App(colour.into(), vec![var("Xgm_l")]),
+            neg("h", vec![crate::term::mk_app_str("dot", vec![
+                crate::term::mk_app_str(colour, vec![var("Xgm_l")]),
                 var("S_gm_h"),
             ])]),
-            neg("h", vec![Term::App("dot".into(), vec![
-                Term::App(colour.into(), vec![var("Xgm_r")]),
+            neg("h", vec![crate::term::mk_app_str("dot", vec![
+                crate::term::mk_app_str(colour, vec![var("Xgm_r")]),
                 var("S_gm_h2"),
             ])]),
             pos("bond", vec![var("S_gm_h3")]),
@@ -356,12 +355,12 @@ pub fn env_constellation(tau: usize, glue_colours: &[&str]) -> Constellation {
         // Vertical glue-match star.
         phi.push(vec![
             neg("temp", vec![var("T_gv")]),
-            neg("v", vec![Term::App("dot".into(), vec![
-                Term::App(colour.into(), vec![var("Ygv_b")]),
+            neg("v", vec![crate::term::mk_app_str("dot", vec![
+                crate::term::mk_app_str(colour, vec![var("Ygv_b")]),
                 var("S_gv_v"),
             ])]),
-            neg("v", vec![Term::App("dot".into(), vec![
-                Term::App(colour.into(), vec![var("Ygv_t")]),
+            neg("v", vec![crate::term::mk_app_str("dot", vec![
+                crate::term::mk_app_str(colour, vec![var("Ygv_t")]),
                 var("S_gv_v2"),
             ])]),
             pos("bond", vec![var("S_gv_v3")]),
@@ -377,9 +376,9 @@ pub fn env_constellation(tau: usize, glue_colours: &[&str]) -> Constellation {
     phi.push(vec![
         neg("add", vec![var("X_add"), var("Y_add2"), var("Z_add")]),
         pos("add", vec![
-            Term::App("s".into(), vec![var("X_add")]),
+            crate::term::mk_app_str("s", vec![var("X_add")]),
             var("Y_add2"),
-            Term::App("s".into(), vec![var("Z_add")]),
+            crate::term::mk_app_str("s", vec![var("Z_add")]),
         ]),
     ]);
 
@@ -390,8 +389,8 @@ pub fn env_constellation(tau: usize, glue_colours: &[&str]) -> Constellation {
     phi.push(vec![pos("geq", vec![var("X_geq"), nat(0)])]);
     phi.push(vec![
         neg("geq", vec![
-            Term::App("s".into(), vec![var("X_geq2")]),
-            Term::App("s".into(), vec![var("Y_geq2")]),
+            crate::term::mk_app_str("s", vec![var("X_geq2")]),
+            crate::term::mk_app_str("s", vec![var("Y_geq2")]),
         ]),
         pos("geq", vec![var("X_geq2"), var("Y_geq2")]),
     ]);
@@ -479,24 +478,20 @@ mod tests {
         assert_eq!(star.len(), 4, "tile star must have 4 rays");
 
         // Ray 0: east = +h(…)
-        assert_eq!(ray_polarity(&star[0]), Polarity::Pos);
-        assert!(matches!(&star[0], Term::App(h, _) if h == "+h"),
-            "east ray must be +h(…)");
+        assert_eq!(ray_polarity(star[0]), Polarity::Pos);
+        assert_eq!(star[0].head(), Some("+h".to_string()), "east ray must be +h(…)");
 
         // Ray 1: west = -h(…)
-        assert_eq!(ray_polarity(&star[1]), Polarity::Neg);
-        assert!(matches!(&star[1], Term::App(h, _) if h == "-h"),
-            "west ray must be -h(…)");
+        assert_eq!(ray_polarity(star[1]), Polarity::Neg);
+        assert_eq!(star[1].head(), Some("-h".to_string()), "west ray must be -h(…)");
 
         // Ray 2: north = +v(…)
-        assert_eq!(ray_polarity(&star[2]), Polarity::Pos);
-        assert!(matches!(&star[2], Term::App(v, _) if v == "+v"),
-            "north ray must be +v(…)");
+        assert_eq!(ray_polarity(star[2]), Polarity::Pos);
+        assert_eq!(star[2].head(), Some("+v".to_string()), "north ray must be +v(…)");
 
         // Ray 3: south = -v(…)
-        assert_eq!(ray_polarity(&star[3]), Polarity::Neg);
-        assert!(matches!(&star[3], Term::App(v, _) if v == "-v"),
-            "south ray must be -v(…)");
+        assert_eq!(ray_polarity(star[3]), Polarity::Neg);
+        assert_eq!(star[3].head(), Some("-v".to_string()), "south ray must be -v(…)");
     }
 
     /// Structural test: two tile stars with matching east/west glues produce a
@@ -717,19 +712,19 @@ mod tests {
         // h-edges: 2 tiles with +h(mid_h) × 2 tiles with -h(mid_h) = 4 pairs.
         let h_count: usize = dg.edges.iter().filter(|e| {
             let (r0, r1) = e.ends();
-            let ray0 = &phi[r0.0][r0.1];
-            let ray1 = &phi[r1.0][r1.1];
-            matches!(ray0, Term::App(s, _) if s == "+h" || s == "-h") &&
-            matches!(ray1, Term::App(s, _) if s == "+h" || s == "-h")
+            let ray0 = phi[r0.0][r0.1];
+            let ray1 = phi[r1.0][r1.1];
+            matches!(ray0.head().as_deref(), Some("+h") | Some("-h")) &&
+            matches!(ray1.head().as_deref(), Some("+h") | Some("-h"))
         }).count();
 
         // v-edges: 2 tiles with +v(mid_v) × 2 tiles with -v(mid_v) = 4 pairs.
         let v_count: usize = dg.edges.iter().filter(|e| {
             let (r0, r1) = e.ends();
-            let ray0 = &phi[r0.0][r0.1];
-            let ray1 = &phi[r1.0][r1.1];
-            matches!(ray0, Term::App(s, _) if s == "+v" || s == "-v") &&
-            matches!(ray1, Term::App(s, _) if s == "+v" || s == "-v")
+            let ray0 = phi[r0.0][r0.1];
+            let ray1 = phi[r1.0][r1.1];
+            matches!(ray0.head().as_deref(), Some("+v") | Some("-v")) &&
+            matches!(ray1.head().as_deref(), Some("+v") | Some("-v"))
         }).count();
 
         assert_eq!(h_count, 4,
@@ -742,12 +737,12 @@ mod tests {
         // Confirm: zero edges between distinct boundary glues (unique names).
         let boundary_edges: usize = dg.edges.iter().filter(|e| {
             let (r0, r1) = e.ends();
-            let ray0 = &phi[r0.0][r0.1];
-            let ray1 = &phi[r1.0][r1.1];
-            let is_h = matches!(ray0, Term::App(s, _) if s == "+h" || s == "-h") &&
-                       matches!(ray1, Term::App(s, _) if s == "+h" || s == "-h");
-            let is_v = matches!(ray0, Term::App(s, _) if s == "+v" || s == "-v") &&
-                       matches!(ray1, Term::App(s, _) if s == "+v" || s == "-v");
+            let ray0 = phi[r0.0][r0.1];
+            let ray1 = phi[r1.0][r1.1];
+            let is_h = matches!(ray0.head().as_deref(), Some("+h") | Some("-h")) &&
+                       matches!(ray1.head().as_deref(), Some("+h") | Some("-h"));
+            let is_v = matches!(ray0.head().as_deref(), Some("+v") | Some("-v")) &&
+                       matches!(ray1.head().as_deref(), Some("+v") | Some("-v"));
             !is_h && !is_v
         }).count();
         assert_eq!(boundary_edges, 0,
@@ -819,29 +814,20 @@ mod tests {
     fn glue_term_structure() {
         // Wang tile: gl(red)(X) = dot(red(X), 0)
         let gt = glue_term("red", "X", 0);
-        match &gt {
-            Term::App(sym, args) if sym == "dot" => {
-                assert_eq!(args.len(), 2);
-                match &args[0] {
-                    Term::App(c, cargs) if c == "red" => {
-                        assert_eq!(cargs.len(), 1);
-                        assert!(matches!(&cargs[0], Term::Var(v) if v == "X"));
-                    }
-                    _ => panic!("expected red(X), got {:?}", args[0]),
-                }
-                assert_eq!(args[1], con("0"), "Wang strength must be 0");
-            }
-            _ => panic!("expected dot(…, …), got {:?}", gt),
-        }
+        assert_eq!(gt.head(), Some("dot".to_string()), "expected dot(…, …)");
+        let gt_args = gt.args();
+        assert_eq!(gt_args.len(), 2);
+        assert_eq!(gt_args[0].head(), Some("red".to_string()), "expected red(X)");
+        let red_args = gt_args[0].args();
+        assert_eq!(red_args.len(), 1);
+        assert!(red_args[0].is_var(), "expected X to be a variable");
+        assert_eq!(gt_args[1], con("0"), "Wang strength must be 0");
 
         // Strength 2: gl(blue)(Y) = dot(blue(Y), s(s(0)))
         let gt2 = glue_term("blue", "Y", 2);
-        match &gt2 {
-            Term::App(sym, args) if sym == "dot" => {
-                assert_eq!(args[1], nat(2), "strength 2 must encode as s(s(0))");
-            }
-            _ => panic!("expected dot(…, …), got {:?}", gt2),
-        }
+        assert_eq!(gt2.head(), Some("dot".to_string()), "expected dot(…, …)");
+        let gt2_args = gt2.args();
+        assert_eq!(gt2_args[1], nat(2), "strength 2 must encode as s(s(0))");
     }
 
     // ── env_constellation structural test ─────────────────────────────────────
@@ -860,18 +846,18 @@ mod tests {
         // Temperature star: first star has a single +temp(s(s(0))) ray.
         let temp_star = &env[0];
         assert_eq!(temp_star.len(), 1);
-        assert!(matches!(&temp_star[0], Term::App(s, _) if s == "+temp"),
+        assert_eq!(temp_star[0].head(), Some("+temp".to_string()),
             "first star must be +temp(τ̄)");
 
         // Check +add(0,Y,Y) base star is present.
         let has_add_base = env.iter().any(|star| {
-            star.len() == 1 && matches!(&star[0], Term::App(s, args) if s == "+add" && args[0] == nat(0))
+            star.len() == 1 && star[0].head() == Some("+add".to_string()) && star[0].args()[0] == nat(0)
         });
         assert!(has_add_base, "env constellation must include add base [+add(0̄,Y,Y)]");
 
         // Check +geq(X, 0) base star is present.
         let has_geq_base = env.iter().any(|star| {
-            star.len() == 1 && matches!(&star[0], Term::App(s, args) if s == "+geq" && args[1] == nat(0))
+            star.len() == 1 && star[0].head() == Some("+geq".to_string()) && star[0].args()[1] == nat(0)
         });
         assert!(has_geq_base, "env constellation must include geq base [+geq(X,0̄)]");
     }

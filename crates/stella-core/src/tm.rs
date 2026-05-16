@@ -127,22 +127,22 @@ pub struct Ntm {
 
 /// Build a zero-arity constant term.
 fn constant(name: &str) -> Term {
-    Term::App(name.into(), vec![])
+    crate::term::mk_app_str(&name, vec![])
 }
 
 /// Build `+sym(args)`.
 fn pos(neutral: &str, args: Vec<Term>) -> Term {
-    Term::App(format!("+{neutral}"), args)
+    crate::term::mk_app_str(&format!("+{neutral}"), args)
 }
 
 /// Build `−sym(args)`.
 fn neg(neutral: &str, args: Vec<Term>) -> Term {
-    Term::App(format!("-{neutral}"), args)
+    crate::term::mk_app_str(&format!("-{neutral}"), args)
 }
 
 /// Build a variable term.
 fn var(name: &str) -> Term {
-    Term::Var(name.into())
+    crate::term::mk_var(name)
 }
 
 /// Build a right-associative `○` chain (§56.21 `rcons`):
@@ -153,7 +153,7 @@ fn rcons_chain(items: &[Term], base: Term) -> Term {
     items
         .iter()
         .rev()
-        .fold(base, |acc, c| Term::App("rcons".into(), vec![c.clone(), acc]))
+        .fold(base, |acc, c| crate::term::mk_app_str("rcons", vec![c.clone(), acc]))
 }
 
 /// Build a left-associative `●` application (`lcons`):
@@ -162,7 +162,7 @@ fn rcons_chain(items: &[Term], base: Term) -> Term {
 /// This is used only for the `L ● X` pattern in transitions (one level deep).
 /// `lcons_app(left, right)` = `lcons(left, right)`.
 fn lcons_app(left: Term, right: Term) -> Term {
-    Term::App("lcons".into(), vec![left, right])
+    crate::term::mk_app_str("lcons", vec![left, right])
 }
 
 /// Encode a state name as a constant term.
@@ -239,7 +239,7 @@ pub fn encode_ntm(ntm: &Ntm) -> Constellation {
     {
         let c_var = var("C");
         let w_var = var("W");
-        let input = Term::App("rcons".into(), vec![c_var.clone(), w_var.clone()]);
+        let input = crate::term::mk_app_str("rcons", vec![c_var.clone(), w_var.clone()]);
         c.push(vec![
             neg("i", vec![input]),
             pos_m(
@@ -307,7 +307,7 @@ pub fn encode_ntm(ntm: &Ntm) -> Constellation {
                 let x = var("X");
                 let r = var("R");
                 let lx = lcons_app(l.clone(), x.clone()); // L ● X
-                let cpr = Term::App("rcons".into(), vec![cp, r.clone()]); // c' ○ R
+                let cpr = crate::term::mk_app_str("rcons", vec![cp, r.clone()]); // c' ○ R
                 vec![
                     neg_m(lx, state(from), c_sym, r),
                     pos_m(l, state(to), x, cpr),
@@ -318,7 +318,7 @@ pub fn encode_ntm(ntm: &Ntm) -> Constellation {
                 let l = var("L");
                 let x = var("X");
                 let r = var("R");
-                let xr = Term::App("rcons".into(), vec![x.clone(), r.clone()]); // X ○ R
+                let xr = crate::term::mk_app_str("rcons", vec![x.clone(), r.clone()]); // X ○ R
                 let lcp = lcons_app(l.clone(), cp);                             // L ● c'
                 vec![
                     neg_m(l, state(from), c_sym, xr),
@@ -363,7 +363,7 @@ pub fn encode_ntm(ntm: &Ntm) -> Constellation {
         let cv = var("C");
         let l = var("L");
         let lhs = constant(BLANK);                                                   // □
-        let rhs = Term::App("rcons".into(), vec![constant(BLANK), constant(BLANK)]); // □ ○ □
+        let rhs = crate::term::mk_app_str("rcons", vec![constant(BLANK), constant(BLANK)]); // □ ○ □
         c.push(vec![
             neg_m(l.clone(), q.clone(), cv.clone(), lhs),
             pos_m(l, q, cv, rhs),
@@ -560,49 +560,49 @@ mod tests {
         // Star 0: word star — a single +i ray
         let word_star = &phi[0];
         assert_eq!(word_star.len(), 1, "word star should have 1 ray");
-        assert_eq!(word_star[0].head(), Some("+i"), "word star ray should be +i");
+        assert_eq!(word_star[0].head(), Some("+i".to_string()), "word star ray should be +i");
 
         // Star 1: q₀ non-empty — [−i(rcons(C,W)), +m(blank, q0, C, W)]
         let q0_nonempty = &phi[1];
         assert_eq!(q0_nonempty.len(), 2, "q0 non-empty star should have 2 rays");
-        assert_eq!(q0_nonempty[0].head(), Some("-i"), "first ray of q0 non-empty star should be -i");
-        assert_eq!(q0_nonempty[1].head(), Some("+m"), "second ray of q0 non-empty star should be +m");
+        assert_eq!(q0_nonempty[0].head(), Some("-i".to_string()), "first ray of q0 non-empty star should be -i");
+        assert_eq!(q0_nonempty[1].head(), Some("+m".to_string()), "second ray of q0 non-empty star should be +m");
 
         // Star 2: q₀ empty — [−i(blank), +m(blank, q0, blank, blank)]
         let q0_empty = &phi[2];
         assert_eq!(q0_empty.len(), 2, "q0 empty star should have 2 rays");
-        assert_eq!(q0_empty[0].head(), Some("-i"), "first ray of q0 empty star should be -i");
-        assert_eq!(q0_empty[1].head(), Some("+m"), "second ray of q0 empty star should be +m");
+        assert_eq!(q0_empty[0].head(), Some("-i".to_string()), "first ray of q0 empty star should be -i");
+        assert_eq!(q0_empty[1].head(), Some("+m".to_string()), "second ray of q0 empty star should be +m");
 
         // Stars 3,4: accept/reject halting stars — each has 2 rays: -m and a constant
         let q_a_star = &phi[3];
         assert_eq!(q_a_star.len(), 2);
-        assert_eq!(q_a_star[0].head(), Some("-m"), "accept star should start with -m");
+        assert_eq!(q_a_star[0].head(), Some("-m".to_string()), "accept star should start with -m");
         assert_eq!(q_a_star[1], constant("accept"), "accept star should end with [accept]");
 
         let q_r_star = &phi[4];
         assert_eq!(q_r_star.len(), 2);
-        assert_eq!(q_r_star[0].head(), Some("-m"), "reject star should start with -m");
+        assert_eq!(q_r_star[0].head(), Some("-m".to_string()), "reject star should start with -m");
         assert_eq!(q_r_star[1], constant("reject"), "reject star should end with [reject]");
 
         // Transition stars (indices 5..7): each has 2 rays (-m, +m)
         for idx in 5..8 {
             let ts = &phi[idx];
             assert_eq!(ts.len(), 2, "transition star {} should have 2 rays", idx);
-            assert_eq!(ts[0].head(), Some("-m"), "transition star {} ray 0 should be -m", idx);
-            assert_eq!(ts[1].head(), Some("+m"), "transition star {} ray 1 should be +m", idx);
+            assert_eq!(ts[0].head(), Some("-m".to_string()), "transition star {} ray 0 should be -m", idx);
+            assert_eq!(ts[1].head(), Some("+m".to_string()), "transition star {} ray 1 should be +m", idx);
         }
 
         // Malloc stars (indices 8, 9): each has 2 rays (-m, +m)
         let malloc_l = &phi[8];
         assert_eq!(malloc_l.len(), 2, "left malloc star should have 2 rays");
-        assert_eq!(malloc_l[0].head(), Some("-m"));
-        assert_eq!(malloc_l[1].head(), Some("+m"));
+        assert_eq!(malloc_l[0].head(), Some("-m".to_string()));
+        assert_eq!(malloc_l[1].head(), Some("+m".to_string()));
 
         let malloc_r = &phi[9];
         assert_eq!(malloc_r.len(), 2, "right malloc star should have 2 rays");
-        assert_eq!(malloc_r[0].head(), Some("-m"));
-        assert_eq!(malloc_r[1].head(), Some("+m"));
+        assert_eq!(malloc_r[0].head(), Some("-m".to_string()));
+        assert_eq!(malloc_r[1].head(), Some("+m".to_string()));
     }
 
     /// Verify transition star count for the anbn TM (14 transitions).
@@ -724,14 +724,10 @@ mod tests {
     fn encode_word_empty() {
         let star = encode_word_ntm(&[]);
         assert_eq!(star.len(), 1, "empty word star should have 1 ray");
-        assert_eq!(star[0].head(), Some("+i"));
-        // Argument should be the blank constant.
-        if let Term::App(_, args) = &star[0] {
-            assert_eq!(args.len(), 1);
-            assert_eq!(args[0], constant(BLANK), "empty word star arg should be blank");
-        } else {
-            panic!("expected App");
-        }
+        assert_eq!(star[0].head(), Some("+i".to_string()));
+        let args0 = star[0].args();
+        assert_eq!(args0.len(), 1);
+        assert_eq!(args0[0], constant(BLANK), "empty word star arg should be blank");
     }
 
     /// Non-empty word "ab" encodes as [+i(rcons(a, rcons(b, blank)))] (§56.21).
@@ -739,12 +735,9 @@ mod tests {
     fn encode_word_ab() {
         let star = encode_word_ntm(&word(&["a", "b"]));
         assert_eq!(star.len(), 1);
-        assert_eq!(star[0].head(), Some("+i"));
-        if let Term::App(_, args) = &star[0] {
-            assert_eq!(args.len(), 1);
-            assert_eq!(args[0].head(), Some("rcons"), "word should be rcons-encoded");
-        } else {
-            panic!("expected App");
-        }
+        assert_eq!(star[0].head(), Some("+i".to_string()));
+        let args0 = star[0].args();
+        assert_eq!(args0.len(), 1);
+        assert_eq!(args0[0].head(), Some("rcons".to_string()), "word should be rcons-encoded");
     }
 }
