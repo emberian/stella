@@ -85,6 +85,7 @@
     align-items: center;
     gap: 10px;
     flex-shrink: 0;
+    flex-wrap: wrap;
   }
   .toolbar button {
     background: #21262d;
@@ -102,7 +103,18 @@
   .toolbar .step-info {
     font-size: 0.78rem;
     color: #8b949e;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
+  .toolbar button#btn-reset {
+    background: #2d1b1b;
+    border-color: #5c2626;
+    color: #f85149;
+  }
+  .toolbar button#btn-reset:hover { background: #3d2222; }
   .panels {
     flex: 1;
     display: flex;
@@ -145,12 +157,6 @@
     white-space: pre;
     overflow: auto;
   }
-  #exec-summary {
-    font-size: 0.82rem;
-    color: #c9d1d9;
-    white-space: pre-wrap;
-    line-height: 1.6;
-  }
   #graph-svg-container {
     min-width: 200px;
     min-height: 200px;
@@ -161,9 +167,9 @@
   .loading { color: #58a6ff; font-size: 0.82rem; }
   .error { color: #f85149; font-size: 0.82rem; }
 
-  /* Step stepper panel */
+  /* Step trace panel */
   .step-panel {
-    padding: 14px;
+    padding: 10px 14px;
     font-size: 0.78rem;
     color: #c9d1d9;
     line-height: 1.7;
@@ -179,6 +185,10 @@
     border-left-color: #58a6ff;
     background: #1f3352;
   }
+  .step-entry.final-step {
+    border-left-color: #3fb950;
+    background: #1b2d1f;
+  }
   .step-label {
     font-weight: 600;
     color: #58a6ff;
@@ -186,10 +196,44 @@
     text-transform: uppercase;
     letter-spacing: 0.06em;
     margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .step-label .badge {
+    font-size: 0.65rem;
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: #388bfd22;
+    border: 1px solid #388bfd55;
+    text-transform: none;
+    letter-spacing: 0;
+    color: #79c0ff;
+  }
+  .step-label .badge.final {
+    background: #3fb95022;
+    border-color: #3fb95055;
+    color: #56d364;
   }
   .step-stars {
-    font-size: 0.78rem;
+    font-size: 0.77rem;
     color: #e6edf3;
+    margin-bottom: 4px;
+  }
+  .step-ray {
+    font-size: 0.71rem;
+    color: #f0883e;
+    font-style: italic;
+  }
+  .step-ray:empty { display: none; }
+
+  /* Active ray highlight in dep-graph panel header */
+  #graph-panel-header .active-info {
+    font-size: 0.68rem;
+    color: #f0883e;
+    text-transform: none;
+    letter-spacing: 0;
+    margin-top: 2px;
   }
 </style>
 </head>
@@ -197,7 +241,7 @@
 
 <header>
   <h1>stella-viz</h1>
-  <span>Stellar Resolution Explorer — proto theorem-prover UI</span>
+  <span>Stellar Resolution Explorer — interactive step-through proto theorem-prover</span>
 </header>
 
 <div class="main">
@@ -208,25 +252,29 @@
 
   <div class="content">
     <div class="toolbar">
-      <button id="btn-prev" disabled title="Previous step">← Prev</button>
-      <button id="btn-next" disabled title="Next step">Next →</button>
+      <button id="btn-reset" title="Reset to step 0">↺ Reset</button>
+      <button id="btn-prev" disabled title="Previous step (◀)">◀ Prev</button>
+      <button id="btn-next" disabled title="Next step (▶)">Next ▶</button>
       <span class="step-info" id="step-info">Select a preset to begin.</span>
     </div>
 
     <div class="panels">
-      <!-- Left panel: rendered dep-graph -->
+      <!-- Left panel: rendered dep-graph at current step -->
       <div class="panel" style="flex:2;">
-        <div class="panel-header">Dependency graph D[Φ; C]</div>
+        <div class="panel-header" id="graph-panel-header">
+          Interaction space Ψ — dep-graph D[Ψ; C] at current step
+          <div class="active-info" id="active-ray-info"></div>
+        </div>
         <div class="panel-body" id="graph-panel-body">
           <div id="graph-svg-container"><span class="loading">Select a preset to visualize.</span></div>
         </div>
       </div>
 
-      <!-- Right panel: execution trace / step -->
-      <div class="panel" style="flex:1; min-width:220px;">
-        <div class="panel-header">Execution result / step trace</div>
+      <!-- Right panel: step trace -->
+      <div class="panel" style="flex:1; min-width:240px;">
+        <div class="panel-header">IEx step trace — Ψ at each step</div>
         <div class="panel-body text" id="exec-panel">
-          <span class="loading">Select a preset to see execution result.</span>
+          <span class="loading">Select a preset to see the execution trace.</span>
         </div>
       </div>
     </div>
@@ -241,11 +289,11 @@
 // ── State ─────────────────────────────────────────────────────────────────────
 let gViz = null;           // Viz.js instance (loaded async)
 let gPresets = [];         // [{id, name, description}]
-let gCurrentPreset = null; // current preset data from /api/dot/<n>
-let gStepIndex = 0;        // current step index in the step trace
+let gSteps = [];           // Current preset's step snapshots from /api/steps/<n>
+let gCurrentPresetIdx = -1;
+let gStepIndex = 0;        // Current step index into gSteps
 
 // ── Viz.js init ────────────────────────────────────────────────────────────────
-// @viz-js/viz exposes Viz as a global after loading.
 async function initViz() {
   try {
     if (typeof Viz !== "undefined") {
@@ -288,21 +336,23 @@ function renderPresetList() {
 
 // ── Select & load a preset ─────────────────────────────────────────────────────
 async function selectPreset(idx) {
-  // Highlight active button
   document.querySelectorAll(".preset-btn").forEach((b, i) => {
     b.classList.toggle("active", i === idx);
   });
 
   document.getElementById("graph-svg-container").innerHTML =
-    `<span class="loading">Rendering…</span>`;
+    `<span class="loading">Loading steps…</span>`;
   document.getElementById("exec-panel").innerHTML =
     `<span class="loading">Loading…</span>`;
-  document.getElementById("step-info").textContent = "Loading…";
+  document.getElementById("step-info").textContent = "Loading step trace…";
+  document.getElementById("active-ray-info").textContent = "";
 
   try {
-    gCurrentPreset = await fetchJson(`/api/dot/${idx}`);
+    // Load step-by-step trace from /api/steps/<idx>
+    gSteps = await fetchJson(`/api/steps/${idx}`);
+    gCurrentPresetIdx = idx;
     gStepIndex = 0;
-    renderCurrent();
+    await renderCurrentStep();
   } catch (e) {
     document.getElementById("graph-svg-container").innerHTML =
       `<span class="error">Error: ${e.message}</span>`;
@@ -310,12 +360,30 @@ async function selectPreset(idx) {
 }
 
 // ── Rendering ──────────────────────────────────────────────────────────────────
-async function renderCurrent() {
-  if (!gCurrentPreset) return;
+async function renderCurrentStep() {
+  if (gSteps.length === 0) return;
+  const snap = gSteps[gStepIndex];
 
-  // Render DOT → SVG
-  const dotSrc = gCurrentPreset.dep_graph_dot;
+  // Render DOT for the current step's Ψ dep-graph
+  await renderDot(snap.dot);
+
+  // Show active ray info
+  document.getElementById("active-ray-info").textContent =
+    snap.active_ray ? `Next fire: ${snap.active_ray}` : (snap.is_final ? "Normal form reached." : "");
+
+  // Render step trace panel
+  renderTracePanel();
+
+  // Update toolbar
+  updateToolbar(snap);
+}
+
+async function renderDot(dotSrc) {
   const container = document.getElementById("graph-svg-container");
+  if (!dotSrc || dotSrc.trim() === "" || dotSrc.includes("// empty")) {
+    container.innerHTML = `<span style="color:#8b949e; font-size:0.82rem;">Ψ is empty (no stars).</span>`;
+    return;
+  }
   if (gViz) {
     try {
       const svg = await gViz.renderSVGElement(dotSrc);
@@ -323,75 +391,105 @@ async function renderCurrent() {
       container.innerHTML = "";
       container.appendChild(svg);
     } catch (e) {
-      // Fallback: show DOT text if rendering fails
       container.innerHTML = `<pre id="dot-raw">${esc(dotSrc)}</pre>`;
     }
   } else {
-    // No viz.js: show raw DOT with a message
     container.innerHTML = `
       <div>
-        <p class="error" style="margin-bottom:8px;">viz.js not available (CDN offline). Raw DOT source:</p>
+        <p class="error" style="margin-bottom:8px;">viz.js not available (CDN offline). Raw DOT:</p>
         <pre id="dot-raw">${esc(dotSrc)}</pre>
       </div>`;
   }
-
-  // Render execution summary
-  renderExecPanel();
-
-  // Update step controls
-  updateStepControls();
 }
 
-// Parse the execution summary into "steps" for the stepper
-function parseSteps(summary) {
-  // Treat the summary as a single-item trace for now (server provides full IEx result).
-  // The step concept: "step 0" = initial constellation description; "step 1" = IEx result.
-  return [
-    { label: "Step 0: Initial constellation", stars: "Dependency graph D[Φ;C] shown on the left." },
-    { label: "Step 1: Execution result (↨♭ IEx / AEx)", stars: summary },
-  ];
-}
-
-function renderExecPanel() {
+function renderTracePanel() {
   const panel = document.getElementById("exec-panel");
-  const steps = parseSteps(gCurrentPreset.execution_summary);
   let html = `<div class="step-panel">`;
-  steps.forEach((s, i) => {
-    const cls = i === gStepIndex ? "step-entry current" : "step-entry";
-    html += `<div class="${cls}">
-      <div class="step-label">${esc(s.label)}</div>
-      <div class="step-stars">${esc(s.stars)}</div>
+  gSteps.forEach((s, i) => {
+    const isCurrent = (i === gStepIndex);
+    let cls = "step-entry";
+    if (isCurrent) cls += " current";
+    if (s.is_final) cls += " final-step";
+
+    const badgeText = s.is_final ? "normal form" : `step ${s.step}`;
+    const badgeCls = s.is_final ? "badge final" : "badge";
+
+    const starsHtml = s.psi_stars.length > 0
+      ? s.psi_stars.map(st => `<div>${esc(st)}</div>`).join("")
+      : `<div style="color:#8b949e;">∅ (empty interaction space)</div>`;
+
+    html += `<div class="${cls}" data-step="${i}">
+      <div class="step-label">
+        Step ${s.step}
+        <span class="${badgeCls}">${badgeText}</span>
+      </div>
+      <div class="step-stars">${starsHtml}</div>
+      <div class="step-ray">${esc(s.active_ray)}</div>
     </div>`;
   });
   html += `</div>`;
   panel.innerHTML = html;
+
+  // Click on any step entry to jump to it
+  panel.querySelectorAll(".step-entry").forEach(el => {
+    el.addEventListener("click", async () => {
+      const i = parseInt(el.dataset.step, 10);
+      if (!isNaN(i) && i >= 0 && i < gSteps.length) {
+        gStepIndex = i;
+        await renderCurrentStep();
+      }
+    });
+    el.style.cursor = "pointer";
+  });
 
   // Scroll current step into view
   const current = panel.querySelector(".step-entry.current");
   if (current) current.scrollIntoView({ block: "nearest" });
 }
 
-function updateStepControls() {
-  if (!gCurrentPreset) {
-    document.getElementById("btn-prev").disabled = true;
-    document.getElementById("btn-next").disabled = true;
-    document.getElementById("step-info").textContent = "Select a preset.";
-    return;
-  }
-  const steps = parseSteps(gCurrentPreset.execution_summary);
+function updateToolbar(snap) {
+  const presetName = gPresets[gCurrentPresetIdx]?.name ?? "";
   document.getElementById("btn-prev").disabled = gStepIndex <= 0;
-  document.getElementById("btn-next").disabled = gStepIndex >= steps.length - 1;
+  document.getElementById("btn-next").disabled = gStepIndex >= gSteps.length - 1;
+  document.getElementById("btn-reset").disabled = gSteps.length === 0;
   document.getElementById("step-info").textContent =
-    `Preset: ${gCurrentPreset.name} — Step ${gStepIndex + 1} / ${steps.length}`;
+    `${presetName} — Step ${gStepIndex} / ${gSteps.length - 1}${snap.is_final ? " [normal form]" : ""}`;
 }
 
-// ── Step buttons ───────────────────────────────────────────────────────────────
-document.getElementById("btn-prev").addEventListener("click", () => {
-  if (gStepIndex > 0) { gStepIndex--; renderExecPanel(); updateStepControls(); }
+// ── Step / Reset buttons ───────────────────────────────────────────────────────
+document.getElementById("btn-reset").addEventListener("click", async () => {
+  if (gSteps.length > 0) {
+    gStepIndex = 0;
+    await renderCurrentStep();
+  }
 });
-document.getElementById("btn-next").addEventListener("click", () => {
-  const steps = gCurrentPreset ? parseSteps(gCurrentPreset.execution_summary) : [];
-  if (gStepIndex < steps.length - 1) { gStepIndex++; renderExecPanel(); updateStepControls(); }
+
+document.getElementById("btn-prev").addEventListener("click", async () => {
+  if (gStepIndex > 0) {
+    gStepIndex--;
+    await renderCurrentStep();
+  }
+});
+
+document.getElementById("btn-next").addEventListener("click", async () => {
+  if (gStepIndex < gSteps.length - 1) {
+    gStepIndex++;
+    await renderCurrentStep();
+  }
+});
+
+// Keyboard navigation: arrow keys
+document.addEventListener("keydown", async (e) => {
+  if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+  if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+    if (gStepIndex < gSteps.length - 1) { gStepIndex++; await renderCurrentStep(); }
+  } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+    if (gStepIndex > 0) { gStepIndex--; await renderCurrentStep(); }
+  } else if (e.key === "Home") {
+    gStepIndex = 0; await renderCurrentStep();
+  } else if (e.key === "End") {
+    gStepIndex = gSteps.length - 1; await renderCurrentStep();
+  }
 });
 
 // ── HTML escaping ──────────────────────────────────────────────────────────────

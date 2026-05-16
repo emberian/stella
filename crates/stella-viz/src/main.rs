@@ -23,8 +23,9 @@
 
 mod presets;
 mod server;
+pub mod stepper;
 
-use presets::all_presets;
+use presets::{all_presets, all_step_data};
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -74,11 +75,12 @@ fn main() {
     }
 }
 
-/// Headless mode: load all presets, print their DOT strings, and exit.
+/// Headless mode: load all presets and step data, print their DOT strings, and exit.
 ///
 /// Intended for smoke-testing that the engine + viz pipeline works without
 /// starting the HTTP server (useful in CI / `cargo test`).
 fn run_headless() {
+    // Summary presets (static dep-graph + IEx result).
     let presets = all_presets();
     for (i, p) in presets.iter().enumerate() {
         println!("=== Preset {i}: {} ===", p.name);
@@ -94,6 +96,29 @@ fn run_headless() {
         }
         println!();
     }
+
+    // Step-by-step traces.
+    println!("=== Step-through traces ===");
+    let step_data = all_step_data();
+    for (i, sd) in step_data.iter().enumerate() {
+        println!("--- Preset {i}: {} ({} steps) ---", sd.name, sd.steps.len());
+        // Print step-0 and step-N DOTs (first 4 lines each).
+        if let Some(s0) = sd.steps.first() {
+            println!("  Step 0 DOT ({} chars, is_final={}):", s0.dot.len(), s0.is_final);
+            for line in s0.dot.lines().take(4) {
+                println!("    {line}");
+            }
+        }
+        if sd.steps.len() > 1 {
+            let sn = sd.steps.last().unwrap();
+            println!("  Step {} DOT ({} chars, is_final={}):", sn.step, sn.dot.len(), sn.is_final);
+            for line in sn.dot.lines().take(4) {
+                println!("    {line}");
+            }
+            println!("  Final Ψ: {}", sn.psi_stars.join("; "));
+        }
+        println!();
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -102,7 +127,7 @@ fn run_headless() {
 
 #[cfg(test)]
 mod tests {
-    use super::presets::all_presets;
+    use super::presets::{all_presets, all_step_data};
 
     /// Smoke test: load all presets, verify DOT strings are non-empty and
     /// well-formed (start/end with correct graphviz delimiters).
@@ -186,5 +211,90 @@ mod tests {
             let _ = p.dep_graph_dot.len();
             let _ = p.execution_summary.len();
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Step-through smoke tests
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// Smoke: all presets produce at least 2 step snapshots (step-0 and step-N).
+    #[test]
+    fn smoke_step_data_has_steps() {
+        let sd = all_step_data();
+        assert!(!sd.is_empty(), "should have step data for all presets");
+        for (i, d) in sd.iter().enumerate() {
+            assert!(
+                d.steps.len() >= 2,
+                "preset {i} ({}) should have at least 2 steps (initial + final); got {}",
+                d.name,
+                d.steps.len()
+            );
+        }
+    }
+
+    /// Smoke: step-0 DOT for every preset is a valid dep_graph DOT.
+    #[test]
+    fn smoke_step0_dot_valid() {
+        let sd = all_step_data();
+        for (i, d) in sd.iter().enumerate() {
+            let s0 = &d.steps[0];
+            assert_eq!(s0.step, 0, "preset {i}: first snapshot should be step 0");
+            assert!(
+                s0.dot.contains("graph dep_graph {"),
+                "preset {i} ({}) step-0 DOT should contain 'graph dep_graph {{'; got: {}",
+                d.name,
+                &s0.dot[..s0.dot.len().min(120)]
+            );
+            assert!(
+                s0.dot.trim_end().ends_with('}'),
+                "preset {i} ({}) step-0 DOT should end with '}}'",
+                d.name
+            );
+        }
+    }
+
+    /// Smoke: step-N (last snapshot) for every preset is marked final and has valid DOT.
+    #[test]
+    fn smoke_step_n_dot_and_final() {
+        let sd = all_step_data();
+        for (i, d) in sd.iter().enumerate() {
+            let sn = d.steps.last().unwrap();
+            assert!(
+                sn.is_final,
+                "preset {i} ({}) last step should be marked is_final",
+                d.name
+            );
+            assert!(
+                sn.dot.contains("graph dep_graph {") || sn.dot.contains("// empty"),
+                "preset {i} ({}) step-N DOT should be a valid dep_graph or empty marker",
+                d.name
+            );
+        }
+    }
+
+    /// Smoke: Horn-add step-N Ψ contains s(s(s(s(0)))) = nat(4) (the answer 2+2=4).
+    #[test]
+    fn smoke_horn_add_step_n_answer() {
+        let sd = all_step_data();
+        let horn_steps = &sd[0]; // horn_add is first
+        let sn = horn_steps.steps.last().unwrap();
+        let result_str = sn.psi_stars.join(" ");
+        assert!(
+            result_str.contains("s(s(s(s(0))))"),
+            "Horn-add 2+2 final Ψ should contain nat(4) = s(s(s(s(0)))); got: {result_str}"
+        );
+    }
+
+    /// Smoke: NFA step-N Ψ contains "accept" (NFA accepts "000").
+    #[test]
+    fn smoke_nfa_step_n_accepts() {
+        let sd = all_step_data();
+        let nfa_steps = &sd[1]; // nfa is second
+        let sn = nfa_steps.steps.last().unwrap();
+        let result_str = sn.psi_stars.join(" ");
+        assert!(
+            result_str.contains("accept"),
+            "NFA '000' final Ψ should contain accept; got: {result_str}"
+        );
     }
 }
