@@ -76,7 +76,19 @@ pub struct DepGraph {
 
 impl DepGraph {
     /// Build `D[Φ; C]` for a given colour set `C` (§49.10).
+    ///
+    /// This is the O(n²) pairwise scan — kept as the oracle for testing.
+    /// Production callers should prefer `build_indexed` / `from_constellation`.
     pub fn build(phi: &Constellation, c: &HashSet<String>) -> Self {
+        Self::build_scan(phi, c)
+    }
+
+    /// O(n²) pairwise scan oracle for `D[Φ; C]` (§49.10).
+    ///
+    /// Examines every cross-star ray pair and emits an edge when `matchable`
+    /// returns true and both rays' colour sets are subsets of `c`.
+    /// This is the reference implementation used to validate `build_indexed`.
+    pub fn build_scan(phi: &Constellation, c: &HashSet<String>) -> Self {
         let ids: Vec<RayId> = id_rays(phi);
         let mut edges = Vec::new();
 
@@ -103,10 +115,22 @@ impl DepGraph {
         Self { n_stars: phi.len(), edges }
     }
 
-    /// Build `D[Φ; all_colours(Φ)]` — the standard choice for Horn execution.
+    /// Build `D[Φ; all_colours(Φ)]` using the first-symbol index (default).
+    ///
+    /// Delegates to `from_constellation_indexed` (defined in `index.rs`), which
+    /// produces the same edge set as the O(n²) scan but runs faster on large
+    /// constellations.  The scan oracle is preserved as `build_scan` /
+    /// `from_constellation_scan`.
     pub fn from_constellation(phi: &Constellation) -> Self {
+        Self::from_constellation_indexed(phi)
+    }
+
+    /// O(n²) scan version of `from_constellation` — the oracle.
+    ///
+    /// Use this in tests that need the reference (scan) build path explicitly.
+    pub fn from_constellation_scan(phi: &Constellation) -> Self {
         let c = all_colours(phi);
-        Self::build(phi, &c)
+        Self::build_scan(phi, &c)
     }
 
     pub fn adj(&self, rid: RayId) -> Vec<RayId> {
