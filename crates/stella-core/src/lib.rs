@@ -3,6 +3,7 @@ pub mod atm;
 pub mod automata;
 pub mod circuits;
 pub mod concrete;
+pub mod nfta;
 pub mod constellation;
 pub mod dep_graph;
 pub mod diagram;
