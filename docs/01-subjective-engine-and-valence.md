@@ -89,6 +89,36 @@ The §49.50/§49.52 inference — adjudicated, now canonical, not open:
   steps). The `Step` stream exposes both the substrate step index (witness clock)
   and the reafferent-round index (the agent's proper time).
 
+### 2.2 §2.2-detection converged (2026-05-16, with principal): provenance, not structure
+
+Spec §2.2's reafference cycle — *"the agent's later resolution is conditioned on
+the environment-modification its own earlier crossing produced"* — is an
+irreducibly **causal/temporal** property across the trajectory, NOT a static graph
+property. L1c's per-step cut/boundary-flux cannot establish causal conditioning;
+inferring it from structural co-occurrence *is* the N1 failure mode (reading
+closure into structure). Therefore, adjudicated canonical:
+
+- **L1d (new prerequisite, before L2a):** the subjective engine tracks
+  **derivation provenance through fusion** — each star/ray carries which prior
+  fusions/substitutions produced it. Additive instrumentation (like L1c):
+  observationally transparent, must not change stream behaviour, regression-gated
+  on the existing subjective + objective-oracle tests.
+- **§2.2 cycle = a provenance pattern:** ∃ rounds r < r′ and a candidate
+  agent-partition P such that an agent→env cross-cut interaction at round r whose
+  substitution modifies an environment star, and an agent resolution at round r′
+  whose **provenance traces through that modified environment star**. The cycle is
+  *causal*, decided over provenance, never over structural recurrence alone.
+- **N1 structurally guarded:** L2a never takes the cut as given. It runs the
+  detector over a **principled, Ch9-§62-gated enumeration** of candidate
+  partitions and *solves for* the partition admitting the cycle (the fixed point,
+  spec §2.2 — Girard-bi-orthogonality flavour). The harness (L2c) pre-registers:
+  N1 falsifies iff a closure only ever appears under hand-engineered
+  partitions/environments, never one the dynamics single out.
+
+Updated decomposition (§5): **L1a✓ L1b✓ L1c✓ → L1d (engine provenance) → L2a
+(provenance+cut cycle-detector + partition-search) → L2b (viability /
+trajectory / proper-time) → L2c (harness, N1–N4 pre-registered gates).**
+
 ## 3. Layer 2 — the valence probe (spec §2 foundation, verbatim)
 
 Couples a candidate **agent** sub-constellation to a partner **environment**
