@@ -1007,24 +1007,26 @@ pub fn phi_switched_2i(ps: &ProofStructure, sw: &Switching) -> Constellation {
         }
     }
 
-    // Conclusion routing stars: [−v(X); +@v(X)] for each free conclusion.
+    // Conclusion routing stars: [−v(X); v(X)] for each free conclusion.
     //
-    // We use a colour-wrapped POSITIVE output `+@v(X)` (symbol `@v` prefixed with `@`)
-    // instead of the neutral `v(X)` used in mll.rs.  This prevents spurious chain
-    // interactions: `+@v(X)` (positive) cannot match `+@v(X)` (positive, incompatible
-    // polarity) or neutral `v(X)` (different symbol).  The ONLY match for `+@v(X)` in
-    // the combined constellation (step 2) is `-@v(X)` from `full_head_polarise` ...
-    // but wait — we don't emit `-@v(X)` anywhere.
+    // We use a NEUTRAL output `v(X)` (same as the MLL conclusion star in mll.rs and
+    // the spec's §75.9 example: `[−4(X); 4(X)]`).
     //
-    // Actually: the simplest anti-chain fix is to make the conclusion output symbol
-    // UNIQUE and POSITIVE.  Since `+@v(X)` appears only here, no other star can
-    // interact with it within phi_sw alone.  `star_matches_root` then looks for `@v`
-    // symbols (stripped of `+` prefix) matching conclusion vertex names (stripped of `@`).
+    // A neutral ray can only match another neutral ray (Neutral↔Neutral polarity
+    // compatibility).  Since no other star in phi_switched_2i emits neutral `v(X)`,
+    // the neutral conclusion output has NO dep_graph neighbours and cannot participate
+    // in further interactions.  This prevents the spurious cycle that arose when
+    // `+@v(X)` (positive colour-wrapped) was used: `+@v(X)` could interact with
+    // `-@v(v(p))` from ax-routing stars (via copy-2 variables not triggering occurs
+    // check), creating infinite chains of the form `4(·(r, 4(·(r, ...))))`.
+    //
+    // `star_matches_root` recognises neutral `v(X)` by stripping any polarity prefix
+    // (none here) — the symbol name IS the vertex name.
     for &v in &free_concls {
         let neg_v = neg_ray(&v.name(), vec![x]);
-        // Colour-wrapped conclusion output: `+@v(X)`.  The `@` prefix ensures uniqueness.
-        let pos_vcol = pos_ray(&format!("@{}", v.name()), vec![x]);
-        c.push(vec![neg_v, pos_vcol]);
+        // Neutral conclusion output: `v(X)` — terminal, cannot interact further.
+        let neu_v = mk_app_str(&v.name(), vec![x]);
+        c.push(vec![neg_v, neu_v]);
     }
 
     // Per-link v★ stars (non-ax, non-cut).
@@ -1430,7 +1432,7 @@ fn free_conclusion_set(ps: &ProofStructure) -> rustc_hash::FxHashSet<VId> {
 /// 1. Pre-execute test: `aex_test = AEx(Φ^φ_S_col)`
 /// 2. Combine: `+Φ^ax_S_col ⊎ aex_test`
 /// 3. Execute: `result = AEx(combined)`
-/// 4. Check: `result = [[+@v₁(X), …, +@vₙ(X)]]` or matched form
+/// 4. Check: `result = [[v₁(X), …, vₙ(X)]]` (neutral conclusion rays per §75.9)
 fn check_root_star(
     ps: &ProofStructure,
     sw: &Switching,
@@ -1476,15 +1478,16 @@ fn check_root_star(
     }
 }
 
-/// Check that a star's rays are exactly `[v₁(X), …, vₙ(X)]` (or coloured
-/// `[+@v₁(X), …, +@vₙ(X)]`) for the given conclusion vertices `v_i` (§75.5).
+/// Check that a star's rays are exactly `[v₁(X), …, vₙ(X)]` for the given
+/// conclusion vertices `v_i` (§75.5).
 ///
 /// Each ray must be of the form `App(sym, [Var(_)])` where `sym` (stripped of
-/// polarity prefix `+`/`-` and colour prefix `@`) matches a conclusion vertex name.
+/// any polarity prefix `+`/`-`) matches a conclusion vertex name.
 ///
-/// The colour-wrapped conclusion output `+@v(X)` (from the conclusion routing star
-/// `[-v(X); +@v(X)]`) is recognised by stripping the `@` prefix after polarity
-/// stripping.  This matches vertex name `v`.
+/// The conclusion routing star emits a neutral `v(X)` terminal ray (§75.9
+/// example: `[−4(X); 4(X)]`).  After AEx, these neutral rays appear as the
+/// root star rays.  We strip any polarity prefix then match directly against
+/// the vertex name — no `@` colour prefix to strip (neutral rays have none).
 fn star_matches_root(star: &crate::constellation::Star, concls: &[VId]) -> bool {
     use crate::term::{get, TermData};
 
@@ -1513,10 +1516,10 @@ fn star_matches_root(star: &crate::constellation::Star, concls: &[VId]) -> bool 
                             common_var = Some(arg);
                         }
                         // Match the symbol name to a conclusion vertex.
-                        // Strip polarity prefix then colour prefix `@`.
+                        // Strip polarity prefix only — neutral rays have no `@` prefix.
                         let sname = sym.name.as_str();
                         let no_pol = sname.trim_start_matches('+').trim_start_matches('-');
-                        let no_col = no_pol.trim_start_matches('@');
+                        let no_col = no_pol;
                         for (j, cv) in concls.iter().enumerate() {
                             if !matched_concls[j] && cv.name() == no_col {
                                 matched_concls[j] = true;
