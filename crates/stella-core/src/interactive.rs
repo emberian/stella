@@ -74,14 +74,11 @@
 //! Interactive execution is not guaranteed to terminate. We impose a fuel bound
 //! (maximum number of steps) and return whether normal form was reached.
 
-use std::collections::HashMap;
-
 use crate::constellation::{Constellation, Star};
 use crate::dep_graph::{all_colours, ray_colours};
-use crate::polarised::{matchable, underlying_term, Polarity};
-use crate::constellation::ray_polarity;
+use crate::polarised::{matchable, ray_polarity, underlying_term, Polarity};
 use crate::subst::{freshen, Substitution};
-use crate::term::Term;
+use crate::term::{mk_var_interned, Var, Term};
 use crate::unify::{unify, Equation};
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -94,32 +91,35 @@ use crate::unify::{unify, Equation};
 /// Φ (§51.3, §51.13): Φ is non-linear so each use fetches a fresh rename.
 fn freshen_star(star: &Star, counter: &mut u32) -> Star {
     let prefix = format!("f{}", *counter);
-    *counter += *counter / 10 + 1; // advance counter to avoid collision
+    *counter += *counter / 10 + 1;
     let mut c = *counter;
     star.iter()
-        .map(|r| freshen(r, &prefix, &mut c).0)
+        .map(|&r| freshen(r, &prefix, &mut c).0)
         .collect()
 }
 
 /// Rename all variables in a star with a given prefix, returning the renamed star
 /// and substitution. Used for α-renaming before fusion (§49.30 ∇_α).
 fn alpha_rename_star(star: &Star, prefix: &str, counter: &mut u32) -> (Star, Substitution) {
-    // Collect all variables in the star.
-    let all_vars: Vec<String> = star
+    use rustc_hash::FxHashSet;
+    let all_vars: Vec<Var> = star
         .iter()
-        .flat_map(|r| r.vars())
-        .collect::<std::collections::HashSet<_>>()
+        .flat_map(|&r| r.vars())
+        .collect::<FxHashSet<_>>()
         .into_iter()
         .collect();
 
-    let mut map = HashMap::new();
-    for v in &all_vars {
-        let fresh = format!("{prefix}_{v}_{counter}");
-        *counter += 1;
-        map.insert(v.clone(), Term::Var(fresh));
-    }
-    let subst = Substitution::from_pairs(map);
-    let renamed = star.iter().map(|r| subst.apply(r)).collect();
+    let pairs: Vec<(Var, Term)> = all_vars
+        .into_iter()
+        .map(|v| {
+            let fresh_name = format!("{prefix}_{}{counter}", v.as_str());
+            *counter += 1;
+            let fresh_var = Var::intern(&fresh_name);
+            (v, mk_var_interned(fresh_var))
+        })
+        .collect();
+    let subst = Substitution::from_var_pairs(pairs);
+    let renamed = star.iter().map(|&r| subst.apply(r)).collect();
     (renamed, subst)
 }
 
@@ -132,27 +132,21 @@ fn alpha_rename_star(star: &Star, prefix: &str, counter: &mut u32) -> (Star, Sub
 /// `mat_Φ^C(r) := {(i, j) ∈ ±IdRays(Φ) | r ⋈ Φ[i][j], colours(r) ∪ colours(Φ[i][j]) ⊆ C}`
 ///
 /// We use all colours of `Φ` for `C` (the full-colour case).
-pub fn mat_phi(phi: &Constellation, r: &Term) -> Vec<(usize, usize)> {
+pub fn mat_phi(phi: &Constellation, r: Term) -> Vec<(usize, usize)> {
     mat_phi_c(phi, r, &std::collections::HashSet::new())
 }
 
-/// `mat_Φ^C(r)` with an extra colour set `extra_c` contributed by Ψ.
-///
-/// C = colours(Φ) ∪ extra_c (§51.6: C is the colour set of the full configuration
-/// Φ ⊢_C Ψ, which includes colours from both Φ and Ψ).
-fn mat_phi_c(phi: &Constellation, r: &Term, extra_c: &std::collections::HashSet<String>) -> Vec<(usize, usize)> {
+fn mat_phi_c(phi: &Constellation, r: Term, extra_c: &std::collections::HashSet<String>) -> Vec<(usize, usize)> {
     let mut c_set = all_colours(phi);
     c_set.extend(extra_c.iter().cloned());
     let cr = ray_colours(r);
     let mut result = Vec::new();
     for (i, star) in phi.iter().enumerate() {
-        for (j, ray) in star.iter().enumerate() {
-            // Must be a coloured ray (±IdRays, §48.14).
+        for (j, &ray) in star.iter().enumerate() {
             let rj_pol = ray_polarity(ray);
             if rj_pol == Polarity::Neutral {
                 continue;
             }
-            // Colour condition: colours(r) ∪ colours(Φ[i][j]) ⊆ C.
             let crj = ray_colours(ray);
             if !cr.is_subset(&c_set) || !crj.is_subset(&c_set) {
                 continue;
@@ -165,17 +159,11 @@ fn mat_phi_c(phi: &Constellation, r: &Term, extra_c: &std::collections::HashSet<
     result
 }
 
-/// `mat_{star}^C(r)` — matchable ray indices WITHIN `star` itself (§51.9, second sum).
-///
-/// Used for self-interaction: we look for rays `(i, j_k)` within the same star
-/// (same `i`) that are matchable with the selected ray `r = star[j]`, excluding `j` itself.
 fn mat_self(star: &Star, j: usize) -> Vec<usize> {
-    let r = &star[j];
+    let r = star[j];
     let mut result = Vec::new();
-    for (jk, ray) in star.iter().enumerate() {
-        if jk == j {
-            continue;
-        }
+    for (jk, &ray) in star.iter().enumerate() {
+        if jk == j { continue; }
         if matchable(r, ray) {
             result.push(jk);
         }
@@ -201,25 +189,22 @@ fn mat_self(star: &Star, j: usize) -> Vec<usize> {
 ///
 /// Returns `None` if unification fails (the summand disappears, §51.9).
 fn fuse(phi1: &Star, j: usize, phi2_renamed: &Star, j_prime: usize) -> Option<Star> {
-    // Build the equation from underlying (colour-stripped) terms (§49.27, §49.30).
-    let r1 = underlying_term(&phi1[j]);
-    let r2 = underlying_term(&phi2_renamed[j_prime]);
+    let r1 = underlying_term(phi1[j]);
+    let r2 = underlying_term(phi2_renamed[j_prime]);
     let theta = unify(vec![Equation::new(r1, r2)])?;
 
-    // φ₁' = phi1 minus ray j, with θ applied.
     let mut result: Star = phi1
         .iter()
         .enumerate()
         .filter(|&(idx, _)| idx != j)
-        .map(|(_, r)| theta.apply(r))
+        .map(|(_, &r)| theta.apply(r))
         .collect();
 
-    // φ₂' = phi2_renamed minus ray j', with θ applied.
     let rest2: Star = phi2_renamed
         .iter()
         .enumerate()
         .filter(|&(idx, _)| idx != j_prime)
-        .map(|(_, r)| theta.apply(r))
+        .map(|(_, &r)| theta.apply(r))
         .collect();
 
     result.extend(rest2);
@@ -236,15 +221,15 @@ fn fuse(phi1: &Star, j: usize, phi2_renamed: &Star, j_prime: usize) -> Option<St
 /// `θ = solution{star[j] =? star[j']}` (over underlying terms). Returns
 /// `θ(star − {j, j'})` or `None` if unification fails.
 fn self_interact(star: &Star, j: usize, j_prime: usize) -> Option<Star> {
-    let r1 = underlying_term(&star[j]);
-    let r2 = underlying_term(&star[j_prime]);
+    let r1 = underlying_term(star[j]);
+    let r2 = underlying_term(star[j_prime]);
     let theta = unify(vec![Equation::new(r1, r2)])?;
 
     let result: Star = star
         .iter()
         .enumerate()
         .filter(|&(idx, _)| idx != j && idx != j_prime)
-        .map(|(_, r)| theta.apply(r))
+        .map(|(_, &r)| theta.apply(r))
         .collect();
     Some(result)
 }
@@ -284,7 +269,7 @@ fn interaction_step(
         .map(|(_, s)| s)
         .collect();
 
-    let r = &selected_star[ray_idx];
+    let r = selected_star[ray_idx];
 
     // First sum: external fusions — interact with fresh copies of Φ stars.
     // C = colours(Φ) ∪ colours(Ψ) (§51.6: full configuration colour set).
@@ -332,16 +317,13 @@ fn is_normal_form(phi: &Constellation, psi: &[Star]) -> bool {
     let psi_vec: Constellation = psi.to_vec();
     let psi_colours = all_colours(&psi_vec);
     for (_i, star) in psi.iter().enumerate() {
-        for (j, r) in star.iter().enumerate() {
-            // Only coloured rays can interact (§51.9: "selected ray (i,j) ∈ ±IdRays(Ψ)").
+        for (j, &r) in star.iter().enumerate() {
             if ray_polarity(r) == Polarity::Neutral {
                 continue;
             }
-            // Check external: mat_Φ^C(r) non-empty? C includes colours of Ψ.
             if !mat_phi_c(phi, r, &psi_colours).is_empty() {
                 return false;
             }
-            // Check internal: mat_{star}(r) non-empty?
             if !mat_self(star, j).is_empty() {
                 return false;
             }
@@ -393,7 +375,7 @@ pub fn iex(phi: &Constellation, psi_init: Vec<Star>, fuel: usize) -> IExResult {
         // at least one external or self-interaction.
         let mut found_step = None;
         'outer: for (i, star) in psi.iter().enumerate() {
-            for (j, r) in star.iter().enumerate() {
+            for (j, &r) in star.iter().enumerate() {
                 if ray_polarity(r) == Polarity::Neutral {
                     continue;
                 }
@@ -456,7 +438,7 @@ pub fn iex_concealed(phi: &Constellation, psi: Vec<Star>, fuel: usize) -> (Vec<S
 /// Per §56.5: `A accepts w iff [accept] ∈ ↨♭ IEx(A⋆, w⋆)`.
 pub fn iex_nfa_accepts(phi: &Constellation, psi: Vec<Star>, fuel: usize) -> bool {
     let (visible, _) = iex_concealed(phi, psi, fuel);
-    let accept_star: Star = vec![Term::App("accept".into(), vec![])];
+    let accept_star: Star = vec![crate::term::mk_app_str("accept", vec![])];
     visible.iter().any(|s| s == &accept_star)
 }
 
@@ -471,9 +453,9 @@ mod tests {
     use crate::polarised::{neg_ray, pos_ray};
     use crate::automata::{encode_word, encode_nfa, eng_fig561_nfa, nfa_constellation};
 
-    fn var(x: &str) -> Term { Term::Var(x.into()) }
-    fn app(f: &str, args: Vec<Term>) -> Term { Term::App(f.into(), args) }
-    fn c(name: &str) -> Term { Term::App(name.into(), vec![]) }
+    fn var(x: &str) -> Term { crate::term::mk_var(x) }
+    fn app(f: &str, args: Vec<Term>) -> Term { crate::term::mk_app_str(f, args) }
+    fn c(name: &str) -> Term { crate::term::mk_app_str(name, vec![]) }
 
     fn nat(n: usize) -> Term {
         let mut t = c("0");
@@ -642,7 +624,7 @@ mod tests {
         let phi = add_prog();
         // query ray: -add(2̄, 2̄, R) — matches +add(0,Y,Y) (base) and +add(s(X),Y,s(Z)) (step).
         let r = neg_ray("add", vec![nat(2), nat(2), var("R")]);
-        let matches = mat_phi(&phi, &r);
+        let matches = mat_phi(&phi, r);
         // Should match star 0 ray 0 (+add(0,Y,Y)) and star 1 ray 1 (+add(s(X),Y,s(Z))).
         assert!(!matches.is_empty(), "query ray should match something in Φ⁺_N");
         // At minimum must match the step rule.

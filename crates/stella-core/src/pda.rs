@@ -32,24 +32,24 @@ use crate::term::Term;
 // ─────────────────────────────────────────────────────────────────────────────
 
 fn constant(name: &str) -> Term {
-    Term::App(name.into(), vec![])
+    crate::term::mk_app_str(&name, vec![])
 }
 
 fn pos(neutral: &str, args: Vec<Term>) -> Term {
-    Term::App(format!("+{neutral}"), args)
+    crate::term::mk_app_str(&format!("+{neutral}"), args)
 }
 
 fn neg(neutral: &str, args: Vec<Term>) -> Term {
-    Term::App(format!("-{neutral}"), args)
+    crate::term::mk_app_str(&format!("-{neutral}"), args)
 }
 
 fn var(name: &str) -> Term {
-    Term::Var(name.into())
+    crate::term::mk_var(name)
 }
 
 /// `c·W` = `cons(c, W)`.
 fn cons(c: Term, w: Term) -> Term {
-    Term::App("cons".into(), vec![c, w])
+    crate::term::mk_app_str("cons", vec![c, w])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -158,7 +158,7 @@ pub fn encode_npda(pda: &Npda, n_copies: usize) -> Constellation {
     for qf in &pda.finals {
         c.push(vec![
             neg("p", vec![constant("eps"), constant(qf), constant("$")]),
-            Term::App("accept".into(), vec![]),
+            crate::term::mk_app_str("accept", vec![]),
         ]);
     }
 
@@ -287,7 +287,7 @@ pub fn eng_fig562_npda_constellation(n_copies: usize) -> Constellation {
     // Final: [−p(ε, q₂, $), accept]  — literal $
     phi.push(vec![
         neg("p", vec![eps(), constant("q2"), dollar()]),
-        Term::App("accept".into(), vec![]),
+        crate::term::mk_app_str("accept", vec![]),
     ]);
 
     // 4 transition stars, n_copies times
@@ -407,13 +407,13 @@ mod tests {
         // Initial star: [−i(W), +p(W, q₀, $)]
         let init_star = &phi[0];
         assert_eq!(init_star.len(), 2);
-        assert_eq!(init_star[0].head(), Some("-i"), "initial star has -i ray");
-        assert_eq!(init_star[1].head(), Some("+p"), "initial star has +p ray");
+        assert_eq!(init_star[0].head(), Some("-i".to_string()), "initial star has -i ray");
+        assert_eq!(init_star[1].head(), Some("+p".to_string()), "initial star has +p ray");
 
         // Final star: [−p(ε, q₂, $), accept]
         let final_star = &phi[1];
         assert_eq!(final_star.len(), 2);
-        assert_eq!(final_star[0].head(), Some("-p"), "final star has -p ray");
-        assert_eq!(final_star[1].head(), Some("accept"), "final star has accept ray");
+        assert_eq!(final_star[0].head(), Some("-p".to_string()), "final star has -p ray");
+        assert_eq!(final_star[1].head(), Some("accept".to_string()), "final star has accept ray");
     }
 }

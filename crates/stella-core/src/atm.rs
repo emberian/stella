@@ -125,27 +125,27 @@ pub struct Atm {
 // ─────────────────────────────────────────────────────────────────────────────
 
 fn constant(name: &str) -> Term {
-    Term::App(name.into(), vec![])
+    crate::term::mk_app_str(&name, vec![])
 }
 
 fn pos(neutral: &str, args: Vec<Term>) -> Term {
-    Term::App(format!("+{neutral}"), args)
+    crate::term::mk_app_str(&format!("+{neutral}"), args)
 }
 
 fn neg(neutral: &str, args: Vec<Term>) -> Term {
-    Term::App(format!("-{neutral}"), args)
+    crate::term::mk_app_str(&format!("-{neutral}"), args)
 }
 
 fn var(name: &str) -> Term {
-    Term::Var(name.into())
+    crate::term::mk_var(name)
 }
 
 fn rcons(left: Term, right: Term) -> Term {
-    Term::App("rcons".into(), vec![left, right])
+    crate::term::mk_app_str("rcons", vec![left, right])
 }
 
 fn lcons_app(left: Term, right: Term) -> Term {
-    Term::App("lcons".into(), vec![left, right])
+    crate::term::mk_app_str("lcons", vec![left, right])
 }
 
 fn state(q: &str) -> Term {
@@ -597,38 +597,38 @@ mod tests {
         // Index 0: word star (1 ray: +i(blank))
         let word_star = &phi[0];
         assert_eq!(word_star.len(), 1, "word star should have 1 ray");
-        assert_eq!(word_star[0].head(), Some("+i"), "word star ray should be +i");
+        assert_eq!(word_star[0].head(), Some("+i".to_string()), "word star ray should be +i");
 
         // Index 1: q₀ non-empty — 2 rays: -i, +m
         let q0_ne = &phi[1];
         assert_eq!(q0_ne.len(), 2);
-        assert_eq!(q0_ne[0].head(), Some("-i"));
-        assert_eq!(q0_ne[1].head(), Some("+m"));
+        assert_eq!(q0_ne[0].head(), Some("-i".to_string()));
+        assert_eq!(q0_ne[1].head(), Some("+m".to_string()));
 
         // Index 2: q₀ empty — 2 rays: -i, +m
         let q0_e = &phi[2];
         assert_eq!(q0_e.len(), 2);
-        assert_eq!(q0_e[0].head(), Some("-i"));
-        assert_eq!(q0_e[1].head(), Some("+m"));
+        assert_eq!(q0_e[0].head(), Some("-i".to_string()));
+        assert_eq!(q0_e[1].head(), Some("+m".to_string()));
 
         // Index 3: accept star — 2 rays: -m, accept
         let acc = &phi[3];
         assert_eq!(acc.len(), 2);
-        assert_eq!(acc[0].head(), Some("-m"));
+        assert_eq!(acc[0].head(), Some("-m".to_string()));
         assert_eq!(acc[1], constant("accept"));
 
         // Index 4: reject star — 2 rays: -m, reject
         let rej = &phi[4];
         assert_eq!(rej.len(), 2);
-        assert_eq!(rej[0].head(), Some("-m"));
+        assert_eq!(rej[0].head(), Some("-m".to_string()));
         assert_eq!(rej[1], constant("reject"));
 
         // Find the ∧-star for (q0, blank, S) — should have 3 rays: 1 neg + 2 pos
         let and_blank = phi.iter().skip(5).find(|star| {
             star.len() == 3
-                && star[0].head() == Some("-m")
-                && star[1].head() == Some("+m")
-                && star[2].head() == Some("+m")
+                && star[0].head() == Some("-m".to_string())
+                && star[1].head() == Some("+m".to_string())
+                && star[2].head() == Some("+m".to_string())
         });
         assert!(
             and_blank.is_some(),
@@ -642,11 +642,11 @@ mod tests {
         let ml = &phi[n - 2];
         let mr = &phi[n - 1];
         assert_eq!(ml.len(), 2);
-        assert_eq!(ml[0].head(), Some("-m"));
-        assert_eq!(ml[1].head(), Some("+m"));
+        assert_eq!(ml[0].head(), Some("-m".to_string()));
+        assert_eq!(ml[1].head(), Some("+m".to_string()));
         assert_eq!(mr.len(), 2);
-        assert_eq!(mr[0].head(), Some("-m"));
-        assert_eq!(mr[1].head(), Some("+m"));
+        assert_eq!(mr[0].head(), Some("-m".to_string()));
+        assert_eq!(mr[1].head(), Some("+m".to_string()));
     }
 
     // ── Acceptance tests ──────────────────────────────────────────────────────
@@ -710,7 +710,7 @@ mod tests {
     fn encode_word_empty() {
         let star = encode_word_atm(&[]);
         assert_eq!(star.len(), 1);
-        assert_eq!(star[0].head(), Some("+i"));
+        assert_eq!(star[0].head(), Some("+i".to_string()));
     }
 
     /// Non-empty word `[a]` encodes as `[+i(rcons(a, blank))]`.
@@ -718,9 +718,9 @@ mod tests {
     fn encode_word_a() {
         let star = encode_word_atm(&word(&["a"]));
         assert_eq!(star.len(), 1);
-        assert_eq!(star[0].head(), Some("+i"));
-        if let Term::App(_, args) = &star[0] {
-            assert_eq!(args[0].head(), Some("rcons"), "should be rcons-encoded");
+        assert_eq!(star[0].head(), Some("+i".to_string()));
+        if let crate::term::TermData::App(_, args) = crate::term::get(star[0]) {
+            assert_eq!(args[0].head(), Some("rcons".to_string()), "should be rcons-encoded");
         }
     }
 }

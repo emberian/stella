@@ -43,23 +43,23 @@ use crate::term::Term;
 // ─────────────────────────────────────────────────────────────────────────────
 
 fn constant(name: &str) -> Term {
-    Term::App(name.into(), vec![])
+    crate::term::mk_app_str(&name, vec![])
 }
 
 fn pos(neutral: &str, args: Vec<Term>) -> Term {
-    Term::App(format!("+{neutral}"), args)
+    crate::term::mk_app_str(&format!("+{neutral}"), args)
 }
 
 fn neg(neutral: &str, args: Vec<Term>) -> Term {
-    Term::App(format!("-{neutral}"), args)
+    crate::term::mk_app_str(&format!("-{neutral}"), args)
 }
 
 fn var(name: &str) -> Term {
-    Term::Var(name.into())
+    crate::term::mk_var(name)
 }
 
 fn cons(c: Term, s: Term) -> Term {
-    Term::App("cons".into(), vec![c, s])
+    crate::term::mk_app_str("cons", vec![c, s])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -180,29 +180,26 @@ pub fn nfst_constellation(fst: &Nfst, word: &[&str], n_copies: usize) -> Constel
 /// Decode a `cons`-chain term back to a symbol vector.
 ///
 /// `cons(c₁, cons(c₂, … cons(cₙ, eps) …))` → `["c₁", "c₂", …, "cₙ"]`.
-fn decode_stack(term: &Term) -> Vec<String> {
+fn decode_stack(term: Term) -> Vec<String> {
+    use crate::term::{get, TermData};
     let mut out = Vec::new();
     let mut cur = term;
     loop {
-        match cur {
-            Term::App(head, args) if head == "cons" && args.len() == 2 => {
-                if let Term::App(sym, sym_args) = &args[0] {
-                    if sym_args.is_empty() {
-                        out.push(sym.clone());
-                    } else {
-                        // Compound symbol — stringify.
-                        out.push(format!("{}", args[0]));
+        match get(cur) {
+            TermData::App(sym, args) if sym.display_name() == "cons" && args.len() == 2 => {
+                let arg0 = args[0];
+                match get(arg0) {
+                    TermData::App(s, sargs) if sargs.is_empty() => {
+                        out.push(s.display_name());
                     }
-                } else {
-                    out.push(format!("{}", args[0]));
+                    _ => {
+                        out.push(format!("{arg0}"));
+                    }
                 }
-                cur = &args[1];
+                cur = args[1];
             }
-            Term::App(head, args) if head == "eps" && args.is_empty() => break,
-            _ => {
-                // Non-standard tail; stop.
-                break;
-            }
+            TermData::App(sym, args) if sym.display_name() == "eps" && args.is_empty() => break,
+            _ => break,
         }
     }
     out
@@ -241,23 +238,15 @@ pub fn nfst_transduce(fst: &Nfst, word: &[&str], n_copies: usize, fuel: usize) -
     let mut results = Vec::new();
     for star in &concealed {
         if star.len() == 1 {
-            let ray = &star[0];
-            // Must be neutral (unpolarised).
+            let ray = star[0];
             if ray_polarity(ray) != Polarity::Neutral {
                 continue;
             }
-            // Must look like a cons-chain or eps.
-            match ray {
-                Term::App(head, _) if head == "cons" || head == "eps" => {
-                    results.push(decode_stack(ray));
-                }
-                Term::Var(_) => {
-                    // A bare variable — the stack was unconstrained, skip.
-                }
-                _ => {
-                    // Other neutral term — not an output stack.
-                }
+            let h = ray.head();
+            if matches!(h.as_deref(), Some("cons") | Some("eps")) {
+                results.push(decode_stack(ray));
             }
+            // Bare var or other neutral: skip.
         }
     }
     results
@@ -384,16 +373,16 @@ mod tests {
         // Initial star: [−i(W), +f(W, q₀, ε)]
         let init = &phi[0];
         assert_eq!(init.len(), 2);
-        assert_eq!(init[0].head(), Some("-i"), "initial star first ray is -i");
-        assert_eq!(init[1].head(), Some("+f"), "initial star second ray is +f");
+        assert_eq!(init[0].head(), Some("-i".to_string()), "initial star first ray is -i");
+        assert_eq!(init[1].head(), Some("+f".to_string()), "initial star second ray is +f");
 
         // Final star: [−f(ε, q₀, S), S]
         let fin = &phi[1];
         assert_eq!(fin.len(), 2);
-        assert_eq!(fin[0].head(), Some("-f"), "final star first ray is -f");
+        assert_eq!(fin[0].head(), Some("-f".to_string()), "final star first ray is -f");
         // Second ray is unpolarised (bare variable S).
         assert!(
-            matches!(&fin[1], Term::Var(_)),
+            matches!(crate::term::get(fin[1]), crate::term::TermData::Var(_)),
             "final star second ray is neutral variable S; got {:?}", fin[1]
         );
     }
