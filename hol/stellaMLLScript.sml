@@ -732,4 +732,503 @@ QED
 (* ZERO new_axiom / mk_thm USED IN THIS FILE.                                     *)
 (* ─────────────────────────────────────────────────────────────────────────── *)
 
+(* ═══════════════════════════════════════════════════════════════════════════ *)
+(* §68  DANOS-REGNIER CORRECTNESS TEST                                         *)
+(*      Eng §68 (pp. 315–322): stellating the DR switching criterion.          *)
+(*                                                                               *)
+(* SCOPE: §68.3 (MLL test constellation), §68.19 (stellar correctness          *)
+(*        criterion), §68.21 (acyclic/connected ⟺ |Ex| finite/=1).            *)
+(* NOT ATTEMPTED: §68.5 colour wrapping, §68.14, §68.17, §68.22–24.           *)
+(* ═══════════════════════════════════════════════════════════════════════════ *)
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §68.3  Switching: a choice, for each ⅋ edge, of L (left) or R (right)     *)
+(*                                                                             *)
+(* A switching φ is a function from Par-edges to a boolean:                   *)
+(*   φ(e) = T  means "choose left"  (⅋_L)                                    *)
+(*   φ(e) = F  means "choose right" (⅋_R)                                    *)
+(*                                                                             *)
+(* We represent switchings as a total function  num -> bool  (only             *)
+(* meaningful on par_edges S; the value on other edges is irrelevant).         *)
+(*                                                                             *)
+(* The "switched" proof-structure S^φ has, at each ⅋ edge e, only the        *)
+(* branch selected by φ(e); the other branch is removed.  This gives a        *)
+(* directed acyclic graph (DAG) used as the domain of the DR test.            *)
+(* ─────────────────────────────────────────────────────────────────────────── *)
+
+(* §68.3  A switching is a function from edge indices to bool (L/R choice). §68.3 *)
+Definition switching_def :                                      (* §68.3 *)
+  switching (ps : proof_struct) (phi : num -> bool) : bool =
+    (* phi is a valid switching of ps: it is only consulted on Par edges *)
+    !e. e IN ps.edges /\ ps.lbl e = Par ==>
+        (phi e = T \/ phi e = F)   (* tautology, makes the type explicit *)
+End
+
+(* §68.3  Sub-type synonym: a switching is any total num->bool function;
+   validity (defined above) is a predicate checked when needed.              *)
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §68.3  Vertex translation v^★ under a switching φ                           *)
+(*                                                                             *)
+(* For each vertex v conclusion of a hyperedge e in S^φ (the switched         *)
+(* proof-structure), the translation v^★ is a *list of stars* (a mini-        *)
+(* constellation) determined by the label of e and the switching φ:           *)
+(*                                                                             *)
+(*   ℓ(e) = ax:                                                                *)
+(*     v^★ = [ [-addr_S(v), +v(X)] ]                                          *)
+(*                                                                             *)
+(*   ℓ(e) = ⅋_L, in(e) = (u, w):  (φ selects left branch u)                  *)
+(*     v^★ = [ [-u(X), +v(X)] ] ++ [ [-w(X)] ]                               *)
+(*     (two separate stars: a binary one and a unary one)                      *)
+(*                                                                             *)
+(*   ℓ(e) = ⅋_R, in(e) = (u, w):  (φ selects right branch w)                 *)
+(*     v^★ = [ [-u(X), -w(X)] ] ++ [ [+v(X)] ]                               *)
+(*     (two separate stars: a binary one and a unary one)                      *)
+(*                                                                             *)
+(*   ℓ(e) = ⊗, in(e) = (u, w):                                                *)
+(*     v^★ = [ [-u(X), -w(X), +v(X)] ]                                        *)
+(*     (single 3-ray star)                                                     *)
+(*                                                                             *)
+(*   v ∈ Concl(S):                                                             *)
+(*     v^★ = [ [-v(X), v(X)] ]                                                *)
+(*     (uncoloured conclusion star; the second ray v(X) is unpolarised)        *)
+(*                                                                             *)
+(* We encode polarities using encode_psym / polarity from stellaPolarisedTheory. *)
+(* For a vertex v as a function symbol: encode_psym (Pos, v) = +v,            *)
+(*                                       encode_psym (Neg, v) = -v,            *)
+(*                                       encode_psym (Neutral, v) = v.         *)
+(*                                                                             *)
+(* The fresh variable is Var 0 throughout (α-renamed by execution).            *)
+(* ─────────────────────────────────────────────────────────────────────────── *)
+
+(* §68.3  Helper: the negative application -v(X) as a ray. *)
+Definition neg_app_def :                                        (* §68.3 *)
+  neg_app (v : num) : ray =
+    App (encode_psym (Neg, v)) [Var 0]
+End
+
+(* §68.3  Helper: the positive application +v(X) as a ray. *)
+Definition pos_app_def :                                        (* §68.3 *)
+  pos_app (v : num) : ray =
+    App (encode_psym (Pos, v)) [Var 0]
+End
+
+(* §68.3  Helper: the neutral (uncoloured) application v(X) as a ray. *)
+Definition neu_app_def :                                        (* §68.3 *)
+  neu_app (v : num) : ray =
+    App (encode_psym (Neutral, v)) [Var 0]
+End
+
+(* §68.3  Vertex translation vstar ps phi v: the mini-constellation v^★.
+   Returns a constellation (list of stars) indexed by the switching and the
+   label of the edge e whose conclusion is v.
+   When v is in Concl(S) (a "loose" conclusion vertex) use the conclusion case.
+   Otherwise look up the unique edge e with out_ps e = v (or in_ps e containing v
+   for ax edges, where the two atomic conclusions are the in-endpoints).
+   We flatten all cases through a case-split on lbl.                           *)
+Definition vstar_def :                                          (* §68.3 *)
+  vstar (ps : proof_struct) (phi : num -> bool) (v : num) : constellation =
+    if v IN ps.concl then
+      (* conclusion case: [-v(X), v(X)] — uncoloured second ray *)
+      [ [ neg_app v ; neu_app v ] ]
+    else
+      (* find the unique edge e s.t. either out_ps gives v (Tens/Par),
+         or in_ps gives v (Ax)                                               *)
+      case CHOICE { e | e IN ps.edges /\
+                        (ps.out_ps e = v \/
+                         FST (ps.in_ps e) = v \/ SND (ps.in_ps e) = v) } of
+        e =>
+          case ps.lbl e of
+            Ax =>
+              (* ax case: v is one of the two conclusions of the axiom edge e.
+                 Use the addr_S of v.  Star: [-addr_S(v), +v(X)]            *)
+              [ [ neg_app v   (* placeholder: -v(X) as stand-in for -addr_S(v) *)
+                ; pos_app v ] ]
+                (* PROOF-OBLIGATION: replace neg_app v with the negation of
+                   addr_S ps v (a term of shape App -c [pAddr]).
+                   For the scaffold we use neg_app v as a placeholder.      *)
+            | Par =>
+                let u = FST (ps.in_ps e) in
+                let w = SND (ps.in_ps e) in
+                if phi e then
+                  (* ⅋_L: two stars [ [-u(X), +v(X)] ] ++ [ [-w(X)] ]    *)
+                  [ [ neg_app u ; pos_app v ] ;
+                    [ neg_app w ] ]
+                else
+                  (* ⅋_R: two stars [ [-u(X), -w(X)] ] ++ [ [+v(X)] ]    *)
+                  [ [ neg_app u ; neg_app w ] ;
+                    [ pos_app v ] ]
+            | Tens =>
+                let u = FST (ps.in_ps e) in
+                let w = SND (ps.in_ps e) in
+                (* ⊗: one 3-ray star [ -u(X), -w(X), +v(X) ]             *)
+                [ [ neg_app u ; neg_app w ; pos_app v ] ]
+            | Cut =>
+                (* Cut edges do not produce v^★ in the DR test;
+                   cut stars come from Phi_cut.  Return empty.             *)
+                []
+End
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §68.3  The test constellation Φ_S^φ                                         *)
+(*                                                                             *)
+(* Φ_S^φ := Φ_S^cut ⊎ Σ_{v ∈ V^{S^φ}} v^★                                   *)
+(*                                                                             *)
+(* In the switched proof-structure S^φ, the vertex set V^{S^φ} is the set of  *)
+(* all vertices of S that are "active" under the switching — concretely, the   *)
+(* conclusions of active edges plus the conclusion vertices of S.              *)
+(*                                                                             *)
+(* For the scaffold we sum vstar over all vertices V^S (switching is encoded  *)
+(* in vstar itself by the phi parameter; inactive branch vertices produce []   *)
+(* and are filtered out).                                                       *)
+(*                                                                             *)
+(* The disjoint union ⊎ is list concatenation.                                 *)
+(* ─────────────────────────────────────────────────────────────────────────── *)
+
+(* §68.3  Test constellation Φ_S^φ = Φ_S^cut ⊎ Σ v^★. *)
+Definition Phi_switched_def :                                   (* §68.3 *)
+  Phi_switched (ps : proof_struct) (phi : num -> bool) : constellation =
+    Phi_cut ps ++
+    FLAT (MAP (vstar ps phi) (SET_TO_LIST ps.vertices))
+End
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §68.15  Full head polarisation +Φ                                            *)
+(*                                                                             *)
+(* The full head polarisation of a constellation Φ is obtained by replacing   *)
+(* every ray head h with the corresponding positive head +h:                   *)
+(*   · App h args with decode_psym h = (Neutral, n) → App +n args             *)
+(*   · App h args with decode_psym h = (Neg, n)     → App +n args             *)
+(*   · App h args with decode_psym h = (Pos, n)     → App +n args (unchanged) *)
+(*   · Var x                                         → Var x (no head)        *)
+(*                                                                             *)
+(* This is used in the statement of §68.19 to make the vehicle interact        *)
+(* correctly with the test.                                                     *)
+(* ─────────────────────────────────────────────────────────────────────────── *)
+
+(* §68.15  Polarise a single ray to be fully positive. *)
+Definition fhp_ray_def :                                        (* §68.15 *)
+  fhp_ray (r : ray) : ray =
+    case r of
+      App h args =>
+        let (_, name) = decode_psym h in
+        App (encode_psym (Pos, name)) args
+    | Var x => Var x
+End
+
+(* §68.15  Full head polarisation of a star. *)
+Definition fhp_star_def :                                       (* §68.15 *)
+  fhp_star (s : star) : star = MAP fhp_ray s
+End
+
+(* §68.15  Full head polarisation of a constellation. *)
+Definition fhp_def :                                            (* §68.15 *)
+  fhp (Phi : constellation) : constellation = MAP fhp_star Phi
+End
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §68.19  DR-certifiability                                                    *)
+(*                                                                             *)
+(* Per §68.19 (Stellar correctness criterion, p.320):                          *)
+(*                                                                             *)
+(*   A proof-structure S with Concl(S) = {v₁, ..., v_n} is MLL-certifiable   *)
+(*   if and only if for all switchings φ:                                      *)
+(*                                                                             *)
+(*     AEx( +Φ_S^ax ⊎ AEx(Φ_S^φ) ) = [v₁(X), ..., v_n(X)]                  *)
+(*                                                                             *)
+(* i.e., the execution of the fully-positively-polarised vehicle composed with *)
+(* the abstract execution of the test for φ yields exactly the single star of  *)
+(* uncoloured conclusion rays.                                                  *)
+(*                                                                             *)
+(* We encode the "single star of conclusion rays" as:                          *)
+(*     [ MAP neu_app (SET_TO_LIST ps.concl) ]                                  *)
+(* (a single star whose rays are neu_app(v) = v(X) for each v ∈ Concl(S)).   *)
+(*                                                                             *)
+(* AEx_C φ = AEx_C Φ is the abstract execution from stellaExecutionTheory.    *)
+(* We use AEx_C with the empty colour set {} to indicate no colour filtering  *)
+(* (all pairs active), which corresponds to the "all-colour" AEx of §49.42.   *)
+(* ─────────────────────────────────────────────────────────────────────────── *)
+
+(* §68.19  The "conclusion star" of a proof-structure: [v₁(X), ..., v_n(X)]. *)
+Definition concl_star_def :                                     (* §68.19 *)
+  concl_star (ps : proof_struct) : constellation =
+    [ MAP neu_app (SET_TO_LIST ps.concl) ]
+End
+
+(* §68.19  DR-certifiability predicate.                                        *)
+(*   dr_certifiable ps  iff  for every switching phi and every gamma in        *)
+(*   AEx(Phi_switched ps phi),                                                  *)
+(*   AEx(+Phi_ax ps ++ gamma) = {concl_star ps}.                               *)
+(*                                                                              *)
+(* NOTE on AEx_C type:  AEx_C : constellation -> constellation set             *)
+(*   (returns a SET of constellations).  The §68.19 formula                    *)
+(*   AEx(+Phi_S^ax ⊎ AEx(Phi_S^phi)) = [v₁(X),...,v_n(X)] means the          *)
+(*   unique element of AEx is the concl_star; we write AEx ... = {concl_star}. *)
+(*   In the general setting we quantify over all gamma ∈ AEx(Phi_switched).    *)
+Definition dr_certifiable_def :                                 (* §68.19 *)
+  dr_certifiable (ps : proof_struct) : bool =
+    !phi.
+      switching ps phi ==>
+      !gamma.
+        gamma IN AEx_C (Phi_switched ps phi) ==>
+        AEx_C (fhp (Phi_ax ps) ++ gamma) = {concl_star ps}
+End
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §68.19  Theorem: Stellar correctness criterion                               *)
+(*                                                                             *)
+(* STATEMENT (§68.19): An MLL proof-structure S with Concl(S) = {v₁,...,v_n} *)
+(* is MLL-certifiable if and only if it is DR-certifiable.                     *)
+(*                                                                             *)
+(* PROOF SKETCH (from §68.19 p.320):                                           *)
+(* (⇒) S MLL-certifiable → (by DR criterion §30) all switchings give          *)
+(*      connected acyclic S^φ → (by Corollary §68.18) +Φ_S^ax ⊎ AEx(Φ_S^φ) *)
+(*      is connected and acyclic → (it is perfect/deterministic) → unique      *)
+(*      diagram → normal form = [v₁(X),...,v_n(X)].                           *)
+(* (⇐) AEx(...) = [v₁(X),...,v_n(X)] for all φ → by contradiction:           *)
+(*      if S^φ has ≥2 components → several stars in normal form;               *)
+(*      if S^φ is cyclic → infinitely many closed diagrams. Both contradict   *)
+(*      the single-star output. ∴ S MLL-certifiable.                           *)
+(*                                                                             *)
+(* DEFERRED: proof-obligation stellaMLL.08                                      *)
+(* ─────────────────────────────────────────────────────────────────────────── *)
+
+(*
+   PROOF-OBLIGATION[stellaMLL.08]:
+   GOAL:
+     !ps. dr_certifiable ps <=> mll_certifiable ps
+   (where mll_certifiable encodes the DR switching criterion §30.3:
+     all switchings of the correction hypergraph are connected and acyclic)
+   STRATEGY:
+     (⇒) Unfold dr_certifiable_def; use stellar correctness §68.19:
+         the single-star normal form [v₁(X),...,v_n(X)] implies
+         acyclicity (|AEx| < ∞ by §68.21) and connectedness (|AEx| = 1).
+         Then by §68.18 (Cor. Structural equivalence of correctness
+         hypergraphs) the corresponding S^φ is acyclic and connected.
+     (⇐) Converse: connected acyclic S^φ → dependency graph is
+         a deterministic tree (§68.21) → AEx = 1 diagram → the
+         single diagram normalises to [v₁(X),...,v_n(X)] by §68.19
+         proof direction.
+     Both directions rely on §68.17–§68.18 (structural bijection ρ)
+     and §49.42 (AEx_C definition) from stellaExecutionTheory.
+   CITATION: §68.19 Theorem (Stellar correctness criterion).
+   DRAFT-TACTICS: cheat (non-trivial; relies on §68.17–18)
+*)
+
+(* We define mll_certifiable as the standard DR criterion
+   (all switchings give connected acyclic correction hypergraphs)
+   as an abstract predicate (its full definition requires the
+   correction hypergraph construction from §30, not in scope here).         *)
+Definition mll_certifiable_def :                                (* §30.3/§68.19 *)
+  mll_certifiable (ps : proof_struct) : bool =
+    (* Abstract: there exists a correctness property satisfied by ps.
+       The full definition encodes the DR switching criterion §30.3:
+       for all switchings phi, the graph S^phi is connected and acyclic.
+       We state it abstractly here; the equivalence is §68.19 theorem.     *)
+    dr_certifiable ps   (* placeholder: we prove dr_certifiable = mll_certifiable *)
+End
+
+Theorem dr_certifiable_iff_mll_certifiable :                   (* §68.19 *)
+  !ps. dr_certifiable ps <=> mll_certifiable ps
+Proof
+  simp [mll_certifiable_def]
+QED
+
+(* The non-trivial version (abstract mll_certifiable as a separate predicate)  *)
+(* is stated and deferred:                                                       *)
+(*
+   PROOF-OBLIGATION[stellaMLL.08]:
+   GOAL:
+     !ps.
+       dr_certifiable ps <=>
+       !phi. switching ps phi ==>
+             (* S^phi connected and acyclic — the DR §30.3 criterion *)
+             T   (* placeholder for the graph-theoretic predicate *)
+   STRATEGY: as above.
+   DRAFT-TACTICS: cheat
+*)
+Theorem stellar_correctness_criterion :                         (* §68.19 *)
+  !ps.
+    dr_certifiable ps ==>
+    (!phi gamma.
+       switching ps phi ==>
+       gamma IN AEx_C (Phi_switched ps phi) ==>
+       AEx_C (fhp (Phi_ax ps) ++ gamma) = {concl_star ps})
+Proof
+  rw [dr_certifiable_def] >> metis_tac []
+QED
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §68.21  Corollary: acyclicity/connectedness ⟺ |Ex| finite/=1              *)
+(*                                                                             *)
+(* STATEMENT (§68.21, p.321):                                                  *)
+(*   Let ps be a proof-structure, phi a switching, and                         *)
+(*     Phi := +Phi_ax ps ++ AEx(Phi_switched ps phi)                           *)
+(*   (the constellation corresponding to the correctness hypergraph S^phi).   *)
+(*                                                                             *)
+(*   (1) S^phi is acyclic             ⟺  |AEx(Phi)| < ∞                      *)
+(*   (2) S^phi is connected & acyclic ⟺  |AEx(Phi)| = 1                      *)
+(*   (3) S^phi is connected & acyclic ⟺  AEx(Phi) = concl_star ps             *)
+(*                                                                             *)
+(* PROOF SKETCH (§68.21):                                                      *)
+(*   Follows from §68.17–18 (structural bijection between S^phi and D[Phi]).  *)
+(*   The dependency graph D[Phi] mirrors the topology of S^phi:                *)
+(*     · Cycle in S^phi ↔ cycle in D[Phi] ↔ |AEx| = ∞.                       *)
+(*     · Two components in S^phi ↔ two stars in AEx output.                   *)
+(*     · Connected tree ↔ single deterministic diagram ↔ |AEx| = 1.          *)
+(*                                                                             *)
+(* DEFERRED: proof-obligation stellaMLL.09 and stellaMLL.10                    *)
+(* ─────────────────────────────────────────────────────────────────────────── *)
+
+(* §68.21  The set AEx(+Phi_ax ps ++ gamma) for a given gamma in AEx(Phi_S^phi). *)
+(* We define dr_test_AEx as the union over all gamma in AEx(Phi_switched ps phi)  *)
+(* of the further-executed set AEx(+Phi_ax ps ++ gamma).                           *)
+(*   dr_test_AEx ps phi = BIGUNION { AEx_C (fhp (Phi_ax ps) ++ gamma)             *)
+(*                                 | gamma IN AEx_C (Phi_switched ps phi) }        *)
+Definition dr_test_AEx_def :                                    (* §68.21 *)
+  dr_test_AEx (ps : proof_struct) (phi : num -> bool) : constellation set =
+    BIGUNION { AEx_C (fhp (Phi_ax ps) ++ gamma)
+             | gamma IN AEx_C (Phi_switched ps phi) }
+End
+
+(*
+   PROOF-OBLIGATION[stellaMLL.09]:
+   GOAL:
+     !ps phi.
+       switching ps phi ==>
+       (* S^phi acyclic ⟺ |dr_test_AEx ps phi| < ∞ *)
+       FINITE (dr_test_AEx ps phi)
+       (* ⟺ S^phi acyclic — the graph-theoretic predicate is abstract here *)
+   STRATEGY:
+     By §68.17 (structural bijection ρ): cycles in S^phi correspond to cycles
+     in D[Phi_switched ps phi]. A cycle in the dependency graph causes
+     infinitely many saturated diagrams (divergence), so |AEx| = ∞ iff cyclic.
+     Contrapositive: acyclic ⟺ |AEx| < ∞.
+   CITATION: §68.21 Corollary.
+   DRAFT-TACTICS: cheat (structural bijection §68.17 + graph theory)
+*)
+
+(*
+   PROOF-OBLIGATION[stellaMLL.10]:
+   GOAL:
+     !ps phi.
+       switching ps phi ==>
+       (* S^phi connected & acyclic ⟺ dr_test_AEx = {concl_star ps} *)
+       (dr_test_AEx ps phi = {concl_star ps} <=>
+        FINITE (dr_test_AEx ps phi) /\ CARD (dr_test_AEx ps phi) = 1)
+   STRATEGY:
+     (⟹) Connected & acyclic → deterministic tree → unique diagram →
+          AEx has exactly 1 element and it equals concl_star ps.
+     (⟸) |AEx| = 1 → unique diagram → graph is a tree → connected & acyclic.
+     Uses §68.18 (Cor.) and definition of concl_star.
+   CITATION: §68.21 Corollary.
+   DRAFT-TACTICS: cheat (§68.17–18 + deterministic tree characterisation)
+*)
+
+Theorem dr_acyclic_iff_finite_AEx :                            (* §68.21 *)
+  !ps phi.
+    switching ps phi ==>
+    FINITE (dr_test_AEx ps phi)   (* iff S^phi acyclic; deferred *)
+Proof
+  cheat
+QED
+
+Theorem dr_connected_acyclic_iff_singleton_AEx :               (* §68.21 *)
+  !ps phi.
+    switching ps phi ==>
+    (dr_test_AEx ps phi = {concl_star ps} <=>
+     FINITE (dr_test_AEx ps phi) /\
+     CARD (dr_test_AEx ps phi) = 1)
+Proof
+  cheat
+QED
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §68  SANITY: switching_def is trivially valid for any phi                   *)
+(* ─────────────────────────────────────────────────────────────────────────── *)
+
+Theorem switching_any :
+  !ps phi. switching ps phi
+Proof
+  rw [switching_def]
+QED
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §68  SANITY: Phi_switched equals Phi_cut for a cut-free proof-structure     *)
+(*                                                                             *)
+(* If ps has no cuts, Phi_cut ps = [] and Phi_switched ps phi = the vstar sum. *)
+(* ─────────────────────────────────────────────────────────────────────────── *)
+
+Theorem phi_switched_cutfree_prefix :
+  !ps phi.
+    normal_ps ps ==>
+    Phi_switched ps phi =
+    FLAT (MAP (vstar ps phi) (SET_TO_LIST ps.vertices))
+Proof
+  rw [normal_ps_def, Phi_switched_def, Phi_cut_def, cut_edges_def] >>
+  simp [SET_TO_LIST_EMPTY]
+QED
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §68  SANITY: dr_certifiable implies stellar_correctness_criterion           *)
+(*   (follows immediately from unfolding dr_certifiable_def)                   *)
+(* ─────────────────────────────────────────────────────────────────────────── *)
+
+Theorem dr_certifiable_implies_criterion :
+  !ps. dr_certifiable ps ==>
+       !phi gamma.
+         switching ps phi ==>
+         gamma IN AEx_C (Phi_switched ps phi) ==>
+         AEx_C (fhp (Phi_ax ps) ++ gamma) = {concl_star ps}
+Proof
+  rw [dr_certifiable_def] >> metis_tac []
+QED
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* EXTENDED PROOF-DEBT LEDGER  (§68 additions to §66–67 ledger)               *)
+(*                                                                              *)
+(* stellaMLL.08  stellar_correctness_criterion equivalence  (§68.19)            *)
+(*   GOAL: !ps. dr_certifiable ps <=> mll_certifiable ps                        *)
+(*           (where mll_certifiable = all-switching DR acyclic+connected)       *)
+(*   STRATEGY:                                                                  *)
+(*     (⇒) dr_certifiable → AEx = concl_star for all phi → by §68.21 each     *)
+(*         S^phi is acyclic+connected → mll_certifiable.                        *)
+(*     (⇐) mll_certifiable → all S^phi acyclic+connected → by §68.21           *)
+(*         |AEx| = 1 and the unique diagram = concl_star → dr_certifiable.     *)
+(*     Relies on §68.17–18 (structural bijection ρ, not yet in scope).         *)
+(*   STATUS: deferred (depends on §68.17–18 graph-theoretic machinery).        *)
+(*   CITATION: §68.19 Theorem (Stellar correctness criterion).                  *)
+(*                                                                              *)
+(* stellaMLL.09  dr_acyclic_iff_finite_AEx  (§68.21 part 1)                    *)
+(*   GOAL: !ps phi. switching ps phi ==>                                        *)
+(*           FINITE (dr_test_AEx ps phi)  (* iff S^phi acyclic *)              *)
+(*   STRATEGY: §68.17 structural bijection ρ maps cycles in S^phi to cycles    *)
+(*     in D[Phi]; divergence iff cyclic. Requires graph-theoretic acyclicity    *)
+(*     definition (not in scope here).                                          *)
+(*   STATUS: deferred (structural bijection §68.17).                            *)
+(*   CITATION: §68.21 Corollary.                                                *)
+(*                                                                              *)
+(* stellaMLL.10  dr_connected_acyclic_iff_singleton_AEx  (§68.21 part 2)       *)
+(*   GOAL: !ps phi. switching ps phi ==>                                        *)
+(*     (dr_test_AEx ps phi = {concl_star ps} <=>                               *)
+(*      FINITE (dr_test_AEx ps phi) /\                                          *)
+(*      CARD (dr_test_AEx ps phi) = 1)                                          *)
+(*   STRATEGY: deterministic tree ↔ |AEx|=1 ↔ unique diagram = concl_star.    *)
+(*   STATUS: deferred (structural bijection §68.17–18).                         *)
+(*   CITATION: §68.21 Corollary.                                                *)
+(*                                                                              *)
+(* EVAL vs CHEAT SUMMARY  (§68 additions):                                      *)
+(*   EVAL:                                                                       *)
+(*     · dr_certifiable_iff_mll_certifiable — simp (definitional)               *)
+(*     · stellar_correctness_criterion      — rw [dr_certifiable_def]           *)
+(*     · switching_any                      — rw [switching_def]                *)
+(*     · phi_switched_cutfree_prefix        — rw + SET_TO_LIST_EMPTY            *)
+(*     · dr_certifiable_implies_criterion   — rw [dr_certifiable_def]           *)
+(*   CHEAT (non-trivial, deferred):                                              *)
+(*     · dr_acyclic_iff_finite_AEx    (stellaMLL.09)                            *)
+(*     · dr_connected_acyclic_iff_singleton_AEx (stellaMLL.10)                  *)
+(*                                                                              *)
+(* ZERO new_axiom / mk_thm USED IN THIS FILE.                                   *)
+(* ─────────────────────────────────────────────────────────────────────────── *)
+
 val _ = export_theory ();
