@@ -30,11 +30,16 @@
 //!    [−i(T), +ta(q₀, T)]
 //!    ```
 //!
-//! 2. **Rule stars** — one per `(q, f)` transition and per child position `i`:
+//! 2. **Rule stars** — one star per rule (conjunctive encoding, §57.11):
 //!    ```text
-//!    [−ta(q, f(X₁, …, Xₙ)), +ta(qᵢ, Xᵢ)]
+//!    [−ta(q, f(X₁, …, Xₙ)), +ta(q₁, X₁), …, +ta(qₙ, Xₙ)]
 //!    ```
-//!    (n stars per rule with n children)
+//!    All n child state assignments live in ONE star.  Bundling them together is
+//!    the key invariant: IEx can only discharge all positive rays by matching each
+//!    child subtree against its target state, so every child must succeed for the
+//!    star to become fully neutral.  Splitting into n separate stars (one per child)
+//!    is WRONG for IEx: independent stars can produce `accept` from disjoint paths,
+//!    falsely accepting trees that evaluate to false.
 //!
 //! 3. **Terminal stars** — two kinds:
 //!
@@ -57,20 +62,18 @@
 //! T(t) = 1   ⟺   ɟEx(T★ + t★) ≠ ∅
 //! ```
 //!
-//! where `ɟ = ↨♭` (conceal + noise-filter), and `Ex` is **abstract execution**
-//! (AEx), NOT IEx.
+//! where `ɟ = ↨♭` (conceal + noise-filter).
 //!
-//! ## Fast execution
+//! ## IEx implementation
 //!
 //! We use **IEx** (interactive execution) with:
-//! - Reference Φ = T★ (infinite supply of machine stars)
-//! - Initial Ψ = {t★} (tree star, consumed once)
+//! - Reference Φ = T★ (machine stars, infinite supply)
+//! - Initial Ψ = {t★} (tree input star)
 //!
-//! This is equivalent to AEx for deterministic top-down traversal (one acceptance
-//! path per tree) and runs in O(|tree| × |rules|) steps rather than the
-//! exponential AEx diagram enumeration.
-//!
-//! The criterion becomes: `T` accepts `t` iff `[accept] ∈ ↨♭ IEx(T★, {t★})`.
+//! With the single-star-per-rule encoding, every accepting run reduces to a star
+//! whose rays are all neutral `accept` atoms (one per leaf).  False trees strand a
+//! coloured `ta` ray in the star, blocking concealment.  The acceptance check is
+//! therefore `↨♭ IEx(T★, {t★}) ≠ ∅` — the visible result is non-empty iff T(t)=1.
 //!
 //! ## Notation
 //!
@@ -78,11 +81,10 @@
 //! T★ = initial stars + rule stars + terminal stars
 //! t★ = [+i(encode(t))]
 //! IEx(T★, {t★}) — drive Φ ⊢ {t★} ↝* normal form
-//! accept ∈ ↨♭(result) ⟺ T(t) = 1
+//! ↨♭(result) ≠ ∅  ⟺  T(t) = 1
 //! ```
 
 use crate::constellation::{Constellation, Star};
-use crate::execution::stars_alpha_equiv;
 use crate::interactive::{conceal_and_filter, iex};
 use crate::term::Term;
 
@@ -217,8 +219,14 @@ impl Nfta {
     /// 1. **Initial stars**: for each `q₀ ∈ Q₀`:
     ///    `[−i(T), +ta(q₀, T)]`
     ///
-    /// 2. **Rule stars**: for each rule `q/f(X₁…Xₙ)→[q₁,…,qₙ]` and each child `i`:
-    ///    `[−ta(q, f(X₁, …, Xₙ)), +ta(qᵢ, Xᵢ)]`
+    /// 2. **Rule stars**: one star per rule (conjunctive encoding):
+    ///    `[−ta(q, f(X₁, …, Xₙ)), +ta(q₁, X₁), …, +ta(qₙ, Xₙ)]`
+    ///
+    ///    All n child assignments are bundled into a SINGLE star so that IEx forces
+    ///    all children to reach acceptance simultaneously (§57.11 conjunctive criterion).
+    ///    Splitting into n separate stars (one per child) would allow children from
+    ///    different non-deterministic rule branches to independently produce `accept`,
+    ///    falsely accepting trees that evaluate to false.
     ///
     /// 3. **Terminal stars** (two kinds):
     ///    - Variable-leaf: `[−ta(q, X), accept]` for each `q ∈ leaf_states`
@@ -234,7 +242,18 @@ impl Nfta {
             ]);
         }
 
-        // 2. Rule stars (one per child per rule).
+        // 2. Rule stars — ONE star per rule (§57.10 conjunctive semantics).
+        //
+        // Encoding: [−ta(q, f(X₁,…,Xₙ)), +ta(q₁,X₁), …, +ta(qₙ,Xₙ)]
+        //
+        // All n child assignments live in a SINGLE star so that IEx forces every
+        // child to reach acceptance simultaneously.  Splitting into n separate
+        // stars (one per child) was the original bug: separate stars in IEx fire
+        // independently, so a child from one non-deterministic rule branch could
+        // produce [accept] even when the sibling from a *different* branch fails.
+        // With a single star the whole multi-child cluster reduces as a unit; any
+        // residual coloured ray blocks concealment, faithfully rejecting partial
+        // acceptance paths.
         for (rule_idx, rule) in self.rules.iter().enumerate() {
             let n = rule.successors.len();
             let child_vars: Vec<Term> = (0..n)
@@ -242,12 +261,13 @@ impl Nfta {
                 .collect();
             let pattern = app(&rule.symbol, child_vars.clone());
 
+            // One star: [−ta(q, f(X₁…Xₙ)), +ta(q₁,X₁), …, +ta(qₙ,Xₙ)]
+            let mut rule_star: Star = Vec::with_capacity(1 + n);
+            rule_star.push(neg_ray("ta", vec![cst(&rule.state), pattern]));
             for (i, qi) in rule.successors.iter().enumerate() {
-                stars.push(vec![
-                    neg_ray("ta", vec![cst(&rule.state), pattern.clone()]),
-                    pos_ray("ta", vec![cst(qi), child_vars[i].clone()]),
-                ]);
+                rule_star.push(pos_ray("ta", vec![cst(qi), child_vars[i].clone()]));
             }
+            stars.push(rule_star);
         }
 
         // 3a. Variable-leaf stars: [−ta(q, X), accept] for each q ∈ leaf_states.
@@ -291,8 +311,15 @@ impl Nfta {
         let result = iex(&phi, psi, fuel);
         let visible = conceal_and_filter(&result.psi);
 
-        let accept_star: Star = vec![cst("accept")];
-        visible.iter().any(|s| stars_alpha_equiv(s, &accept_star))
+        // §57.11 criterion: T(t)=1 ⟺ ɟEx(T★+t★) ≠ ∅.
+        //
+        // With the single-star-per-rule encoding, every accepting run reduces to
+        // a star whose rays are all neutral `accept` atoms (one per leaf).  The
+        // concealment ↨ keeps only fully-neutral stars; ♭ drops empty ones.
+        // So non-emptiness of the visible set is the correct accept/reject test.
+        // (Checking for a specific [accept] singleton was wrong: multi-leaf trees
+        // produce [accept,…,accept] stars, not [accept].)
+        !visible.is_empty()
     }
 }
 
@@ -336,18 +363,15 @@ mod tests {
     //   t★  not(t) →  not(t★)
     //   t★  or(t,u)→  or(t★,u★)
     //
-    // Machine stars T★:
-    //   [−i(T), +ta(qt,T)]                          -- initial
-    //   [−ta(qt,or(X1,X2)), +ta(qt,X1)]  (rule 0a) -- qt/or left child qt
-    //   [−ta(qt,or(X1,X2)), +ta(qf,X2)]  (rule 0b) -- qt/or right child qf
-    //   [−ta(qt,or(X1,X2)), +ta(qf,X1)]  (rule 1a) -- qt/or left child qf
-    //   [−ta(qt,or(X1,X2)), +ta(qt,X2)]  (rule 1b) -- qt/or right child qt
-    //   [−ta(qt,not(X1)),   +ta(qf,X1)]  (rule 2)  -- qt/not
-    //   [−ta(qf,not(X1)),   +ta(qt,X1)]  (rule 3)  -- qf/not
-    //   [−ta(qf,or(X1,X2)), +ta(qf,X1)]  (rule 4a) -- qf/or left
-    //   [−ta(qf,or(X1,X2)), +ta(qf,X2)]  (rule 4b) -- qf/or right
-    //   [−ta(qt,1()),  accept]                       -- terminal qt/1
-    //   [−ta(qf,0()),  accept]                       -- terminal qf/0
+    // Machine stars T★ (single-star-per-rule encoding):
+    //   [−i(T), +ta(qt,T)]                                    -- initial
+    //   [−ta(qt,or(X1,X2)), +ta(qt,X1), +ta(qf,X2)]  (rule 0) -- qt/or: qt,qf
+    //   [−ta(qt,or(X1,X2)), +ta(qf,X1), +ta(qt,X2)]  (rule 1) -- qt/or: qf,qt
+    //   [−ta(qt,not(X1)),   +ta(qf,X1)]               (rule 2) -- qt/not
+    //   [−ta(qf,not(X1)),   +ta(qt,X1)]               (rule 3) -- qf/not
+    //   [−ta(qf,or(X1,X2)), +ta(qf,X1), +ta(qf,X2)]  (rule 4) -- qf/or: qf,qf
+    //   [−ta(qt,1()),  accept]                                   -- terminal qt/1
+    //   [−ta(qf,0()),  accept]                                   -- terminal qf/0
     // ```
 
     fn bool_formula_nfta() -> Nfta {
@@ -473,15 +497,16 @@ mod tests {
     fn nfta_machine_constellation_structure() {
         let nfta = bool_formula_nfta();
         let t_star = nfta.machine_constellation();
-        // 1 initial + rule stars + terminal stars
+        // With the single-star-per-rule encoding, rule count = number of rules
+        // (each rule is ONE star with all children as positive rays).
         let n_initial = nfta.initial.len();   // 1
-        let n_rule: usize = nfta.rules.iter().map(|r| r.successors.len()).sum();
-        // rule 0: qt/or → 2 children → 2 stars
-        // rule 1: qt/or → 2 children → 2 stars
-        // rule 2: qt/not → 1 child → 1 star
-        // rule 3: qf/not → 1 child → 1 star
-        // rule 4: qf/or → 2 children → 2 stars
-        // total = 8
+        let n_rule = nfta.rules.len();
+        // rule 0: qt/or → 1 star  (with 2 +ta child rays)
+        // rule 1: qt/or → 1 star  (with 2 +ta child rays)
+        // rule 2: qt/not → 1 star
+        // rule 3: qf/not → 1 star
+        // rule 4: qf/or → 1 star  (with 2 +ta child rays)
+        // total rules = 5
         let n_leaf = nfta.leaf_states.len();  // 0
         let n_term = nfta.terminal_pairs.len(); // 2
         let expected = n_initial + n_rule + n_leaf + n_term;
