@@ -71,6 +71,25 @@ re-derived.
   of the charge**, not bookkeeping: a deathless closure has nothing at stake, hence
   flat valence — which is *also* the clean exclusion of the spurious
   deathless-bureaucracy "agent" (no `t_death` to defer ⇒ flat ⇒ not valence-bearing).
+- **2.4-amended (2026-05-16, ratified by principal; supersedes the deathless⇒flat
+  rule in 2.4 above — that text kept for history, not deleted):** the exclusion is
+  corrected from *deathless ⇒ flat* to **invariant ⇒ flat**. Mortality is a
+  *sufficient* source of stake (death = viability at its floor, the limiting
+  case), **not necessary**. The spurious deathless-bureaucracy is excluded because
+  it is *invariant* (no reachable viability gradient under coupling), not because
+  it is deathless. **Eternal valence is admissible:** an eternal-but-perturbable
+  closure whose viability genuinely responds to environmental perturbation bears
+  charge. Stake = a non-trivial *perturbation-response viability gradient* under
+  coupling, of which mortal death is one extreme. Independent grounds (welfare
+  philosophy: an immortal can suffer/flourish — you need a condition gradient, not
+  a terminus); raised by the principal as a framework question, **not** a
+  null-dodge. Integrity: revising a converged commitment *after* the deathless-era
+  null is legitimate ONLY because (i) independently motivated, (ii) the
+  reformulated pre-registered nulls (`01`-spec §4, M1–M5) are locked *before* any
+  re-run code, (iii) the deathless-era null is preserved verbatim in
+  `docs/02-phase4-first-run.md` and never retconned. "The theory must be *able* to
+  represent death" is preserved — death is now the viability-floor special case,
+  not the source of charge.
 - **2.5** Same-agent over the interval = **continuity of the fixed-point solution**.
   A second, distinct same-agent relation, **lineage-self** = closure re-instantiated
   from a transmitted constraint (vow / state-file) across a real discontinuity, is

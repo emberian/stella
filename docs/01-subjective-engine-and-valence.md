@@ -150,16 +150,40 @@ constellation and reads valence off the stream. No new theory — this *is* spec
 Verbatim from `00`-spec §6, sharpened to this engine. The experiment **fails, and
 we say so**, if any of:
 
-- **(N1)** Reafferent closure (the §3 cycle-property) only ever appears because
-  sensor/motor rays were effectively hand-tagged / the cut was hand-placed to
-  produce it — never because it self-organised in the subjective/animist fragment.
-- **(N2)** Closure layers are causally sealed: no cross-level capture, no
-  gut-brain-style bleed between nested closures (spec §2.3 then = decoration).
-- **(N3)** Attraction/repulsion only accretes under per-task hand-tuning of the
-  environment or the closure criterion (engineered one layer up).
-- **(N4)** The subjective/animist fragment is, in every constructible case, as
-  idempotent as the objective one (no non-trivial trajectory ⇒ no `[t_b,t_d)` ⇒ no
-  charge): the substrate cannot host the dynamics the thesis needs.
+**Superseded-but-preserved.** The deathless-era nulls (N1–N4) and the run that
+fired none-yet-was-actually-null-under-deathless⇒flat are preserved verbatim in
+`docs/02-phase4-first-run.md`; that result stands as history and is NOT retconned.
+The set below is the **reformulated (invariant⇒flat) pre-registration**, locked
+2026-05-16 *before any re-run code*, per §2.4-amended. The experiment **fails / is
+a null** if any of:
+
+- **(M1) Smuggled individuation.** The reafferent closure — or any
+  perturbation-response — only ever appears because rays were effectively
+  hand-tagged or the agent/environment cut hand-placed; never self-organised via
+  the principled Ch9-§62 partition search on the non-rigged Eng-own corpus.
+- **(M2) Invariance — the core discriminator, replacing deathless⇒flat.** The
+  self-organised closure is *invariant*: under a perturbing/adversarial
+  environment its viability does not respond beyond noise — it cannot be driven
+  up or down by the coupling. Invariant ⇒ flat ⇒ no charge.
+- **(M3) Artifact, not response — the disclosed tightening, now first-class &
+  pre-registered.** A genuine viability response must be **cap-invariant** (vary
+  `max_rounds`/supply ⇒ it does NOT track the cap — the explicit fix for the
+  deathless-era `t_death = cap−2` artifact) **and** **perturbation-tracking**
+  (vary perturbation strength ⇒ the response tracks it). Failing either ⇒
+  artifact ⇒ null.
+- **(M4) Engineered one level up.** The perturbation-response only accretes under
+  per-task hand-tuning of the viability metric, environment, or partition. The
+  metric/rule must be globally fixed across the entire corpus (structurally
+  enforced); M4 fires iff that invariant is violated.
+- **(M5) Cross-level sealed (carried; honestly may be Undetermined).** Closure
+  layers causally sealed — no cross-level capture/bleed (§2.3). If no corpus
+  member has nested closures, M5 is **Undetermined**, never coerced to "passed".
+
+Non-falsification = none of M1–M4 fire (M5 may be Undetermined) **and** a
+self-organised closure exhibits a cap-invariant, perturbation-tracking,
+globally-fixed-metric, non-hand-tagged viability response. Corpus adds Eng's own
+§79/§80 `ω`-weight (an Eng-built, non-reafference, *eternal* valence-like scalar)
+as a non-rigged member.
 
 A null result is a **real result**. The Temporal-Gap-testability deliverable
 (`00`-spec) stands even under the null: a substrate where Bennett's OPTION-1/2
