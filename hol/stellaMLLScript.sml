@@ -2224,4 +2224,571 @@ QED
 (* ZERO new_axiom / mk_thm USED IN THIS FILE.                                   *)
 (* ─────────────────────────────────────────────────────────────────────────── *)
 
+(* ═══════════════════════════════════════════════════════════════════════════ *)
+(* §71  The case of multiplicative units (pp. 339–341)                        *)
+(*                                                                             *)
+(* SCOPE: §71.5 (Def. One = {∅}), §71.9 (Def. Bottom = One^⊥),              *)
+(*        §71.6 (A ⊗ 1 = A), §71.10 (A ⅋ ⊥ = A w.r.t. ⊥^R),               *)
+(*        §71.11 (A^⊥ = A ⊸ ⊥ w.r.t. ⊥^R),                                 *)
+(*        §71.13–14 (Usine tests for units: Φ∈⊥ iff Φ⊥∅; Φ∈1 iff Φ=∅).   *)
+(*                                                                             *)
+(* Orthogonality ⊥^R (orth_roots_C) is used throughout §71 unless stated.   *)
+(* All non-trivial proofs are deferred (proof-obligation ledger §71.20–26).  *)
+(* ═══════════════════════════════════════════════════════════════════════════ *)
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §71.1–3  The pole ⊥⊥ and the pre-behaviour {∅}                             *)
+(*                                                                             *)
+(* §71.1–2: The pole ⊥⊥ is the set of all constellations Φ such that         *)
+(*   Ex(Φ ⊎ ∅) ∈ ⊥⊥ (closed under anti-evaluation).                         *)
+(* Under ⊥^R: ⊥⊥ is the set of all constellations normalising into a single  *)
+(* uncoloured star (the "roots" condition for a constellation paired with ∅). *)
+(*                                                                             *)
+(* §71.3: The natural behaviour for the neutral element of ⊗ is {∅}:         *)
+(*   any Φ ⊎ ∅ = Φ, so {∅} acts as a unit for disjoint union.               *)
+(* ─────────────────────────────────────────────────────────────────────────── *)
+
+(* §71.1–2  The pole pre-behaviour ⊥⊥ w.r.t. ⊥^R (§71.2):                  *)
+(* ⊥⊥ = { Φ | AEx(Φ ++ []) = {roots [] Φ} }                                 *)
+(* i.e., constellations that self-normalise into their own uncoloured roots.  *)
+(* §71.2 *)
+Definition pole_def :
+  pole : constellation set =
+    { Phi | AEx_C (Phi ++ []) = {roots [] Phi} }
+End
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §71.5  Definition: One = {∅} = ⊥⊥^⊥                                        *)
+(*                                                                             *)
+(* The behaviour One is the pre-behaviour containing only the empty           *)
+(* constellation ∅.  Eng §71.5:  1 := {∅} = ⊥⊥^⊥.                          *)
+(*                                                                             *)
+(* In HOL4:  the empty constellation is the empty list [].                   *)
+(* §71.5 *)
+Definition mll_one_def :                                        (* §71.5 *)
+  mll_one : constellation set = {[]}
+End
+
+(* §71.5  Remark: One = ⊥⊥^⊥ (i.e. One = orthogonal_set orth_roots_C pole).
+   This is a consequence of §71.4 (Φ∈{∅}^⊥^⊥ iff Φ self-normalises → ⊥⊥^⊥ = {∅}).
+   Stated as a remark; proved via proof-obligation §71.20.  §71.5 *)
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §71.4  Proposition: {∅} is a behaviour                                      *)
+(*                                                                             *)
+(* {∅}^⊥ = ⊥⊥  (constellations that self-normalise into their roots).        *)
+(* {∅}^{⊥⊥} = ⊥⊥^⊥ = {∅}.                                                  *)
+(* Hence {∅} = ({∅}^⊥)^⊥ = ({∅}^{⊥⊥}) is a behaviour.                      *)
+(*                                                                             *)
+(* PROOF-OBLIGATION[stellaMLL.20]:                                             *)
+(*   GOAL: is_behaviour (orth_roots_C {}) mll_one                              *)
+(*   STRATEGY:                                                                 *)
+(*     mll_one = {[]}; show mll_one = orthogonal_set orth_roots_C pole.       *)
+(*     (⊆) []: AEx([] ++ Phi) = AEx(Phi); for Phi in pole, AEx(Phi) = {roots},*)
+(*         so orth_roots_C {Phi} {[]} holds by unfolding orth_roots_C.        *)
+(*     (⊇) If Phi ∉ mll_one then Phi ≠ []; there exists Phi' in pole with     *)
+(*         AEx(Phi ++ Phi') ≠ {Roots}; hence Phi ∉ pole^⊥.                   *)
+(*   STATUS: deferred.                                                         *)
+(*   CITATION: §71.4 Proposition.                                              *)
+
+Theorem mll_one_is_behaviour :                                  (* §71.4 *)
+  is_behaviour (orth_roots_C {}) mll_one
+Proof
+  cheat
+QED
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §71.9  Definition: Bottom = 1^⊥ = ⊥⊥                                       *)
+(*                                                                             *)
+(* The behaviour Bottom is the orthogonal of One:                             *)
+(*   ⊥ := 1^⊥ = {∅}^⊥ = ⊥⊥.                                                 *)
+(*                                                                             *)
+(* §71.7 remarks that 1^⊥ = ⊥⊥; §71.8 shows it is a behaviour               *)
+(* (since A^⊥ is always a behaviour for any pre-behaviour A).                 *)
+(* §71.9 *)
+Definition mll_bottom_def :                                     (* §71.9 *)
+  mll_bottom : constellation set =
+    orthogonal_set (orth_roots_C {}) mll_one
+End
+
+(* §71.7–8  Remark: mll_bottom = pole (the "⊥⊥" pre-behaviour).
+   By §71.4–5: {∅}^⊥ = ⊥⊥ = pole.  §71.7 *)
+
+(* §71.8  Bottom is a behaviour: immediate since A^⊥ is always a behaviour.   *)
+(*                                                                             *)
+(* PROOF-OBLIGATION[stellaMLL.21]:                                             *)
+(*   GOAL: is_behaviour (orth_roots_C {}) mll_bottom                           *)
+(*   STRATEGY:                                                                 *)
+(*     mll_bottom = orthogonal_set orth_roots_C mll_one.                      *)
+(*     Any orthogonal_set is a behaviour: take B := mll_one in §69.30.        *)
+(*     So mll_bottom = mll_one^⊥ = B^⊥ for B = mll_one.                     *)
+(*   STATUS: deferred (direct from is_behaviour_def + orthogonal_set).        *)
+(*   CITATION: §71.8 Proposition.                                              *)
+
+Theorem mll_bottom_is_behaviour :                               (* §71.8 *)
+  is_behaviour (orth_roots_C {}) mll_bottom
+Proof
+  cheat
+QED
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §71.6  Proposition: A ⊗ 1 = A                                               *)
+(*                                                                             *)
+(* §71.6: For any behaviour A, A ⊗ 1 = A.                                    *)
+(*                                                                             *)
+(* Proof sketch (§71.6):                                                       *)
+(*   A ⊗ 1 = (A ⊙ {∅})^{⊥⊥}                                                 *)
+(*         = { Phi_A ++ [] | Phi_A ∈ A }^{⊥⊥}                                *)
+(*         = { Phi_A | Phi_A ∈ A }^{⊥⊥}  (since Phi ++ [] = Phi)            *)
+(*         = A^{⊥⊥} = A  (A is a behaviour, so A = A^{⊥⊥}).                 *)
+(*                                                                             *)
+(* PROOF-OBLIGATION[stellaMLL.22]:                                             *)
+(*   GOAL: !A. is_behaviour (orth_roots_C {}) A ==>                            *)
+(*             behaviour_tensor (orth_roots_C {}) A mll_one = A               *)
+(*   STRATEGY:                                                                 *)
+(*     Unfold behaviour_tensor = biorth orth (pre_tensor A mll_one).          *)
+(*     pre_tensor A mll_one = { Phi ++ [] | Phi ∈ A } = A  (by APPEND_NIL).  *)
+(*     biorth orth A = A  since A is a behaviour (behaviour_iff_biorth).      *)
+(*   CITATION: §71.6 Proposition.                                              *)
+
+(*
+   PROOF-OBLIGATION[stellaMLL.22]:
+   GOAL:
+     !A.
+       is_behaviour (orth_roots_C {}) A ==>
+       behaviour_tensor (orth_roots_C {}) A mll_one = A
+   STRATEGY:
+     Step 1: pre_tensor A mll_one = A.
+       pre_tensor A mll_one = { Phi | ?Phi1 Phi2. Phi1 IN A /\ Phi2 IN mll_one /\ Phi = Phi1 ++ Phi2 }
+       mll_one = {[]} => Phi2 = [] => Phi = Phi1 ++ [] = Phi1 => pre_tensor A {[]} = A.
+     Step 2: biorth orth A = A by behaviour_iff_biorth + is_behaviour.
+     Step 3: behaviour_tensor orth A mll_one = biorth orth (pre_tensor A mll_one) = biorth orth A = A.
+   DRAFT-TACTICS: rw [behaviour_tensor_def, biorth_def, pre_tensor_def, mll_one_def] >>
+                  simp [APPEND_NIL] >> metis_tac [behaviour_iff_biorth]
+*)
+Theorem tensor_one_id :                                         (* §71.6 *)
+  !A.
+    is_behaviour (orth_roots_C {}) A ==>
+    behaviour_tensor (orth_roots_C {}) A mll_one = A
+Proof
+  cheat
+QED
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §71.10  Proposition: A ⅋ ⊥ = A  (w.r.t. ⊥^R)                             *)
+(*                                                                             *)
+(* §71.10: For any behaviour A, A ⅋ ⊥ = A when using ⊥^R.                   *)
+(*                                                                             *)
+(* Proof sketch (§71.10):                                                      *)
+(*   A ⅋ ⊥ = (A^⊥ ⊗ ⊥^⊥)^⊥                                                 *)
+(*          = (A^⊥ ⊗ {∅}^{⊥⊥})^⊥                                            *)
+(*          = (A^⊥ ⊗ {∅})^⊥          ({∅}^{⊥⊥} = {∅} by §71.4)            *)
+(*          = A^{⊥⊥⊥}                 (⊗ {∅} by tensor_one_id on A^⊥)       *)
+(*          = A^⊥^⊥ = A               (A is a behaviour).                    *)
+(*                                                                             *)
+(* PROOF-OBLIGATION[stellaMLL.23]:                                             *)
+(*   GOAL: !A. is_behaviour (orth_roots_C {}) A ==>                            *)
+(*             behaviour_par (orth_roots_C {}) A mll_bottom = A               *)
+(*   STRATEGY:                                                                 *)
+(*     Unfold behaviour_par orth A mll_bottom                                  *)
+(*       = orthogonal_set orth (behaviour_tensor orth (orth A) (orth mll_bottom)).*)
+(*     orth mll_bottom = orth (orth mll_one) = mll_one^{⊥⊥⊥} = mll_one^⊥ = mll_bottom.*)
+(*     Hmm: we need orth(mll_bottom) = mll_one^{⊥⊥} = mll_one (by §71.4).   *)
+(*     So: behaviour_tensor orth (orth A) mll_one = orth A  (by tensor_one_id on orth A).*)
+(*     Then: orth(orth A) = A^{⊥⊥} = A.                                      *)
+(*     Requires: is_behaviour(orth A) (to apply tensor_one_id to orth A).     *)
+(*   CITATION: §71.10 Proposition.                                             *)
+
+(*
+   PROOF-OBLIGATION[stellaMLL.23]:
+   GOAL:
+     !A.
+       is_behaviour (orth_roots_C {}) A ==>
+       behaviour_par (orth_roots_C {}) A mll_bottom = A
+   STRATEGY:
+     Let orth := orth_roots_C {}.
+     behaviour_par orth A mll_bottom
+       = orthogonal_set orth (behaviour_tensor orth (orthogonal_set orth A) (orthogonal_set orth mll_bottom))
+     orthogonal_set orth mll_bottom = mll_one (since mll_bottom = mll_one^⊥ and mll_one^{⊥⊥} = mll_one by §71.4).
+     A is a behaviour ==> orthogonal_set orth A is a behaviour (A^⊥ is always a behaviour).
+     Apply tensor_one_id (stellaMLL.22) to orth A: behaviour_tensor orth (orth A) mll_one = orth A.
+     behaviour_par orth A mll_bottom = orthogonal_set orth (orth A) = A^{⊥⊥} = A.
+   DRAFT-TACTICS: cheat (needs stellaMLL.22 + double-negation A^{⊥⊥} = A)
+*)
+Theorem par_bottom_id :                                         (* §71.10 *)
+  !A.
+    is_behaviour (orth_roots_C {}) A ==>
+    behaviour_par (orth_roots_C {}) A mll_bottom = A
+Proof
+  cheat
+QED
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §71.11  Proposition: A^⊥ = A ⊸ ⊥  (w.r.t. ⊥^R)                          *)
+(*                                                                             *)
+(* §71.11: For any behaviour A, A^⊥ = A ⊸ ⊥.                                *)
+(*                                                                             *)
+(* Proof sketch (§71.11):                                                      *)
+(*   A ⊸ ⊥ = A^⊥ ⅋ ⊥   (by definition of ⊸)                                *)
+(*          = A^⊥          (by §71.10, since ⊥ is neutral for ⅋).            *)
+(*                                                                             *)
+(* PROOF-OBLIGATION[stellaMLL.24]:                                             *)
+(*   GOAL: !A. is_behaviour (orth_roots_C {}) A ==>                            *)
+(*             behaviour_impl (orth_roots_C {}) A mll_bottom =                 *)
+(*             orthogonal_set (orth_roots_C {}) A                              *)
+(*   STRATEGY:                                                                 *)
+(*     behaviour_impl orth A mll_bottom = behaviour_par orth (orth A) mll_bottom*)
+(*     par_bottom_id (stellaMLL.23) applied to orth A: par orth (orth A) mll_bottom = orth A.*)
+(*     But we need is_behaviour orth (orth A). Since A is a behaviour,        *)
+(*     orth A = A^⊥ is always a behaviour (it is orthogonal_set orth A = A^⊥,*)
+(*     and A^⊥ is a behaviour: take B := A in §69.30, then B^⊥ = A^⊥).      *)
+(*   CITATION: §71.11 Proposition.                                             *)
+
+(*
+   PROOF-OBLIGATION[stellaMLL.24]:
+   GOAL:
+     !A.
+       is_behaviour (orth_roots_C {}) A ==>
+       behaviour_impl (orth_roots_C {}) A mll_bottom =
+       orthogonal_set (orth_roots_C {}) A
+   STRATEGY:
+     behaviour_impl orth A mll_bottom = behaviour_par orth (orthogonal_set orth A) mll_bottom  (def impl)
+     is_behaviour orth (orthogonal_set orth A): take B := A; orth A = B^⊥ for B = A.
+     Apply par_bottom_id (stellaMLL.23) to orthogonal_set orth A:
+       behaviour_par orth (orthogonal_set orth A) mll_bottom = orthogonal_set orth A.
+   DRAFT-TACTICS: rw [behaviour_impl_def] >> irule par_bottom_id >>
+                  rw [is_behaviour_def] >> qexists_tac `A` >> rw [behaviour_par_def]
+*)
+Theorem impl_bottom_is_neg :                                    (* §71.11 *)
+  !A.
+    is_behaviour (orth_roots_C {}) A ==>
+    behaviour_impl (orth_roots_C {}) A mll_bottom =
+    orthogonal_set (orth_roots_C {}) A
+Proof
+  cheat
+QED
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §71.13–14  Testing units: Usine criterion for Bottom and One               *)
+(*                                                                             *)
+(* §71.13: To test whether Φ ∈ ⊥ (Bottom):                                   *)
+(*   Use the test {∅}: Φ ∈ ⊥ iff Φ ⊥^R ∅.                                  *)
+(*   i.e., AEx_C(Φ ++ []) = {Roots(Φ ++ [])} = {Roots(Φ)}.                  *)
+(*                                                                             *)
+(* §71.14: To test whether Φ ∈ 1 (One):                                      *)
+(*   Just check Φ = ∅ (the empty constellation).                              *)
+(*   No interaction needed: membership in {∅} is just equality to [].        *)
+(*                                                                             *)
+(* NOTE (§71.14): The stellar units {∅} and ⊥⊥ do not exactly match the     *)
+(* proof-net units (⊥ in proof-nets has a non-local dependency via jumps,     *)
+(* cf. §30; Girard's workaround: encode units in second-order LL, §44).      *)
+(* ─────────────────────────────────────────────────────────────────────────── *)
+
+(* §71.13  Bottom-membership criterion: Φ ∈ mll_bottom iff Φ ⊥^R ∅.
+   In HOL4: mll_bottom = {[]}^⊥ = orthogonal_set (orth_roots_C {}) {[]}.
+   So Phi IN mll_bottom iff orth_roots_C {} Phi [] = T.
+   I.e., AEx_C (Phi ++ []) = {roots Phi []}.
+
+   This is the definition of mll_bottom applied to the witness []:
+   Phi IN orthogonal_set orth {[]} <=> !Phi'. Phi' IN {[]} ==> orth Phi Phi'
+                                     <=> orth Phi []
+                                     <=> orth_roots_C {} Phi [].               *)
+
+(*
+   PROOF-OBLIGATION[stellaMLL.25]:
+   GOAL: §71.13 — Φ ∈ mll_bottom iff Φ ⊥^R ∅
+     !Phi.
+       Phi IN mll_bottom <=>
+       orth_roots_C {} Phi []
+   STRATEGY:
+     Unfold mll_bottom = orthogonal_set (orth_roots_C {}) mll_one = orthogonal_set orth {[]}.
+     orthogonal_set orth {[]} = { Phi | !Phi'. Phi' IN {[]} ==> orth Phi Phi' }
+                               = { Phi | orth Phi [] }  (since {[]} is a singleton).
+     So Phi IN mll_bottom <=> orth_roots_C {} Phi [].
+   DRAFT-TACTICS:
+     rw [mll_bottom_def, orthogonal_set_def, mll_one_def] >> simp []
+*)
+Theorem in_mll_bottom_iff :                                     (* §71.13 *)
+  !Phi.
+    Phi IN mll_bottom <=>
+    orth_roots_C {} Phi []
+Proof
+  cheat
+QED
+
+(* §71.14  One-membership criterion: Φ ∈ mll_one iff Φ = ∅.
+   Immediate from mll_one = {[]}:  Phi IN mll_one <=> Phi = [].             *)
+
+Theorem in_mll_one_iff :                                        (* §71.14 *)
+  !Phi.
+    Phi IN mll_one <=>
+    Phi = []
+Proof
+  rw [mll_one_def]
+QED
+
+(* §71.14  Remark (Usine vs proof-net units):
+   The stellar units (mll_one = {∅}, mll_bottom = ⊥⊥) provide correct
+   interactive types for multiplicative units within the Usage framework.
+   However, they do not correspond exactly to the proof-net units: in MLL
+   proof-net theory, the constant ⊥ is introduced in a context Γ to which
+   it is connected via a "jump" link (§30), creating a non-local dependency.
+   Under any switching, the ⊥ node becomes disconnected, breaking the
+   Danos-Regnier connectedness criterion.  Girard's fix (§44): encode ⊥ in
+   second-order linear logic, or use "epidictics" to supply the missing
+   structure.  The stellar interpretation exposes this mismatch cleanly
+   (cf. §71.14, §72.3).                                                       *)
+(* §71.14 *)
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §71  SANITY: mll_one and mll_bottom are disjoint (as sets)                  *)
+(*                                                                             *)
+(* mll_one = {[]} contains exactly the empty constellation.                  *)
+(* mll_bottom contains all constellations that self-normalise to their roots; *)
+(* in particular [] ∈ mll_bottom (AEx_C [] = {[]} = {roots [] []}).          *)
+(* They are NOT disjoint as sets — both contain constellations related to []. *)
+(* We instead show the definitional unfolding.                                 *)
+(* ─────────────────────────────────────────────────────────────────────────── *)
+
+Theorem mll_one_singleton :                                     (* §71.5 sanity *)
+  mll_one = {[]}
+Proof
+  rw [mll_one_def]
+QED
+
+Theorem mll_bottom_unfold :                                     (* §71.9 sanity *)
+  mll_bottom = orthogonal_set (orth_roots_C {}) {[]}
+Proof
+  rw [mll_bottom_def, mll_one_def]
+QED
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §71  SANITY: tensor_one_id in terms of mll_one (alternate phrasing)        *)
+(*                                                                             *)
+(* §71.6  A ⊗ One = A.  The impl_bottom version (A ⊸ ⊥ = A^⊥) gives the   *)
+(* de Morgan dual of the tensor unit law.  We state the commuted form.        *)
+(* ─────────────────────────────────────────────────────────────────────────── *)
+
+Theorem one_tensor_id :                                         (* §71.6 commuted *)
+  !A.
+    is_behaviour (orth_roots_C {}) A ==>
+    behaviour_tensor (orth_roots_C {}) mll_one A = A
+Proof
+  cheat
+QED
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* EXTENDED PROOF-DEBT LEDGER  (§71 additions)                                 *)
+(*                                                                              *)
+(* stellaMLL.20  mll_one_is_behaviour  (§71.4 Proposition)                     *)
+(*   GOAL: is_behaviour (orth_roots_C {}) mll_one                               *)
+(*   STRATEGY: mll_one = {[]}; show {[]} = orthogonal_set orth pole.           *)
+(*     (⊆) [] ∈ pole^⊥: AEx([] ++ Phi) = AEx(Phi); for Phi in pole this is   *)
+(*         {roots [] Phi} — unfold definitions.                                  *)
+(*     (⊇) Phi ≠ [] cannot be in pole^⊥ (exists Phi' in pole with AEx ≠ Roots).*)
+(*   STATUS: deferred (requires pole characterisation + AEx_C on empty list).   *)
+(*   CITATION: §71.4 Proposition.                                                *)
+(*                                                                              *)
+(* stellaMLL.21  mll_bottom_is_behaviour  (§71.8 Proposition)                   *)
+(*   GOAL: is_behaviour (orth_roots_C {}) mll_bottom                             *)
+(*   STRATEGY: mll_bottom = orthogonal_set orth mll_one.                        *)
+(*     is_behaviour_def: take B := mll_one; mll_bottom = B^⊥ = orthogonal_set orth B.*)
+(*     Immediate from the definitions.                                            *)
+(*   STATUS: deferred (direct, but requires unfolding is_behaviour_def).         *)
+(*   CITATION: §71.8 Proposition.                                                *)
+(*                                                                              *)
+(* stellaMLL.22  tensor_one_id  (§71.6 Proposition)                             *)
+(*   GOAL: !A. is_behaviour orth A ==> behaviour_tensor orth A mll_one = A      *)
+(*   STRATEGY:                                                                   *)
+(*     pre_tensor A {[]} = A  (Phi ++ [] = Phi for all Phi).                   *)
+(*     biorth orth A = A  (by behaviour_iff_biorth + is_behaviour A).           *)
+(*     behaviour_tensor orth A mll_one = biorth orth (pre_tensor A mll_one) = A.*)
+(*   STATUS: deferred (needs pre_tensor unfolding + APPEND_NIL + behaviour_iff_biorth).*)
+(*   CITATION: §71.6 Proposition.                                                *)
+(*                                                                              *)
+(* stellaMLL.23  par_bottom_id  (§71.10 Proposition)                            *)
+(*   GOAL: !A. is_behaviour orth A ==> behaviour_par orth A mll_bottom = A      *)
+(*   STRATEGY:                                                                   *)
+(*     behaviour_par orth A mll_bottom = orth (behaviour_tensor orth (orth A) (orth mll_bottom)).*)
+(*     orth mll_bottom = mll_one^{⊥⊥} = mll_one  (by §71.4 / mll_one_is_behaviour).*)
+(*     tensor_one_id on orth A: behaviour_tensor orth (orth A) mll_one = orth A.*)
+(*     orth (orth A) = A^{⊥⊥} = A  (A is a behaviour).                        *)
+(*   STATUS: deferred (needs stellaMLL.22 + A^{⊥⊥} = A for behaviours).       *)
+(*   CITATION: §71.10 Proposition.                                               *)
+(*                                                                              *)
+(* stellaMLL.24  impl_bottom_is_neg  (§71.11 Proposition)                       *)
+(*   GOAL: !A. is_behaviour orth A ==>                                           *)
+(*             behaviour_impl orth A mll_bottom = orthogonal_set orth A         *)
+(*   STRATEGY:                                                                   *)
+(*     behaviour_impl orth A mll_bottom = behaviour_par orth (orth A) mll_bottom.*)
+(*     orth A is a behaviour (it is B^⊥ for B = A).                            *)
+(*     par_bottom_id applied to orth A: behaviour_par orth (orth A) mll_bottom = orth A.*)
+(*   STATUS: deferred (needs stellaMLL.23 + is_behaviour (orth A)).             *)
+(*   CITATION: §71.11 Proposition.                                               *)
+(*                                                                              *)
+(* stellaMLL.25  in_mll_bottom_iff  (§71.13)                                    *)
+(*   GOAL: !Phi. Phi IN mll_bottom <=> orth_roots_C {} Phi []                   *)
+(*   STRATEGY:                                                                   *)
+(*     Unfold mll_bottom = orthogonal_set orth {[]}; singleton unfolding.       *)
+(*   STATUS: deferred (straightforward but needs simp on singleton set).         *)
+(*   CITATION: §71.13 (testing units).                                            *)
+(*                                                                              *)
+(* EVAL vs CHEAT SUMMARY  (§71 additions):                                      *)
+(*   EVAL / rw (non-debt):                                                       *)
+(*     · in_mll_one_iff    — rw [mll_one_def]                                   *)
+(*     · mll_one_singleton — rw [mll_one_def]                                   *)
+(*     · mll_bottom_unfold — rw [mll_bottom_def, mll_one_def]                   *)
+(*   CHEAT (non-trivial, deferred):                                              *)
+(*     · mll_one_is_behaviour   (stellaMLL.20)                                   *)
+(*     · mll_bottom_is_behaviour (stellaMLL.21)                                  *)
+(*     · tensor_one_id          (stellaMLL.22)                                   *)
+(*     · one_tensor_id          (commuted: same as stellaMLL.22 by commutativity)*)
+(*     · par_bottom_id          (stellaMLL.23)                                   *)
+(*     · impl_bottom_is_neg     (stellaMLL.24)                                   *)
+(*     · in_mll_bottom_iff      (stellaMLL.25)                                   *)
+(*                                                                              *)
+(* ZERO new_axiom / mk_thm USED IN THIS FILE.                                   *)
+(* ─────────────────────────────────────────────────────────────────────────── *)
+
+(* ═══════════════════════════════════════════════════════════════════════════ *)
+(* §72  Discussion: what is a multiplicative proof? (pp. 341–342)             *)
+(*                                                                             *)
+(* This section contains no new definitions or formal propositions from §72.  *)
+(* Its content is philosophical/descriptive.  We encode the key points as     *)
+(* documented remarks and named definitions for reference, following the       *)
+(* proof-policy: if no precise statement is given, state as remarks/defs only,*)
+(* no proof obligations.                                                       *)
+(* ═══════════════════════════════════════════════════════════════════════════ *)
+
+(* §72.1  Remark: The correctness test for ⊗ is a 3-ary star.
+   Under ⊥^R, the ⊗ test (from §68.3 vstar, Tens case) is the single star
+   [-u(X), -w(X), +v(X)] with two input rays and one output ray.  It forces
+   any interacting vehicle to consist of exactly two disjoint connected
+   components (one matching u and one matching w).  Thus the ⊗ test *reunites*
+   proof-structures — it witnesses their disjoint-union structure.  §72.1 *)
+
+(* §72.1  Remark: The correctness tests for ⅋ are binary and *separate*.
+   The two ⅋ tests (⅋_L and ⅋_R from vstar) each consist of two disjoint
+   stars: a binary star and a unary star.  They *separate* proof-structures
+   into two parts, corresponding to the two branches of the ⅋ connective.
+   MLL proofs are exactly those vehicles that reunite and separate data in
+   the structure prescribed by the formula tree.  §72.1 *)
+
+(* §72.1  Encoded predicate: the ⊗-test star for vertices u, w, v.
+   Used to state §72.1 precisely for reference.  §72.1 *)
+Definition tens_test_star_def :                                 (* §72.1 *)
+  tens_test_star (u : num) (w : num) (v : num) : star =
+    [ neg_app u ; neg_app w ; pos_app v ]
+End
+
+(* §72.1  The test constellation for a ⊗ link (output v, inputs u w)
+   is a singleton constellation containing the 3-ary test star.  §72.1 *)
+Definition tens_test_constellation_def :                        (* §72.1 *)
+  tens_test_constellation (u : num) (w : num) (v : num) : constellation =
+    [ tens_test_star u w v ]
+End
+
+(* §72.2  Remark: Linear negation as symmetry.
+   An axiom star [+1(X), +2(X)] connected with [+3(X)] by cut [-1(X), -3(X)]
+   gives [+2(X)], and by cut [-2(X), -3(X)] gives [+1(X)].  This encodes the
+   MLL equation A ⊸ B = B^⊥ ⊸ A^⊥.  §72.2 *)
+
+(* §72.2  Remark: Complexity of axiom stars scales with formula complexity.
+   For any multiplicative formula A, the axiom-star encoding a proof of
+   ⊢ X₁^⊥ ⅋ X₁ or ⊢ A^⊥ ⅋ A is a binary star [r, r'] where the rays r and
+   r' are as structurally complex as A itself (the address terms embed the
+   binary tree of A via 1-directions and r-directions).  §72.2 *)
+
+(* §72.3  Remark: First-order multiplicatives and polymorphism.
+   The stellar interpretation gives "first-order" multiplicative proof-structures:
+   atomic formulas are represented by concrete function symbols, and the proof-
+   structure is fixed for specific atoms.  Real MLL proofs are *polymorphic*:
+   a proof of ⊢ X₁^⊥ ⅋ X₁ works for any formula substituted for X₁.
+   Polymorphism (second-order generalisation) requires additional structure
+   beyond first-order constellations — this is the role of Girard's
+   "epidictics" (§72.3, cf. §44).  §72.3 *)
+
+(* §72.4  Remark: Hidden non-linearity in MLL proof-net theory.
+   In the GoI interpretation, MLL proofs are permutations over atoms where
+   cuts are partial injections linking atoms.  In proof-net theory, cuts link
+   whole conclusions (not individual atoms), so the cut must be "distributed"
+   to the atoms it connects via the address terms.
+   In the stellar interpretation: this distribution is internalised — the
+   complex shape of proof-structures is encoded directly into the terms of
+   rays (via pAddr_S, addr_S).  To connect the cut with both its left and
+   right premises at all atoms, the variables in address terms act as
+   placeholders that unify during execution.  This exposes the fact that MLL
+   proof-net theory is not truly duplication-free: it hides non-linear
+   (duplicating) behaviour inside the design of the address terms.  §72.4 *)
+
+(* §72  Summary definition: the "reunion" and "separation" dichotomy.
+   We record the key §72 observation as a named boolean predicate for reference:
+   a ⊗-interaction is a 3-ary reunion; a ⅋-interaction is a binary separation. *)
+Definition is_reunion_test_def :                                (* §72.1 *)
+  is_reunion_test (s : star) : bool =
+    (* A reunion test star is 3-ary with two negative and one positive ray. *)
+    ?u w v.
+      s = tens_test_star u w v
+End
+
+Definition is_separation_test_def :                             (* §72.1 *)
+  is_separation_test_L (s1 : star) (s2 : star) : bool =
+    (* A separation test (⅋_L) consists of a binary star [-u(X), +v(X)] and
+       a unary star [-w(X)].  s1 = [-u(X), +v(X)], s2 = [-w(X)].           *)
+    ?u w v.
+      s1 = [ neg_app u ; pos_app v ] /\
+      s2 = [ neg_app w ]
+End
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §72  SANITY: tens_test_star has 3 rays                                      *)
+(* ─────────────────────────────────────────────────────────────────────────── *)
+
+Theorem tens_test_star_length :                                 (* §72 sanity *)
+  !u w v. LENGTH (tens_test_star u w v) = 3
+Proof
+  rw [tens_test_star_def]
+QED
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §66–72  Ch.10 COMPLETION SUMMARY                                            *)
+(*                                                                             *)
+(* All sections of Eng Ch.10 (§66 through §72) are now stated in HOL4.       *)
+(*                                                                             *)
+(*   §66  Proofs as constellations (§66.3, §66.7, §66.11):                   *)
+(*        mll_label, proof_struct, ax_edges, cut_edges, pAddr_S, addr_S,      *)
+(*        mu_ray, ax_star, Phi_ax, cut_star, Phi_cut, Phi_comp.               *)
+(*   §67  Simulation of cut-elimination (§67.7, §67.9, §67.10):              *)
+(*        struct_equiv, cut_elim_step, cut_elim_star, normal_ps,              *)
+(*        AEx_equiv, sim_cut_step, sim_cut_elim.                              *)
+(*   §68  Danos-Regnier correctness (§68.3, §68.15, §68.19, §68.21):         *)
+(*        switching, vstar, Phi_switched, fhp_ray/star, fhp,                  *)
+(*        concl_star, dr_certifiable, mll_certifiable,                        *)
+(*        dr_test_AEx, dr_acyclic_iff_finite_AEx,                             *)
+(*        dr_connected_acyclic_iff_singleton_AEx.                             *)
+(*   §69  Multiplicative formulas / orthogonality (§69.4, §69.29–40, §69.43–44):*)
+(*        roots, orth_fin_C, orth_one_C, orth_roots_C, orthogonal_set, biorth,*)
+(*        pre_tensor, behaviour_tensor, behaviour_par, behaviour_impl,         *)
+(*        trefoil, aex_assoc.                                                  *)
+(*   §70  Soundness and completeness (§70.9, §70.10, §70.17, §70.21, §70.23, §70.26):*)
+(*        mll_formula, basis_interp, wf_basis, interp_formula, interp_sequent,*)
+(*        proof_like, tests_sequent, strict_interp_one, strict_interp_roots,  *)
+(*        full_soundness_mll_mix, completeness_mll_mix,                       *)
+(*        full_soundness_mll_{one,roots}, completeness_mll_{roots,one}.       *)
+(*   §71  Multiplicative units (§71.5, §71.9, §71.6, §71.10, §71.11, §71.13–14):*)
+(*        pole, mll_one, mll_bottom,                                           *)
+(*        mll_one_is_behaviour, mll_bottom_is_behaviour,                      *)
+(*        tensor_one_id, one_tensor_id, par_bottom_id, impl_bottom_is_neg,    *)
+(*        in_mll_bottom_iff, in_mll_one_iff.                                  *)
+(*   §72  Discussion (§72.1–4):                                                *)
+(*        tens_test_star, tens_test_constellation,                             *)
+(*        is_reunion_test, is_separation_test_L.                              *)
+(*        Remarks encoded as documentation comments (no proof obligations      *)
+(*        since §72 contains no formally precise statements).                  *)
+(*                                                                             *)
+(* ZERO new_axiom / mk_thm IN THIS ENTIRE FILE.                               *)
+(* ALL non-trivial proofs deferred via cheat + PROOF-OBLIGATION comments.     *)
+(* Ledger: stellaMLL.01–25 (ends at stellaMLL.25 after §71 additions).        *)
+(* ─────────────────────────────────────────────────────────────────────────── *)
+
 val _ = export_theory ();
