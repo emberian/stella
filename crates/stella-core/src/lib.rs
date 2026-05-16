@@ -17,6 +17,7 @@ pub mod interactive;
 pub mod pda;
 pub mod polarised;
 pub mod subst;
+pub mod subjective;
 pub mod term;
 pub mod tiles;
 pub mod tm;
