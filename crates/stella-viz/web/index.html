@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>stella-viz — Stellar Resolution Explorer (Static / GitHub Pages)</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Mono', monospace;
+    background: #0d1117;
+    color: #c9d1d9;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+  }
+  header {
+    padding: 10px 18px;
+    background: #161b22;
+    border-bottom: 1px solid #30363d;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-shrink: 0;
+  }
+  header h1 { font-size: 1.1rem; color: #58a6ff; }
+  header span { font-size: 0.8rem; color: #8b949e; }
+  .main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+  .sidebar {
+    width: 280px;
+    flex-shrink: 0;
+    background: #161b22;
+    border-right: 1px solid #30363d;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+  .sidebar h2 {
+    font-size: 0.75rem;
+    color: #8b949e;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 12px 14px 6px;
+    border-bottom: 1px solid #21262d;
+  }
+  .preset-btn {
+    display: block;
+    width: 100%;
+    padding: 10px 14px;
+    text-align: left;
+    background: none;
+    border: none;
+    border-bottom: 1px solid #21262d;
+    color: #c9d1d9;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.82rem;
+    transition: background 0.15s;
+  }
+  .preset-btn:hover { background: #21262d; }
+  .preset-btn.active { background: #1f3352; color: #58a6ff; }
+  .preset-btn .preset-name { font-weight: 600; }
+  .preset-btn .preset-desc {
+    margin-top: 4px;
+    font-size: 0.72rem;
+    color: #8b949e;
+    white-space: pre-wrap;
+  }
+  .content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .toolbar {
+    padding: 8px 14px;
+    background: #161b22;
+    border-bottom: 1px solid #30363d;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+  .toolbar button {
+    background: #21262d;
+    color: #c9d1d9;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 5px 14px;
+    font-family: inherit;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .toolbar button:hover { background: #30363d; }
+  .toolbar button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .toolbar .step-info {
+    font-size: 0.78rem;
+    color: #8b949e;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .toolbar button#btn-reset {
+    background: #2d1b1b;
+    border-color: #5c2626;
+    color: #f85149;
+  }
+  .toolbar button#btn-reset:hover { background: #3d2222; }
+  .panels {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+  }
+  .panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-right: 1px solid #30363d;
+  }
+  .panel:last-child { border-right: none; }
+  .panel-header {
+    padding: 6px 14px;
+    font-size: 0.72rem;
+    color: #8b949e;
+    background: #161b22;
+    border-bottom: 1px solid #21262d;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    flex-shrink: 0;
+  }
+  .panel-body {
+    flex: 1;
+    overflow: auto;
+    padding: 8px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+  }
+  .panel-body.text {
+    padding: 14px;
+    align-items: flex-start;
+    justify-content: flex-start;
+  }
+  #dot-raw {
+    font-size: 0.72rem;
+    color: #8b949e;
+    white-space: pre;
+    overflow: auto;
+  }
+  #graph-svg-container {
+    min-width: 200px;
+    min-height: 200px;
+  }
+  #graph-svg-container svg {
+    max-width: 100%;
+  }
+  .loading { color: #58a6ff; font-size: 0.82rem; }
+  .error { color: #f85149; font-size: 0.82rem; }
+
+  /* Step trace panel */
+  .step-panel {
+    padding: 10px 14px;
+    font-size: 0.78rem;
+    color: #c9d1d9;
+    line-height: 1.7;
+  }
+  .step-entry {
+    margin-bottom: 10px;
+    padding: 8px 10px;
+    background: #21262d;
+    border-radius: 6px;
+    border-left: 3px solid #30363d;
+  }
+  .step-entry.current {
+    border-left-color: #58a6ff;
+    background: #1f3352;
+  }
+  .step-entry.final-step {
+    border-left-color: #3fb950;
+    background: #1b2d1f;
+  }
+  .step-label {
+    font-weight: 600;
+    color: #58a6ff;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .step-label .badge {
+    font-size: 0.65rem;
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: #388bfd22;
+    border: 1px solid #388bfd55;
+    text-transform: none;
+    letter-spacing: 0;
+    color: #79c0ff;
+  }
+  .step-label .badge.final {
+    background: #3fb95022;
+    border-color: #3fb95055;
+    color: #56d364;
+  }
+  .step-stars {
+    font-size: 0.77rem;
+    color: #e6edf3;
+    margin-bottom: 4px;
+  }
+  .step-ray {
+    font-size: 0.71rem;
+    color: #f0883e;
+    font-style: italic;
+  }
+  .step-ray:empty { display: none; }
+
+  /* Active ray highlight in dep-graph panel header */
+  #graph-panel-header .active-info {
+    font-size: 0.68rem;
+    color: #f0883e;
+    text-transform: none;
+    letter-spacing: 0;
+    margin-top: 2px;
+  }
+
+  /* WASM loading banner */
+  #wasm-banner {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    padding: 6px 14px;
+    background: #161b22;
+    border-top: 1px solid #30363d;
+    font-size: 0.75rem;
+    color: #8b949e;
+    z-index: 100;
+  }
+  #wasm-banner.ready { color: #3fb950; }
+  #wasm-banner.error { color: #f85149; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>stella-viz</h1>
+  <span>Stellar Resolution Explorer — static GitHub Pages build (Rust/WASM engine, no server)</span>
+</header>
+
+<div class="main">
+  <div class="sidebar" id="sidebar">
+    <h2>Presets</h2>
+    <div id="preset-list"><span class="loading" style="padding:14px;display:block;">Initialising WASM engine…</span></div>
+  </div>
+
+  <div class="content">
+    <div class="toolbar">
+      <button id="btn-reset" title="Reset to step 0">&#x21BA; Reset</button>
+      <button id="btn-prev" disabled title="Previous step">&#9664; Prev</button>
+      <button id="btn-next" disabled title="Next step">Next &#9654;</button>
+      <span class="step-info" id="step-info">Initialising WASM engine…</span>
+    </div>
+
+    <div class="panels">
+      <!-- Left panel: rendered dep-graph at current step -->
+      <div class="panel" style="flex:2;">
+        <div class="panel-header" id="graph-panel-header">
+          Interaction space &#936; &mdash; dep-graph D[&#936;; C] at current step
+          <div class="active-info" id="active-ray-info"></div>
+        </div>
+        <div class="panel-body" id="graph-panel-body">
+          <div id="graph-svg-container"><span class="loading">Initialising WASM engine…</span></div>
+        </div>
+      </div>
+
+      <!-- Right panel: step trace -->
+      <div class="panel" style="flex:1; min-width:240px;">
+        <div class="panel-header">IEx step trace &mdash; &#936; at each step</div>
+        <div class="panel-body text" id="exec-panel">
+          <span class="loading">Initialising WASM engine…</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Status banner -->
+<div id="wasm-banner">&#9654; Loading WASM engine (stella-core compiled to wasm32-unknown-unknown)…</div>
+
+<!-- viz.js via CDN (renders Graphviz DOT to SVG in-browser) -->
+<script src="https://cdn.jsdelivr.net/npm/@viz-js/viz@3/lib/viz-standalone.js"></script>
+
+<script type="module">
+"use strict";
+
+// ── WASM module bootstrap ─────────────────────────────────────────────────────
+// The wasm-pack output is at ./pkg/stella_viz_wasm.js (ES module).
+// We load it dynamically so the page can show a loading state.
+
+import init, { list_presets, get_preset_dot, get_preset_steps, preset_count }
+    from "./pkg/stella_viz_wasm.js";
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let gViz = null;           // Viz.js instance (loaded async)
+let gPresets = [];         // [{id, name, description}]
+let gSteps = [];           // Current preset's step snapshots
+let gCurrentPresetIdx = -1;
+let gStepIndex = 0;
+
+// ── Banner helper ─────────────────────────────────────────────────────────────
+const banner = document.getElementById("wasm-banner");
+function setBanner(msg, cls) {
+    banner.textContent = msg;
+    banner.className = cls || "";
+}
+
+// ── Viz.js init ───────────────────────────────────────────────────────────────
+async function initViz() {
+    try {
+        if (typeof Viz !== "undefined") {
+            gViz = await Viz.instance();
+        }
+    } catch (e) {
+        console.warn("viz.js failed to load (CDN offline?). DOT will show as text.", e);
+    }
+}
+
+// ── Preset list ───────────────────────────────────────────────────────────────
+function loadPresets() {
+    try {
+        gPresets = JSON.parse(list_presets());
+        renderPresetList();
+    } catch (e) {
+        document.getElementById("preset-list").innerHTML =
+            `<span class="error">Failed to parse presets: ${e.message}</span>`;
+    }
+}
+
+function renderPresetList() {
+    const el = document.getElementById("preset-list");
+    el.innerHTML = "";
+    gPresets.forEach((p, i) => {
+        const btn = document.createElement("button");
+        btn.className = "preset-btn";
+        btn.innerHTML = `<div class="preset-name">${esc(p.name)}</div><div class="preset-desc">${esc(p.description)}</div>`;
+        btn.addEventListener("click", () => selectPreset(i));
+        el.appendChild(btn);
+    });
+}
+
+// ── Select & load a preset ────────────────────────────────────────────────────
+async function selectPreset(idx) {
+    document.querySelectorAll(".preset-btn").forEach((b, i) => {
+        b.classList.toggle("active", i === idx);
+    });
+
+    document.getElementById("graph-svg-container").innerHTML =
+        `<span class="loading">Computing steps (WASM)…</span>`;
+    document.getElementById("exec-panel").innerHTML =
+        `<span class="loading">Loading…</span>`;
+    document.getElementById("step-info").textContent = "Computing step trace…";
+    document.getElementById("active-ray-info").textContent = "";
+
+    try {
+        // Run synchronously in WASM (all computation is client-side)
+        const raw = get_preset_steps(idx);
+        gSteps = JSON.parse(raw);
+        gCurrentPresetIdx = idx;
+        gStepIndex = 0;
+        await renderCurrentStep();
+    } catch (e) {
+        document.getElementById("graph-svg-container").innerHTML =
+            `<span class="error">Error: ${e.message}</span>`;
+    }
+}
+
+// ── Rendering ─────────────────────────────────────────────────────────────────
+async function renderCurrentStep() {
+    if (gSteps.length === 0) return;
+    const snap = gSteps[gStepIndex];
+
+    await renderDot(snap.dot);
+
+    document.getElementById("active-ray-info").textContent =
+        snap.active_ray
+            ? `Next fire: ${snap.active_ray}`
+            : (snap.is_final ? "Normal form reached." : "");
+
+    renderTracePanel();
+    updateToolbar(snap);
+}
+
+async function renderDot(dotSrc) {
+    const container = document.getElementById("graph-svg-container");
+    if (!dotSrc || dotSrc.trim() === "" || dotSrc.includes("// empty")) {
+        container.innerHTML = `<span style="color:#8b949e; font-size:0.82rem;">&#936; is empty (no stars).</span>`;
+        return;
+    }
+    if (gViz) {
+        try {
+            const svg = await gViz.renderSVGElement(dotSrc);
+            svg.setAttribute("width", "100%");
+            container.innerHTML = "";
+            container.appendChild(svg);
+        } catch (e) {
+            container.innerHTML = `<pre id="dot-raw">${esc(dotSrc)}</pre>`;
+        }
+    } else {
+        container.innerHTML = `
+          <div>
+            <p class="error" style="margin-bottom:8px;">viz.js not available (CDN offline). Raw DOT:</p>
+            <pre id="dot-raw">${esc(dotSrc)}</pre>
+          </div>`;
+    }
+}
+
+function renderTracePanel() {
+    const panel = document.getElementById("exec-panel");
+    let html = `<div class="step-panel">`;
+    gSteps.forEach((s, i) => {
+        const isCurrent = (i === gStepIndex);
+        let cls = "step-entry";
+        if (isCurrent) cls += " current";
+        if (s.is_final) cls += " final-step";
+
+        const badgeText = s.is_final ? "normal form" : `step ${s.step}`;
+        const badgeCls  = s.is_final ? "badge final"  : "badge";
+
+        const starsHtml = s.psi_stars.length > 0
+            ? s.psi_stars.map(st => `<div>${esc(st)}</div>`).join("")
+            : `<div style="color:#8b949e;">&#8709; (empty interaction space)</div>`;
+
+        html += `<div class="${cls}" data-step="${i}">
+          <div class="step-label">
+            Step ${s.step}
+            <span class="${badgeCls}">${badgeText}</span>
+          </div>
+          <div class="step-stars">${starsHtml}</div>
+          <div class="step-ray">${esc(s.active_ray)}</div>
+        </div>`;
+    });
+    html += `</div>`;
+    panel.innerHTML = html;
+
+    panel.querySelectorAll(".step-entry").forEach(el => {
+        el.addEventListener("click", async () => {
+            const i = parseInt(el.dataset.step, 10);
+            if (!isNaN(i) && i >= 0 && i < gSteps.length) {
+                gStepIndex = i;
+                await renderCurrentStep();
+            }
+        });
+        el.style.cursor = "pointer";
+    });
+
+    const current = panel.querySelector(".step-entry.current");
+    if (current) current.scrollIntoView({ block: "nearest" });
+}
+
+function updateToolbar(snap) {
+    const presetName = gPresets[gCurrentPresetIdx]?.name ?? "";
+    document.getElementById("btn-prev").disabled = gStepIndex <= 0;
+    document.getElementById("btn-next").disabled = gStepIndex >= gSteps.length - 1;
+    document.getElementById("btn-reset").disabled = gSteps.length === 0;
+    document.getElementById("step-info").textContent =
+        `${presetName} — Step ${gStepIndex} / ${gSteps.length - 1}${snap.is_final ? " [normal form]" : ""}`;
+}
+
+// ── Step / Reset buttons ──────────────────────────────────────────────────────
+document.getElementById("btn-reset").addEventListener("click", async () => {
+    if (gSteps.length > 0) { gStepIndex = 0; await renderCurrentStep(); }
+});
+document.getElementById("btn-prev").addEventListener("click", async () => {
+    if (gStepIndex > 0) { gStepIndex--; await renderCurrentStep(); }
+});
+document.getElementById("btn-next").addEventListener("click", async () => {
+    if (gStepIndex < gSteps.length - 1) { gStepIndex++; await renderCurrentStep(); }
+});
+
+document.addEventListener("keydown", async (e) => {
+    if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+    if      (e.key === "ArrowRight" || e.key === "ArrowDown")  {
+        if (gStepIndex < gSteps.length - 1) { gStepIndex++; await renderCurrentStep(); }
+    } else if (e.key === "ArrowLeft"  || e.key === "ArrowUp")    {
+        if (gStepIndex > 0) { gStepIndex--; await renderCurrentStep(); }
+    } else if (e.key === "Home") {
+        gStepIndex = 0; await renderCurrentStep();
+    } else if (e.key === "End") {
+        gStepIndex = gSteps.length - 1; await renderCurrentStep();
+    }
+});
+
+// ── HTML escaping ─────────────────────────────────────────────────────────────
+function esc(s) {
+    return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+(async () => {
+    try {
+        setBanner("Loading WASM engine…");
+        await Promise.all([
+            init(),          // initialise the WASM module (calls _start → panic hook)
+            initViz(),       // load viz.js CDN
+        ]);
+        setBanner("WASM engine ready — stella-core running client-side", "ready");
+        setTimeout(() => banner.style.display = "none", 2500);
+        loadPresets();
+        document.getElementById("step-info").textContent = "Select a preset to begin.";
+        document.getElementById("graph-svg-container").innerHTML =
+            `<span class="loading">Select a preset to visualize.</span>`;
+        document.getElementById("exec-panel").innerHTML =
+            `<span class="loading">Select a preset to see the execution trace.</span>`;
+    } catch (err) {
+        setBanner(`WASM load failed: ${err.message}`, "error");
+        document.getElementById("preset-list").innerHTML =
+            `<span class="error" style="padding:14px;display:block;">WASM engine failed to load.<br>${err.message}</span>`;
+        document.getElementById("step-info").textContent = "WASM engine failed to load.";
+        console.error("stella-viz WASM boot error:", err);
+    }
+})();
+</script>
+</body>
+</html>
