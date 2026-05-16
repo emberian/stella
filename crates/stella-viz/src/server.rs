@@ -3,14 +3,16 @@
 //! Serves the stella-viz single-page UI on `http://127.0.0.1:<port>`.
 //!
 //! Routes:
-//!   GET /          → HTML shell
-//!   GET /api/presets  → JSON array of preset names+descriptions
-//!   GET /api/dot/<n>  → JSON { dep_graph_dot, execution_summary } for preset n
+//!   GET /              → HTML shell
+//!   GET /api/presets   → JSON array of preset names+descriptions
+//!   GET /api/dot/<n>   → JSON { dep_graph_dot, execution_summary } for preset n
+//!   GET /api/steps/<n> → JSON array of step snapshots for preset n
+//!                        Each snapshot: { step, psi_stars, active_ray, dot, is_final }
 
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 
-use crate::presets::all_presets;
+use crate::presets::{all_presets, all_step_data};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HTML page (embedded)
@@ -126,6 +128,32 @@ fn handle(mut stream: TcpStream) {
                     json_str(&p.dep_graph_dot),
                     json_str(&p.execution_summary)
                 );
+                http_ok(&mut stream, "application/json", &body);
+                return;
+            }
+        }
+    }
+
+    if let Some(rest) = path.strip_prefix("/api/steps/") {
+        if let Ok(idx) = rest.parse::<usize>() {
+            let step_data = all_step_data();
+            if idx < step_data.len() {
+                let sd = &step_data[idx];
+                // Serialize as a JSON array of step objects.
+                let items: Vec<String> = sd.steps.iter().map(|s| {
+                    let psi_arr: Vec<String> = s.psi_stars.iter()
+                        .map(|star| json_str(star))
+                        .collect();
+                    format!(
+                        "{{\"step\":{},\"psi_stars\":[{}],\"active_ray\":{},\"dot\":{},\"is_final\":{}}}",
+                        s.step,
+                        psi_arr.join(","),
+                        json_str(&s.active_ray),
+                        json_str(&s.dot),
+                        s.is_final
+                    )
+                }).collect();
+                let body = format!("[{}]", items.join(","));
                 http_ok(&mut stream, "application/json", &body);
                 return;
             }

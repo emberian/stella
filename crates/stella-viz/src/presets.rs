@@ -3,6 +3,9 @@
 //! Each preset builds a `Constellation` and (optionally) runs execution,
 //! returning a `PresetResult` with DOT strings for the dependency graph and
 //! a human-readable execution summary.
+//!
+//! Also provides `PresetStepData` which captures a full step-by-step IEx trace
+//! via the viz-side fuel-replay technique (see `stepper.rs`).
 
 use stella_core::automata::{eng_fig561_nfa, nfa_constellation, encode_nfa, encode_word};
 use stella_core::constellation::Constellation;
@@ -12,6 +15,8 @@ use stella_core::polarised::{pos_ray, neg_ray};
 use stella_core::term::{mk_var, mk_app_str, Term};
 use stella_core::tm::{trivial_accept_empty_tm, encode_ntm, encode_word_ntm};
 use stella_core::viz::dep_graph_dot;
+
+use crate::stepper::{capture_steps, StepSnapshot};
 
 /// The result of loading and running a preset.
 pub struct PresetResult {
@@ -23,6 +28,18 @@ pub struct PresetResult {
     pub dep_graph_dot: String,
     /// Human-readable execution summary.
     pub execution_summary: String,
+}
+
+/// Step-by-step execution data for a preset (for the interactive stepper UI).
+///
+/// Each step captures the interaction space Ψ as rendered stars, the dep-graph
+/// DOT for the current Ψ, and which ray is about to fire.
+pub struct PresetStepData {
+    pub name: String,
+    #[allow(dead_code)]
+    pub description: String,
+    /// All step snapshots (index 0 = initial state, last = normal form or fuel-limit).
+    pub steps: Vec<StepSnapshot>,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -219,14 +236,81 @@ pub fn preset_ntm() -> PresetResult {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Step-data builders (fuel-replay via stepper::capture_steps)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Build step-by-step execution data for the Horn-add preset.
+pub fn step_data_horn_add() -> PresetStepData {
+    let m = 2;
+    let n = 2;
+    let phi = horn_add_constellation();
+    let psi = vec![vec![
+        neg_ray("add", vec![nat(m), nat(n), mk_var("R")]),
+        mk_var("R"),
+    ]];
+    let steps = capture_steps(&phi, psi, 200);
+    PresetStepData {
+        name: format!("Horn addition: add({m},{n},R) — step-by-step"),
+        description: format!(
+            "IEx step-by-step trace for add({m},{n},R).\n\
+             Reference Φ = Horn addition program.\n\
+             Initial Ψ = query star [-add({m},{n},R), R].\n\
+             Note: stepping uses fuel-replay (viz-side approximation); \
+             stella-core exposes no iterator API."
+        ),
+        steps,
+    }
+}
+
+/// Build step-by-step execution data for the NFA preset.
+pub fn step_data_nfa() -> PresetStepData {
+    let nfa = eng_fig561_nfa();
+    let phi = encode_nfa(&nfa);
+    let psi = vec![encode_word(&["0", "0", "0"])];
+    let steps = capture_steps(&phi, psi, 200);
+    PresetStepData {
+        name: "NFA Fig 56.1 — step-by-step IEx".to_string(),
+        description: "IEx step-by-step trace for NFA word '000'.\n\
+            Reference Φ = NFA automaton A⋆. Initial Ψ = word star [+i(0·0·0·ε)].\n\
+            Note: stepping uses fuel-replay (viz-side approximation).".to_string(),
+        steps,
+    }
+}
+
+/// Build step-by-step execution data for the NTM preset.
+pub fn step_data_ntm() -> PresetStepData {
+    let ntm = trivial_accept_empty_tm();
+    let phi_ref = encode_ntm(&ntm);
+    let word: Vec<String> = vec![];
+    let psi_star = encode_word_ntm(&word);
+    let steps = capture_steps(&phi_ref, vec![psi_star], 100);
+    PresetStepData {
+        name: "NTM trivial TM ε — step-by-step IEx".to_string(),
+        description: "IEx step-by-step trace for TM on empty word ε.\n\
+            Reference Φ = TM M⋆. Initial Ψ = word star w⋆.\n\
+            Note: stepping uses fuel-replay (viz-side approximation).".to_string(),
+        steps,
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // All presets
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Return all available presets.
+/// Return all available presets (static/summary view).
 pub fn all_presets() -> Vec<PresetResult> {
     vec![
         preset_horn_add(),
         preset_nfa(),
         preset_ntm(),
+    ]
+}
+
+/// Return step-by-step data for all presets (for the interactive stepper UI).
+pub fn all_step_data() -> Vec<PresetStepData> {
+    vec![
+        step_data_horn_add(),
+        step_data_nfa(),
+        step_data_ntm(),
     ]
 }
