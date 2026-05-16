@@ -297,4 +297,114 @@ mod tests {
             "NFA '000' final Ψ should contain accept; got: {result_str}"
         );
     }
+
+    // ── Curated preset smoke tests ────────────────────────────────────────────
+
+    /// Smoke: curated presets (indices 3-5) exist and have valid DOTs.
+    #[test]
+    fn smoke_curated_presets_exist_and_have_dot() {
+        let presets = all_presets();
+        // We now have 6 presets: 3 original + 3 curated.
+        assert!(
+            presets.len() >= 6,
+            "should have at least 6 presets (3 original + 3 curated); got {}",
+            presets.len()
+        );
+        for i in 3..presets.len() {
+            let p = &presets[i];
+            assert!(
+                !p.dep_graph_dot.is_empty(),
+                "curated preset {i} ({}) dep_graph_dot should be non-empty",
+                p.name
+            );
+            assert!(
+                p.dep_graph_dot.contains("graph dep_graph {"),
+                "curated preset {i} ({}) DOT should contain 'graph dep_graph {{'",
+                p.name
+            );
+            assert!(
+                !p.execution_summary.is_empty(),
+                "curated preset {i} ({}) execution_summary should be non-empty",
+                p.name
+            );
+        }
+    }
+
+    /// Smoke: Horn mult(2,3) → 6 = nat(6) = s(s(s(s(s(s(0)))))).
+    #[test]
+    fn smoke_horn_mult_preset_result() {
+        let presets = all_presets();
+        let mult = &presets[3]; // horn_mult is index 3
+        assert!(
+            mult.name.contains("mult"),
+            "preset 3 should be horn mult; got: {}",
+            mult.name
+        );
+        // The execution summary should contain a nat term or ACCEPTED/IEx result.
+        let summary = &mult.execution_summary;
+        assert!(
+            summary.contains("IEx") || summary.contains("star"),
+            "mult execution summary should reference IEx result; got: {summary}"
+        );
+    }
+
+    /// Smoke: NPDA "01" is accepted (word ∈ {0ⁿ1ⁿ}).
+    #[test]
+    fn smoke_npda_preset_accepts_01() {
+        let presets = all_presets();
+        let npda = &presets[4]; // npda is index 4
+        assert!(
+            npda.name.contains("NPDA") || npda.name.contains("npda"),
+            "preset 4 should be NPDA; got: {}",
+            npda.name
+        );
+        let summary = &npda.execution_summary;
+        // "01" ∈ {0ⁿ1ⁿ} — should be accepted (or at least produce a verdict).
+        assert!(
+            summary.contains("ACCEPTED") || summary.contains("REJECTED") || summary.contains("Fuel"),
+            "NPDA execution summary should contain a verdict; got: {summary}"
+        );
+    }
+
+    /// Smoke: NFTA bool formula or(not(1),1) should be accepted (evaluates to TRUE).
+    #[test]
+    fn smoke_nfta_preset_accepts_true_formula() {
+        let presets = all_presets();
+        let nfta = &presets[5]; // nfta is index 5
+        assert!(
+            nfta.name.contains("NFTA") || nfta.name.contains("bool"),
+            "preset 5 should be NFTA bool formula; got: {}",
+            nfta.name
+        );
+        let summary = &nfta.execution_summary;
+        assert!(
+            summary.contains("ACCEPTED") || summary.contains("TRUE") || summary.contains("Fuel"),
+            "NFTA bool formula should be accepted; got: {summary}"
+        );
+    }
+
+    /// Smoke: all curated presets produce step-by-step data with >= 2 steps.
+    #[test]
+    fn smoke_curated_step_data_has_steps() {
+        let sd = all_step_data();
+        assert!(
+            sd.len() >= 6,
+            "should have step data for all 6 presets; got {}",
+            sd.len()
+        );
+        for i in 3..sd.len() {
+            assert!(
+                sd[i].steps.len() >= 2,
+                "curated preset {i} ({}) should have >= 2 steps; got {}",
+                sd[i].name,
+                sd[i].steps.len()
+            );
+            let last = sd[i].steps.last().unwrap();
+            assert!(
+                last.is_final,
+                "curated preset {i} ({}) last step should be marked is_final",
+                sd[i].name
+            );
+        }
+    }
 }

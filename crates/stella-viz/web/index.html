@@ -32,7 +32,7 @@
     overflow: hidden;
   }
   .sidebar {
-    width: 280px;
+    width: 290px;
     flex-shrink: 0;
     background: #161b22;
     border-right: 1px solid #30363d;
@@ -47,6 +47,17 @@
     letter-spacing: 0.08em;
     padding: 12px 14px 6px;
     border-bottom: 1px solid #21262d;
+  }
+  .sidebar .section-label {
+    font-size: 0.68rem;
+    color: #58a6ff;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding: 8px 14px 4px;
+    background: #0d1117;
+    border-bottom: 1px solid #21262d;
+    border-top: 2px solid #1f3352;
+    margin-top: 4px;
   }
   .preset-btn {
     display: block;
@@ -64,6 +75,9 @@
   }
   .preset-btn:hover { background: #21262d; }
   .preset-btn.active { background: #1f3352; color: #58a6ff; }
+  .preset-btn.curated { border-left: 2px solid #388bfd44; }
+  .preset-btn.curated:hover { background: #192035; }
+  .preset-btn.curated.active { background: #1a2540; border-left-color: #58a6ff; }
   .preset-btn .preset-name { font-weight: 600; }
   .preset-btn .preset-desc {
     margin-top: 4px;
@@ -107,6 +121,11 @@
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .toolbar .kbd-hint {
+    font-size: 0.68rem;
+    color: #484f58;
     white-space: nowrap;
   }
   .toolbar button#btn-reset {
@@ -173,6 +192,7 @@
     font-size: 0.78rem;
     color: #c9d1d9;
     line-height: 1.7;
+    width: 100%;
   }
   .step-entry {
     margin-bottom: 10px;
@@ -180,14 +200,23 @@
     background: #21262d;
     border-radius: 6px;
     border-left: 3px solid #30363d;
+    cursor: pointer;
+    transition: background 0.1s;
   }
+  .step-entry:hover { background: #2a313b; }
   .step-entry.current {
     border-left-color: #58a6ff;
     background: #1f3352;
   }
+  .step-entry.current:hover { background: #1f3d65; }
   .step-entry.final-step {
     border-left-color: #3fb950;
     background: #1b2d1f;
+  }
+  .step-entry.final-step:hover { background: #1f3525; }
+  .step-entry.current.final-step {
+    border-left-color: #3fb950;
+    background: #1a3025;
   }
   .step-label {
     font-weight: 600;
@@ -220,12 +249,36 @@
     color: #e6edf3;
     margin-bottom: 4px;
   }
-  .step-ray {
-    font-size: 0.71rem;
+  .step-stars .star {
+    display: block;
+    padding: 2px 0;
+  }
+  .step-stars .star .ray-pos  { color: #56d364; }
+  .step-stars .star .ray-neg  { color: #f85149; }
+  .step-stars .star .ray-neu  { color: #c9d1d9; }
+  /* Active matchable ray-pair highlight */
+  .step-ray-block {
+    margin-top: 5px;
+    padding: 5px 8px;
+    background: #2a1f0a;
+    border: 1px solid #7d4e0055;
+    border-left: 3px solid #f0883e;
+    border-radius: 4px;
+    font-size: 0.70rem;
     color: #f0883e;
     font-style: italic;
+    line-height: 1.5;
   }
-  .step-ray:empty { display: none; }
+  .step-ray-block .ray-label {
+    font-style: normal;
+    font-weight: 600;
+    font-size: 0.65rem;
+    color: #d29922;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 2px;
+  }
+  .step-ray-block:empty { display: none; }
 
   /* Active ray highlight in dep-graph panel header */
   #graph-panel-header .active-info {
@@ -234,6 +287,9 @@
     text-transform: none;
     letter-spacing: 0;
     margin-top: 2px;
+  }
+  #graph-panel-header .active-info.normal-form {
+    color: #3fb950;
   }
 
   /* WASM loading banner */
@@ -255,13 +311,13 @@
 
 <header>
   <h1>stella-viz</h1>
-  <span>Stellar Resolution Explorer — static GitHub Pages build (Rust/WASM engine, no server)</span>
+  <span>Stellar Resolution Explorer &mdash; static GitHub Pages build (Rust/WASM engine, no server)</span>
 </header>
 
 <div class="main">
   <div class="sidebar" id="sidebar">
-    <h2>Presets</h2>
-    <div id="preset-list"><span class="loading" style="padding:14px;display:block;">Initialising WASM engine…</span></div>
+    <h2>Constellations</h2>
+    <div id="preset-list"><span class="loading" style="padding:14px;display:block;">Initialising WASM engine&hellip;</span></div>
   </div>
 
   <div class="content">
@@ -269,7 +325,8 @@
       <button id="btn-reset" title="Reset to step 0">&#x21BA; Reset</button>
       <button id="btn-prev" disabled title="Previous step">&#9664; Prev</button>
       <button id="btn-next" disabled title="Next step">Next &#9654;</button>
-      <span class="step-info" id="step-info">Initialising WASM engine…</span>
+      <span class="step-info" id="step-info">Initialising WASM engine&hellip;</span>
+      <span class="kbd-hint">&#8592;&#8594; / click step</span>
     </div>
 
     <div class="panels">
@@ -280,15 +337,15 @@
           <div class="active-info" id="active-ray-info"></div>
         </div>
         <div class="panel-body" id="graph-panel-body">
-          <div id="graph-svg-container"><span class="loading">Initialising WASM engine…</span></div>
+          <div id="graph-svg-container"><span class="loading">Initialising WASM engine&hellip;</span></div>
         </div>
       </div>
 
       <!-- Right panel: step trace -->
-      <div class="panel" style="flex:1; min-width:240px;">
+      <div class="panel" style="flex:1; min-width:250px;">
         <div class="panel-header">IEx step trace &mdash; &#936; at each step</div>
         <div class="panel-body text" id="exec-panel">
-          <span class="loading">Initialising WASM engine…</span>
+          <span class="loading">Initialising WASM engine&hellip;</span>
         </div>
       </div>
     </div>
@@ -296,7 +353,7 @@
 </div>
 
 <!-- Status banner -->
-<div id="wasm-banner">&#9654; Loading WASM engine (stella-core compiled to wasm32-unknown-unknown)…</div>
+<div id="wasm-banner">&#9654; Loading WASM engine (stella-core compiled to wasm32-unknown-unknown)&hellip;</div>
 
 <!-- viz.js via CDN (renders Graphviz DOT to SVG in-browser) -->
 <script src="https://cdn.jsdelivr.net/npm/@viz-js/viz@3/lib/viz-standalone.js"></script>
@@ -305,9 +362,6 @@
 "use strict";
 
 // ── WASM module bootstrap ─────────────────────────────────────────────────────
-// The wasm-pack output is at ./pkg/stella_viz_wasm.js (ES module).
-// We load it dynamically so the page can show a loading state.
-
 import init, { list_presets, get_preset_dot, get_preset_steps, preset_count }
     from "./pkg/stella_viz_wasm.js";
 
@@ -317,6 +371,9 @@ let gPresets = [];         // [{id, name, description}]
 let gSteps = [];           // Current preset's step snapshots
 let gCurrentPresetIdx = -1;
 let gStepIndex = 0;
+
+// Indices 0-2 are "original" presets; 3+ are curated additions.
+const CURATED_START = 3;
 
 // ── Banner helper ─────────────────────────────────────────────────────────────
 const banner = document.getElementById("wasm-banner");
@@ -351,8 +408,16 @@ function renderPresetList() {
     const el = document.getElementById("preset-list");
     el.innerHTML = "";
     gPresets.forEach((p, i) => {
+        // Insert section label before curated presets
+        if (i === CURATED_START) {
+            const lbl = document.createElement("div");
+            lbl.className = "section-label";
+            lbl.textContent = "Curated examples";
+            el.appendChild(lbl);
+        }
+
         const btn = document.createElement("button");
-        btn.className = "preset-btn";
+        btn.className = "preset-btn" + (i >= CURATED_START ? " curated" : "");
         btn.innerHTML = `<div class="preset-name">${esc(p.name)}</div><div class="preset-desc">${esc(p.description)}</div>`;
         btn.addEventListener("click", () => selectPreset(i));
         el.appendChild(btn);
@@ -366,14 +431,14 @@ async function selectPreset(idx) {
     });
 
     document.getElementById("graph-svg-container").innerHTML =
-        `<span class="loading">Computing steps (WASM)…</span>`;
+        `<span class="loading">Computing steps (WASM)&hellip;</span>`;
     document.getElementById("exec-panel").innerHTML =
-        `<span class="loading">Loading…</span>`;
+        `<span class="loading">Loading&hellip;</span>`;
     document.getElementById("step-info").textContent = "Computing step trace…";
     document.getElementById("active-ray-info").textContent = "";
+    document.getElementById("active-ray-info").className = "active-info";
 
     try {
-        // Run synchronously in WASM (all computation is client-side)
         const raw = get_preset_steps(idx);
         gSteps = JSON.parse(raw);
         gCurrentPresetIdx = idx;
@@ -392,10 +457,17 @@ async function renderCurrentStep() {
 
     await renderDot(snap.dot);
 
-    document.getElementById("active-ray-info").textContent =
-        snap.active_ray
-            ? `Next fire: ${snap.active_ray}`
-            : (snap.is_final ? "Normal form reached." : "");
+    const rayInfoEl = document.getElementById("active-ray-info");
+    if (snap.active_ray) {
+        rayInfoEl.textContent = "Next fire: " + snap.active_ray;
+        rayInfoEl.className = "active-info";
+    } else if (snap.is_final) {
+        rayInfoEl.textContent = "Normal form — no more interactions possible.";
+        rayInfoEl.className = "active-info normal-form";
+    } else {
+        rayInfoEl.textContent = "";
+        rayInfoEl.className = "active-info";
+    }
 
     renderTracePanel();
     updateToolbar(snap);
@@ -425,9 +497,40 @@ async function renderDot(dotSrc) {
     }
 }
 
+// ── Coloured ray rendering ────────────────────────────────────────────────────
+function classifyRay(ray) {
+    const s = ray.trim();
+    if (s.startsWith("+")) return "ray-pos";
+    if (s.startsWith("-")) return "ray-neg";
+    return "ray-neu";
+}
+
+function renderStarHtml(starStr) {
+    const inner = starStr.replace(/^\[/, "").replace(/\]$/, "").trim();
+    if (!inner) return `<span style="color:#8b949e;">&#8709;</span>`;
+    const rays = splitTopLevel(inner);
+    return rays
+        .map(r => `<span class="ray ${classifyRay(r)}">${esc(r.trim())}</span>`)
+        .join(`, `);
+}
+
+function splitTopLevel(s) {
+    const parts = [];
+    let depth = 0, cur = "";
+    for (const ch of s) {
+        if (ch === "(") { depth++; cur += ch; }
+        else if (ch === ")") { depth--; cur += ch; }
+        else if (ch === "," && depth === 0) { parts.push(cur); cur = ""; }
+        else { cur += ch; }
+    }
+    if (cur) parts.push(cur);
+    return parts;
+}
+
 function renderTracePanel() {
     const panel = document.getElementById("exec-panel");
     let html = `<div class="step-panel">`;
+
     gSteps.forEach((s, i) => {
         const isCurrent = (i === gStepIndex);
         let cls = "step-entry";
@@ -438,8 +541,16 @@ function renderTracePanel() {
         const badgeCls  = s.is_final ? "badge final"  : "badge";
 
         const starsHtml = s.psi_stars.length > 0
-            ? s.psi_stars.map(st => `<div>${esc(st)}</div>`).join("")
+            ? s.psi_stars.map(st => `<div class="star">[${renderStarHtml(st)}]</div>`).join("")
             : `<div style="color:#8b949e;">&#8709; (empty interaction space)</div>`;
+
+        let rayBlockHtml = "";
+        if (s.active_ray) {
+            rayBlockHtml = `<div class="step-ray-block">
+              <div class="ray-label">Next interaction</div>
+              ${esc(s.active_ray)}
+            </div>`;
+        }
 
         html += `<div class="${cls}" data-step="${i}">
           <div class="step-label">
@@ -447,9 +558,10 @@ function renderTracePanel() {
             <span class="${badgeCls}">${badgeText}</span>
           </div>
           <div class="step-stars">${starsHtml}</div>
-          <div class="step-ray">${esc(s.active_ray)}</div>
+          ${rayBlockHtml}
         </div>`;
     });
+
     html += `</div>`;
     panel.innerHTML = html;
 
@@ -461,7 +573,6 @@ function renderTracePanel() {
                 await renderCurrentStep();
             }
         });
-        el.style.cursor = "pointer";
     });
 
     const current = panel.querySelector(".step-entry.current");
@@ -488,16 +599,22 @@ document.getElementById("btn-next").addEventListener("click", async () => {
     if (gStepIndex < gSteps.length - 1) { gStepIndex++; await renderCurrentStep(); }
 });
 
+// Keyboard navigation
 document.addEventListener("keydown", async (e) => {
-    if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
-    if      (e.key === "ArrowRight" || e.key === "ArrowDown")  {
+    if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" ||
+        e.target.tagName === "SELECT") return;
+    if (e.key === "ArrowRight" || e.key === "ArrowDown") {
         if (gStepIndex < gSteps.length - 1) { gStepIndex++; await renderCurrentStep(); }
-    } else if (e.key === "ArrowLeft"  || e.key === "ArrowUp")    {
+        e.preventDefault();
+    } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
         if (gStepIndex > 0) { gStepIndex--; await renderCurrentStep(); }
+        e.preventDefault();
     } else if (e.key === "Home") {
         gStepIndex = 0; await renderCurrentStep();
+        e.preventDefault();
     } else if (e.key === "End") {
         gStepIndex = gSteps.length - 1; await renderCurrentStep();
+        e.preventDefault();
     }
 });
 
@@ -515,8 +632,8 @@ function esc(s) {
     try {
         setBanner("Loading WASM engine…");
         await Promise.all([
-            init(),          // initialise the WASM module (calls _start → panic hook)
-            initViz(),       // load viz.js CDN
+            init(),       // initialise the WASM module (calls _start → panic hook)
+            initViz(),    // load viz.js CDN
         ]);
         setBanner("WASM engine ready — stella-core running client-side", "ready");
         setTimeout(() => banner.style.display = "none", 2500);
