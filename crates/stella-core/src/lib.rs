@@ -20,6 +20,7 @@ pub mod subst;
 pub mod subjective;
 pub mod reafference;
 pub mod valence;
+pub mod experiment;
 pub mod term;
 pub mod tiles;
 pub mod tm;
