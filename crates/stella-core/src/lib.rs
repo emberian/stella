@@ -21,6 +21,7 @@ pub mod subjective;
 pub mod reafference;
 pub mod valence;
 pub mod experiment;
+pub mod perturbation;
 pub mod term;
 pub mod tiles;
 pub mod tm;
