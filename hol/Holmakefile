@@ -14,4 +14,4 @@ INCLUDES = $(HOLDIR)/src/finite_maps \
 
 # Default: build all theories in dependency order.
 all: stellaTermTheory.uo stellaPolarisedTheory.uo stellaMatchTheory.uo \
-     stellaDiagramTheory.uo
+     stellaDiagramTheory.uo stellaExecutionTheory.uo
