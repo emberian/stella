@@ -1,0 +1,16 @@
+{
+  "name": "stella-viz",
+  "type": "module",
+  "description": "Interactive stellar-resolution explorer / proto theorem-prover UI",
+  "version": "0.1.0",
+  "files": [
+    "stella_viz_wasm_bg.wasm",
+    "stella_viz_wasm.js",
+    "stella_viz_wasm.d.ts"
+  ],
+  "main": "stella_viz_wasm.js",
+  "types": "stella_viz_wasm.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

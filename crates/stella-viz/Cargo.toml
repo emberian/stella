@@ -8,7 +8,24 @@ description = "Interactive stellar-resolution explorer / proto theorem-prover UI
 name = "stella-viz"
 path = "src/main.rs"
 
+# ── WASM / static-site target ────────────────────────────────────────────────
+# When building for wasm32-unknown-unknown the [[bin]] target is excluded
+# automatically (it depends on TcpListener, etc.).  The [lib] crate-type is
+# cdylib so wasm-bindgen can link it.  The `wasm` feature gates all
+# wasm-bindgen usage; it is never activated for native builds.
+[lib]
+name = "stella_viz_wasm"
+path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
+
+[features]
+wasm = ["wasm-bindgen", "console_error_panic_hook"]
+
 [dependencies]
 stella-core = { path = "../stella-core" }
+
+# WASM-only deps — only pulled in when the `wasm` feature is enabled.
+wasm-bindgen     = { version = "0.2", optional = true }
+console_error_panic_hook = { version = "0.1", optional = true }
 
 [dev-dependencies]
