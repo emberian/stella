@@ -18,6 +18,7 @@ pub mod pda;
 pub mod polarised;
 pub mod subst;
 pub mod subjective;
+pub mod reafference;
 pub mod term;
 pub mod tiles;
 pub mod tm;
