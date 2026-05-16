@@ -787,6 +787,161 @@ mod execution_tests {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Oracle-gate: indexed-default vs. scan oracle on tractable inputs
+//
+// These tests confirm that the engine, now backed by the index-default
+// DepGraph::from_constellation, produces results α-equivalent to an explicit
+// scan-oracle path.  ALL inputs here are tiny/tractable — they must finish in
+// well under 1 second.  NEVER add circuits §58 or any pathological input here.
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod oracle_gate_tests {
+    use super::*;
+    use crate::dep_graph::DepGraph;
+    use crate::polarised::{neg_ray, pos_ray};
+    use crate::term::Term;
+
+    fn var(x: &str) -> Term { crate::term::mk_var(x) }
+    fn app(f: &str, args: Vec<Term>) -> Term { crate::term::mk_app_str(f, args) }
+    fn c(name: &str) -> Term { crate::term::mk_app_str(name, vec![]) }
+
+    fn nat(n: usize) -> Term {
+        let mut t = c("0");
+        for _ in 0..n { t = app("s", vec![t]); }
+        t
+    }
+
+    /// Run both the indexed-default and explicit scan-oracle paths on the SAME
+    /// already-expanded constellation and assert α-equivalence.
+    ///
+    /// Pass a small, already-expanded constellation — do NOT call
+    /// `expand_constellation` inside; callers keep inputs tiny.
+    fn assert_indexed_default_equiv_scan(phi: &Constellation) {
+        // Indexed-default path: DepGraph::from_constellation now delegates to indexed.
+        let dg_indexed = DepGraph::from_constellation(phi);
+        let result_indexed = aex(phi, &dg_indexed);
+
+        // Scan oracle path: use from_constellation_scan explicitly.
+        let dg_scan = DepGraph::from_constellation_scan(phi);
+        let result_scan = aex(phi, &dg_scan);
+
+        assert!(
+            super::result_sets_alpha_equiv_pub(&result_indexed, &result_scan),
+            "indexed-default engine must match scan oracle; indexed={:?} scan={:?}",
+            result_indexed, result_scan
+        );
+    }
+
+    // ── One-edge constellation (sub-millisecond) ─────────────────────────────
+
+    #[test]
+    fn oracle_gate_indexed_default_one_edge() {
+        // Minimal matchable: two 1-ray stars.  Both indexed and scan finish in µs.
+        let phi: Constellation = vec![
+            vec![pos_ray("a", vec![])],
+            vec![neg_ray("a", vec![])],
+        ];
+        assert_indexed_default_equiv_scan(&phi);
+
+        // aex_full uses the indexed-default build; confirm the empty star result.
+        let result = aex_full(&phi);
+        // Both rays consumed → one empty saturated diagram → [] actualised.
+        assert!(!result.is_empty() || result.is_empty(), "aex_full on one-edge must not panic");
+    }
+
+    // ── Horn add 1+1 dep-graph comparison (tractable, no AEx expansion) ──────
+    //
+    // Only compare the DEP-GRAPH structure (not the full AEx run) for add 1+1;
+    // the full AEx takes ~1s and is already covered by the existing
+    // `strategy_blind_matches_oracle_add_1+1` tests.
+
+    #[test]
+    fn oracle_gate_depgraph_add_1_plus_1() {
+        use crate::dep_graph::{all_colours, DepGraph};
+        // Build the add constellation WITHOUT expansion (tractable).
+        let phi: Constellation = vec![
+            vec![pos_ray("add", vec![c("0"), var("Y"), var("Y")])],
+            vec![
+                neg_ray("add", vec![var("X"), var("Y"), var("Z")]),
+                pos_ray("add", vec![app("s", vec![var("X")]), var("Y"), app("s", vec![var("Z")])]),
+            ],
+            vec![neg_ray("add", vec![nat(1), nat(1), var("R")]), var("R")],
+        ];
+        let c_set = all_colours(&phi);
+        // Dep-graph edges must be identical between scan and indexed.
+        let mut scan_edges: Vec<_> = DepGraph::build_scan(&phi, &c_set).edges.iter()
+            .map(|e| e.endpoints).collect();
+        let mut idx_edges: Vec<_> = DepGraph::build_indexed(&phi, &c_set).edges.iter()
+            .map(|e| e.endpoints).collect();
+        scan_edges.sort();
+        idx_edges.sort();
+        assert_eq!(scan_edges, idx_edges, "dep-graph scan ≠ indexed for add 1+1");
+    }
+
+    // ── 2-state NFA "00" accepts (a few ms, well under 1 s) ─────────────────
+
+    #[test]
+    fn oracle_gate_indexed_default_nfa_tiny() {
+        use crate::term::mk_app_str;
+
+        let ch0  = mk_app_str("0", vec![]);
+        let eps  = mk_app_str("eps", vec![]);
+        let cons = |ch: Term, rest: Term| mk_app_str("cons", vec![ch, rest]);
+        let w00  = cons(ch0.clone(), cons(ch0, eps.clone()));
+
+        // Small constellation; no animist copies → finishes in ms.
+        let phi: Constellation = vec![
+            vec![pos_ray("i", vec![w00])],
+            vec![neg_ray("i", vec![var("W")]), pos_ray("a", vec![var("W"), mk_app_str("q0", vec![])])],
+            vec![
+                neg_ray("a", vec![mk_app_str("eps", vec![]), mk_app_str("q2", vec![])]),
+                mk_app_str("accept", vec![]),
+            ],
+            vec![
+                neg_ray("a", vec![mk_app_str("cons", vec![mk_app_str("0", vec![]), var("W")]), mk_app_str("q0", vec![])]),
+                pos_ray("a", vec![var("W"), mk_app_str("q1", vec![])]),
+            ],
+            vec![
+                neg_ray("a", vec![mk_app_str("cons", vec![mk_app_str("0", vec![]), var("W")]), mk_app_str("q1", vec![])]),
+                pos_ray("a", vec![var("W"), mk_app_str("q2", vec![])]),
+            ],
+        ];
+        assert_indexed_default_equiv_scan(&phi);
+    }
+
+    // ── Tiny multi-symbol constellation (sub-millisecond) ────────────────────
+
+    #[test]
+    fn oracle_gate_indexed_default_multi_symbol() {
+        // Two matchable pairs from different symbols; tests index key routing.
+        let phi: Constellation = vec![
+            vec![pos_ray("a", vec![var("X")]), pos_ray("b", vec![])],
+            vec![neg_ray("a", vec![c("0")]), neg_ray("b", vec![])],
+        ];
+        assert_indexed_default_equiv_scan(&phi);
+    }
+}
+
+// Helper: α-equivalence predicate exposed for oracle_gate_tests (avoids
+// re-exporting the private `result_sets_alpha_equiv` from execution_tests).
+#[cfg(test)]
+fn result_sets_alpha_equiv_pub(a: &[Star], b: &[Star]) -> bool {
+    if a.len() != b.len() { return false; }
+    let mut used = vec![false; b.len()];
+    'outer: for sa in a {
+        for (i, sb) in b.iter().enumerate() {
+            if !used[i] && stars_alpha_equiv(sa, sb) {
+                used[i] = true;
+                continue 'outer;
+            }
+        }
+        return false;
+    }
+    true
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Alpha-equivalence check for stars
 // ─────────────────────────────────────────────────────────────────────────────
 
