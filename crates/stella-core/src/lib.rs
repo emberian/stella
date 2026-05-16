@@ -7,6 +7,7 @@ pub mod constellation;
 pub mod dep_graph;
 pub mod diagram;
 pub mod execution;
+pub mod strategy;
 pub mod interactive;
 pub mod pda;
 pub mod polarised;

@@ -1,4 +1,15 @@
 //! Abstract execution `AEx_C(Φ)` (Eng §49.42) and saturation.
+//!
+//! # Engine variants
+//!
+//! | Function | Strategy | Description |
+//! |---|---|---|
+//! | `aex_full` | `Blind` (DFS) | Reference oracle; original behaviour |
+//! | `aex_stratified` | any `SelectionStrategy` | Strategy-threaded saturation |
+//! | `aex_seminaive` | `Blind`-equivalent | Worklist fixpoint with dedup-on-insert |
+//!
+//! All three produce α-equivalent result sets on well-formed constellations
+//! (verified by the oracle-faithfulness tests below).
 
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::HashSet;
@@ -6,6 +17,7 @@ use std::collections::HashSet;
 use crate::constellation::{Constellation, RayId, Star};
 use crate::dep_graph::{AdjIndex, DepEdge, DepGraph};
 use crate::diagram::{Diagram, DiagramEdge};
+use crate::strategy::{Blind, Candidate, SelectionStrategy};
 
 const MAX_VERTICES: usize = 16;
 
@@ -135,10 +147,19 @@ impl DiagBuilder {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Saturation
+// Saturation (strategy-threaded core)
 // ─────────────────────────────────────────────────────────────────────────────
 
-pub fn saturated_diagrams(phi: &Constellation, dg: &DepGraph) -> Vec<Diagram> {
+/// Enumerate all saturated diagrams using the given selection strategy.
+///
+/// The strategy reorders the candidate extensions at each step; all candidates
+/// are still explored (no pruning), so completeness is preserved.
+/// `Blind` (the default) produces the same output as the original algorithm.
+pub fn saturated_diagrams_with_strategy(
+    phi: &Constellation,
+    dg: &DepGraph,
+    strategy: &dyn SelectionStrategy,
+) -> Vec<Diagram> {
     let adj_idx = AdjIndex::build(dg);
 
     let mut saturated: Vec<Diagram> = Vec::new();
@@ -155,7 +176,9 @@ pub fn saturated_diagrams(phi: &Constellation, dg: &DepGraph) -> Vec<Diagram> {
 
     while let Some(b) = stack.pop() {
         let mut any_extension_exists = false;
-        let mut new_extensions: Vec<DiagBuilder> = Vec::new();
+        // Collect raw candidate (builder, is_feasible) pairs together with
+        // Candidate metadata for the strategy to sort.
+        let mut raw: Vec<(DiagBuilder, Candidate)> = Vec::new();
 
         for v in 0..b.n_vertices() {
             let si = b.vertex_star[v];
@@ -169,6 +192,7 @@ pub fn saturated_diagrams(phi: &Constellation, dg: &DepGraph) -> Vec<Diagram> {
                     let (si2, j2) = rid_other;
                     let dep_edge = dg.edges[e_didx].clone();
 
+                    // Case A: connect to an existing vertex.
                     for v2 in 0..b.n_vertices() {
                         if v2 == v { continue; }
                         if b.vertex_star[v2] != si2 { continue; }
@@ -178,11 +202,23 @@ pub fn saturated_diagrams(phi: &Constellation, dg: &DepGraph) -> Vec<Diagram> {
                         if b2.add_edge(v, j, v2, j2, dep_edge.clone()).is_some() {
                             let key = b2.canonical_key(phi);
                             if visited.insert(key) {
-                                new_extensions.push(b2);
+                                // Count free rays after this extension.
+                                let free_count = count_free_rays(&b2, phi);
+                                let cand = Candidate {
+                                    src_vertex: v,
+                                    src_ray: j,
+                                    dst_vertex: v2,
+                                    dst_ray: j2,
+                                    is_new_vertex: false,
+                                    result_n_vertices: b2.n_vertices(),
+                                    result_free_rays: free_count,
+                                };
+                                raw.push((b2, cand));
                             }
                         }
                     }
 
+                    // Case B: introduce a new vertex.
                     if b.n_vertices() < MAX_VERTICES {
                         any_extension_exists = true;
                         let mut b2 = b.clone();
@@ -190,7 +226,17 @@ pub fn saturated_diagrams(phi: &Constellation, dg: &DepGraph) -> Vec<Diagram> {
                         if b2.add_edge(v, j, v2, j2, dep_edge.clone()).is_some() {
                             let key = b2.canonical_key(phi);
                             if visited.insert(key) {
-                                new_extensions.push(b2);
+                                let free_count = count_free_rays(&b2, phi);
+                                let cand = Candidate {
+                                    src_vertex: v,
+                                    src_ray: j,
+                                    dst_vertex: v2,
+                                    dst_ray: j2,
+                                    is_new_vertex: true,
+                                    result_n_vertices: b2.n_vertices(),
+                                    result_free_rays: free_count,
+                                };
+                                raw.push((b2, cand));
                             }
                         }
                     }
@@ -205,20 +251,85 @@ pub fn saturated_diagrams(phi: &Constellation, dg: &DepGraph) -> Vec<Diagram> {
                     saturated.push(b.to_diagram());
                 }
             }
-        } else {
-            stack.extend(new_extensions);
+        } else if !raw.is_empty() {
+            // Let the strategy reorder the candidates.
+            let mut cand_meta: Vec<Candidate> = raw.iter().map(|(_, c)| c.clone()).collect();
+            strategy.order(&mut cand_meta, phi, dg);
+
+            // Build a permutation: for each position in cand_meta, find the
+            // matching original index by (src_vertex, src_ray, dst_vertex, dst_ray, is_new_vertex).
+            // We rely on the fact that (src_v, src_j, dst_v, dst_j, is_new) is unique
+            // within a single expansion step (the visited check de-duplicates).
+            // Simple O(n^2) match — n is tiny (usually < 20).
+            let mut used = vec![false; raw.len()];
+            let mut ordered_builders: Vec<DiagBuilder> = Vec::with_capacity(raw.len());
+            for cm in &cand_meta {
+                for (orig_idx, (b2, c2)) in raw.iter().enumerate() {
+                    if !used[orig_idx]
+                        && c2.src_vertex == cm.src_vertex
+                        && c2.src_ray == cm.src_ray
+                        && c2.dst_vertex == cm.dst_vertex
+                        && c2.dst_ray == cm.dst_ray
+                        && c2.is_new_vertex == cm.is_new_vertex
+                    {
+                        used[orig_idx] = true;
+                        ordered_builders.push(b2.clone());
+                        break;
+                    }
+                }
+            }
+            // Any unmatched (due to ties) are appended in original order.
+            for (orig_idx, (b2, _)) in raw.iter().enumerate() {
+                if !used[orig_idx] {
+                    ordered_builders.push(b2.clone());
+                }
+            }
+
+            stack.extend(ordered_builders);
         }
+        // (if raw is empty but any_extension_exists is true, those candidates
+        // were already in `visited`; skip silently — the diagram is not saturated.)
     }
 
     saturated
 }
 
+/// Count free (unused) rays in a partial diagram builder.
+fn count_free_rays(b: &DiagBuilder, phi: &Constellation) -> usize {
+    let mut count = 0;
+    for (v, &si) in b.vertex_star.iter().enumerate() {
+        let n = phi[si].len();
+        count += n - b.vertex_used_rays[v].len();
+    }
+    count
+}
+
+/// Enumerate all saturated diagrams using the `Blind` (oracle) strategy.
+///
+/// This is the original algorithm; behaviour is preserved exactly.
+pub fn saturated_diagrams(phi: &Constellation, dg: &DepGraph) -> Vec<Diagram> {
+    saturated_diagrams_with_strategy(phi, dg, &Blind)
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
-// Abstract Execution
+// Abstract Execution — core and public API
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// Run AEx using the `Blind` (oracle) strategy.  This is the original behaviour.
 pub fn aex(phi: &Constellation, dg: &DepGraph) -> Vec<Star> {
-    let sats = saturated_diagrams(phi, dg);
+    aex_with_strategy(phi, dg, &Blind)
+}
+
+/// Run AEx using the given selection strategy.
+///
+/// Produces a set of result stars that is α-equivalent to `aex` on
+/// well-formed constellations (all strategies are complete).
+pub fn aex_with_strategy(
+    phi: &Constellation,
+    dg: &DepGraph,
+    strategy: &dyn SelectionStrategy,
+) -> Vec<Star> {
+    let sats = saturated_diagrams_with_strategy(phi, dg, strategy);
     sats.into_iter()
         .filter_map(|d| {
             if d.is_correct(phi) { d.actualise(phi) } else { None }
@@ -246,8 +357,433 @@ pub fn aex_with_copies(phi: &Constellation, copies: usize) -> Vec<Star> {
     aex(&expanded, &dg)
 }
 
+/// Reference oracle: `Blind` saturation with 2 animist copies.
 pub fn aex_full(phi: &Constellation) -> Vec<Star> {
     aex_with_copies(phi, 2)
+}
+
+/// Run AEx with a custom strategy and `copies` animist copies.
+pub fn aex_full_stratified(
+    phi: &Constellation,
+    copies: usize,
+    strategy: &dyn SelectionStrategy,
+) -> Vec<Star> {
+    let expanded = expand_constellation(phi, copies);
+    let dg = DepGraph::from_constellation(&expanded);
+    aex_with_strategy(&expanded, &dg, strategy)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Semi-naive / worklist fixpoint fast path
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Semi-naive worklist fixpoint over saturated diagrams.
+///
+/// This is an ALTERNATIVE execution engine (not a strategy variant).  It
+/// maintains a worklist of partial `DiagBuilder`s and a global dedup set.
+/// Diagrams are deduplicated on insertion rather than on pop, which avoids
+/// re-expanding duplicate states and is closer in spirit to semi-naive
+/// evaluation in Datalog.
+///
+/// The result set is α-equivalent to `aex_full` on well-formed constellations;
+/// see the `oracle_faithfulness_*` tests below.
+///
+/// Internally uses `Blind` ordering (LIFO stack) so the exploration shape is
+/// identical to the reference engine when there are no duplicates.  The
+/// performance gain comes from the dedup-on-insert: states that are
+/// canonically identical to an already-queued builder are dropped immediately
+/// rather than expanded and then discarded on the pop step.
+pub fn aex_seminaive(phi: &Constellation, dg: &DepGraph) -> Vec<Star> {
+    let sats = seminaive_saturated_diagrams(phi, dg);
+    sats.into_iter()
+        .filter_map(|d| {
+            if d.is_correct(phi) { d.actualise(phi) } else { None }
+        })
+        .collect()
+}
+
+/// Semi-naive saturated-diagram enumeration with dedup-on-insert.
+pub fn seminaive_saturated_diagrams(phi: &Constellation, dg: &DepGraph) -> Vec<Diagram> {
+    let adj_idx = AdjIndex::build(dg);
+
+    let mut saturated: Vec<Diagram> = Vec::new();
+    let mut saturated_keys: HashSet<String> = HashSet::new();
+
+    // The worklist is a `HashSet`-backed queue (dedup on insert).
+    // We use a `Vec` for LIFO order with a `HashSet<String>` for O(1) membership.
+    let mut worklist: Vec<DiagBuilder> = Vec::new();
+    let mut in_worklist: HashSet<String> = HashSet::new();
+
+    // Seed the worklist with one-vertex diagrams.
+    for seed in (0..phi.len()).map(DiagBuilder::new_single) {
+        let key = seed.canonical_key(phi);
+        if in_worklist.insert(key) {
+            worklist.push(seed);
+        }
+    }
+
+    while let Some(b) = worklist.pop() {
+        let mut any_extension_exists = false;
+
+        for v in 0..b.n_vertices() {
+            let si = b.vertex_star[v];
+            let n_rays = phi[si].len();
+            for j in 0..n_rays {
+                if b.vertex_used_rays[v].contains(&j) {
+                    continue;
+                }
+                let rid: RayId = (si, j);
+                for &(e_didx, rid_other) in adj_idx.neighbours(rid) {
+                    let (si2, j2) = rid_other;
+                    let dep_edge = dg.edges[e_didx].clone();
+
+                    // Case A: existing vertex.
+                    for v2 in 0..b.n_vertices() {
+                        if v2 == v { continue; }
+                        if b.vertex_star[v2] != si2 { continue; }
+                        if b.vertex_used_rays[v2].contains(&j2) { continue; }
+                        any_extension_exists = true;
+                        let mut b2 = b.clone();
+                        if b2.add_edge(v, j, v2, j2, dep_edge.clone()).is_some() {
+                            let key = b2.canonical_key(phi);
+                            // Dedup-on-insert: only enqueue if not already known.
+                            if in_worklist.insert(key) {
+                                worklist.push(b2);
+                            }
+                        }
+                    }
+
+                    // Case B: new vertex.
+                    if b.n_vertices() < MAX_VERTICES {
+                        any_extension_exists = true;
+                        let mut b2 = b.clone();
+                        let v2 = b2.add_vertex(si2);
+                        if b2.add_edge(v, j, v2, j2, dep_edge.clone()).is_some() {
+                            let key = b2.canonical_key(phi);
+                            if in_worklist.insert(key) {
+                                worklist.push(b2);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if !any_extension_exists {
+            if b.is_connected() {
+                let sat_key = b.canonical_key(phi);
+                if saturated_keys.insert(sat_key) {
+                    saturated.push(b.to_diagram());
+                }
+            }
+        }
+    }
+
+    saturated
+}
+
+/// Convenience wrapper: semi-naive AEx with 2 animist copies (mirrors `aex_full`).
+pub fn aex_seminaive_full(phi: &Constellation) -> Vec<Star> {
+    let expanded = expand_constellation(phi, 2);
+    let dg = DepGraph::from_constellation(&expanded);
+    aex_seminaive(&expanded, &dg)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Oracle-faithfulness tests
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod execution_tests {
+    use super::*;
+    use crate::strategy::{Blind, RoundRobin, SmallestFirst};
+    use crate::polarised::{neg_ray, pos_ray};
+    use crate::term::Term;
+
+    fn var(x: &str) -> Term { crate::term::mk_var(x) }
+    fn app(f: &str, args: Vec<Term>) -> Term { crate::term::mk_app_str(f, args) }
+    fn c(name: &str) -> Term { crate::term::mk_app_str(name, vec![]) }
+
+    fn nat(n: usize) -> Term {
+        let mut t = c("0");
+        for _ in 0..n { t = app("s", vec![t]); }
+        t
+    }
+
+    /// Check that two result-star sets are α-equivalent (same multiset up to
+    /// permutation and per-star α-equivalence).
+    fn result_sets_alpha_equiv(a: &[Star], b: &[Star]) -> bool {
+        if a.len() != b.len() { return false; }
+        let mut used = vec![false; b.len()];
+        'outer: for sa in a {
+            for (i, sb) in b.iter().enumerate() {
+                if !used[i] && stars_alpha_equiv(sa, sb) {
+                    used[i] = true;
+                    continue 'outer;
+                }
+            }
+            return false; // sa not matched
+        }
+        true
+    }
+
+    // ── Helper constellations ─────────────────────────────────────────────────
+
+    fn add_prog() -> Constellation {
+        vec![
+            vec![pos_ray("add", vec![c("0"), var("Y"), var("Y")])],
+            vec![
+                neg_ray("add", vec![var("X"), var("Y"), var("Z")]),
+                pos_ray("add", vec![app("s", vec![var("X")]), var("Y"), app("s", vec![var("Z")])]),
+            ],
+        ]
+    }
+
+    fn query_star(m: usize, n: usize) -> Star {
+        vec![
+            neg_ray("add", vec![nat(m), nat(n), var("R")]),
+            var("R"),
+        ]
+    }
+
+    fn add_constellation(m: usize, n: usize) -> Constellation {
+        let mut phi = add_prog();
+        phi.push(query_star(m, n));
+        phi
+    }
+
+    /// Tiny NFA-like constellation: [+a] + [-a, +b] + [-b].
+    fn tiny_chain() -> Constellation {
+        vec![
+            vec![pos_ray("a", vec![])],
+            vec![neg_ray("a", vec![]), pos_ray("b", vec![])],
+            vec![neg_ray("b", vec![])],
+        ]
+    }
+
+    // ── 1. Blind strategy reproduces aex_full ─────────────────────────────────
+
+    #[test]
+    fn strategy_blind_matches_oracle_add_1_plus_1() {
+        let phi = add_constellation(1, 1);
+        let oracle = aex_full(&phi);
+        let blind = aex_full_stratified(&phi, 2, &Blind);
+        assert!(
+            result_sets_alpha_equiv(&oracle, &blind),
+            "Blind strategy must reproduce oracle for 1+1: oracle={:?} blind={:?}",
+            oracle, blind
+        );
+    }
+
+    #[test]
+    fn strategy_blind_matches_oracle_add_2_plus_2() {
+        let phi = add_constellation(2, 2);
+        let oracle = aex_full(&phi);
+        let blind = aex_full_stratified(&phi, 2, &Blind);
+        assert!(
+            result_sets_alpha_equiv(&oracle, &blind),
+            "Blind strategy must reproduce oracle for 2+2: oracle={:?} blind={:?}",
+            oracle, blind
+        );
+    }
+
+    // ── 2. SmallestFirst strategy is oracle-faithful ──────────────────────────
+
+    #[test]
+    fn strategy_smallest_first_faithful_add_1_plus_1() {
+        let phi = add_constellation(1, 1);
+        let oracle = aex_full(&phi);
+        let smart = aex_full_stratified(&phi, 2, &SmallestFirst);
+        assert!(
+            result_sets_alpha_equiv(&oracle, &smart),
+            "SmallestFirst must be oracle-faithful for 1+1: oracle={:?} smart={:?}",
+            oracle, smart
+        );
+    }
+
+    #[test]
+    fn strategy_smallest_first_faithful_add_2_plus_2() {
+        let phi = add_constellation(2, 2);
+        let oracle = aex_full(&phi);
+        let smart = aex_full_stratified(&phi, 2, &SmallestFirst);
+        assert!(
+            result_sets_alpha_equiv(&oracle, &smart),
+            "SmallestFirst must be oracle-faithful for 2+2: oracle={:?} smart={:?}",
+            oracle, smart
+        );
+    }
+
+    #[test]
+    fn strategy_smallest_first_faithful_tiny_chain() {
+        let phi = tiny_chain();
+        let dg = DepGraph::from_constellation(&phi);
+        let oracle: Vec<Star> = aex(&phi, &dg);
+        let smart: Vec<Star> = aex_with_strategy(&phi, &dg, &SmallestFirst);
+        assert!(
+            result_sets_alpha_equiv(&oracle, &smart),
+            "SmallestFirst on tiny chain: oracle={:?} smart={:?}",
+            oracle, smart
+        );
+    }
+
+    // ── 3. RoundRobin strategy is oracle-faithful ─────────────────────────────
+
+    #[test]
+    fn strategy_round_robin_faithful_add_1_plus_1() {
+        let phi = add_constellation(1, 1);
+        let oracle = aex_full(&phi);
+        let rr = aex_full_stratified(&phi, 2, &RoundRobin);
+        assert!(
+            result_sets_alpha_equiv(&oracle, &rr),
+            "RoundRobin must be oracle-faithful for 1+1: oracle={:?} rr={:?}",
+            oracle, rr
+        );
+    }
+
+    #[test]
+    fn strategy_round_robin_faithful_tiny_chain() {
+        let phi = tiny_chain();
+        let dg = DepGraph::from_constellation(&phi);
+        let oracle: Vec<Star> = aex(&phi, &dg);
+        let rr: Vec<Star> = aex_with_strategy(&phi, &dg, &RoundRobin);
+        assert!(
+            result_sets_alpha_equiv(&oracle, &rr),
+            "RoundRobin on tiny chain: oracle={:?} rr={:?}",
+            oracle, rr
+        );
+    }
+
+    // ── 4. Semi-naive fast path is oracle-faithful ────────────────────────────
+
+    #[test]
+    fn seminaive_faithful_tiny_pair() {
+        // Smallest case: [+a] + [-a].
+        let phi = vec![
+            vec![pos_ray("a", vec![])],
+            vec![neg_ray("a", vec![])],
+        ];
+        let dg = DepGraph::from_constellation(&phi);
+        let oracle: Vec<Star> = aex(&phi, &dg);
+        let fast: Vec<Star> = aex_seminaive(&phi, &dg);
+        assert!(
+            result_sets_alpha_equiv(&oracle, &fast),
+            "seminaive must match oracle on tiny pair: oracle={:?} fast={:?}",
+            oracle, fast
+        );
+    }
+
+    #[test]
+    fn seminaive_faithful_add_1_plus_1() {
+        let phi = add_constellation(1, 1);
+        let oracle = aex_full(&phi);
+        let fast = aex_seminaive_full(&phi);
+        assert!(
+            result_sets_alpha_equiv(&oracle, &fast),
+            "seminaive must match oracle for 1+1: oracle={:?} fast={:?}",
+            oracle, fast
+        );
+        // Also confirm the expected value appears.
+        let expected = vec![nat(2)];
+        assert!(fast.iter().any(|s| stars_alpha_equiv(s, &expected)),
+            "seminaive 1+1 must contain [2]: got {:?}", fast);
+    }
+
+    #[test]
+    fn seminaive_faithful_add_2_plus_2() {
+        let phi = add_constellation(2, 2);
+        let oracle = aex_full(&phi);
+        let fast = aex_seminaive_full(&phi);
+        assert!(
+            result_sets_alpha_equiv(&oracle, &fast),
+            "seminaive must match oracle for 2+2: oracle={:?} fast={:?}",
+            oracle, fast
+        );
+        let expected = vec![nat(4)];
+        assert!(fast.iter().any(|s| stars_alpha_equiv(s, &expected)),
+            "seminaive 2+2 must contain [4]: got {:?}", fast);
+    }
+
+    #[test]
+    fn seminaive_faithful_tiny_chain() {
+        let phi = tiny_chain();
+        let dg = DepGraph::from_constellation(&phi);
+        let oracle: Vec<Star> = aex(&phi, &dg);
+        let fast: Vec<Star> = aex_seminaive(&phi, &dg);
+        assert!(
+            result_sets_alpha_equiv(&oracle, &fast),
+            "seminaive on tiny chain: oracle={:?} fast={:?}",
+            oracle, fast
+        );
+    }
+
+    // ── 5. NFA small constellation (oracle-faithfulness) ──────────────────────
+
+    #[test]
+    fn seminaive_faithful_nfa_accept() {
+        // Eng Fig 56.1 NFA accepting words ending in "00".
+        // Build the constellation directly for word "00".
+        use crate::term::mk_app_str;
+
+        let eps = mk_app_str("eps", vec![]);
+        let ch0 = mk_app_str("0", vec![]);
+        let cons = |c: Term, rest: Term| mk_app_str("cons", vec![c, rest]);
+        let w00 = cons(ch0, cons(ch0, eps));
+
+        // Word star: [+i(0·0·eps)]
+        let word_star = vec![pos_ray("i", vec![w00])];
+
+        // Initial: [-i(W), +a(W, q0)]
+        let init = vec![
+            neg_ray("i", vec![var("W")]),
+            pos_ray("a", vec![var("W"), mk_app_str("q0", vec![])]),
+        ];
+
+        // Final: [-a(eps, q2), accept]
+        let fin_ = vec![
+            neg_ray("a", vec![mk_app_str("eps", vec![]), mk_app_str("q2", vec![])]),
+            mk_app_str("accept", vec![]),
+        ];
+
+        // Transitions (one copy each):
+        // q0 --0--> q1: [-a(cons(0,W), q0), +a(W, q1)]
+        let t1 = vec![
+            neg_ray("a", vec![
+                mk_app_str("cons", vec![mk_app_str("0", vec![]), var("W")]),
+                mk_app_str("q0", vec![]),
+            ]),
+            pos_ray("a", vec![var("W"), mk_app_str("q1", vec![])]),
+        ];
+        // q1 --0--> q2: [-a(cons(0,W), q1), +a(W, q2)]
+        let t2 = vec![
+            neg_ray("a", vec![
+                mk_app_str("cons", vec![mk_app_str("0", vec![]), var("W")]),
+                mk_app_str("q1", vec![]),
+            ]),
+            pos_ray("a", vec![var("W"), mk_app_str("q2", vec![])]),
+        ];
+
+        let phi: Constellation = vec![word_star, init, fin_, t1, t2];
+        let dg = DepGraph::from_constellation(&phi);
+        let oracle: Vec<Star> = aex(&phi, &dg);
+        let fast: Vec<Star> = aex_seminaive(&phi, &dg);
+
+        assert!(
+            result_sets_alpha_equiv(&oracle, &fast),
+            "seminaive NFA: oracle={:?} fast={:?}",
+            oracle, fast
+        );
+
+        // The accept star should be present.
+        let accept_star: Star = vec![mk_app_str("accept", vec![])];
+        assert!(
+            oracle.iter().any(|s| s == &accept_star),
+            "oracle should contain [accept] for word '00'"
+        );
+        assert!(
+            fast.iter().any(|s| s == &accept_star),
+            "seminaive should contain [accept] for word '00'"
+        );
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
