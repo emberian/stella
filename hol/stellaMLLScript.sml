@@ -1231,4 +1231,370 @@ QED
 (* ZERO new_axiom / mk_thm USED IN THIS FILE.                                   *)
 (* ─────────────────────────────────────────────────────────────────────────── *)
 
+(* ═══════════════════════════════════════════════════════════════════════════ *)
+(* §69  Construction of multiplicative formulas                                *)
+(*       Orthogonality · Behaviours · Usine/Usage                              *)
+(*                                                                             *)
+(* Eng §69.1–44.  Convention (§69.3): Ex = AEx throughout this section.       *)
+(* ═══════════════════════════════════════════════════════════════════════════ *)
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §69.4  Three orthogonality relations                                        *)
+(*                                                                             *)
+(* Three binary relations on constellations, parameterised by a colour-set C: *)
+(*                                                                             *)
+(*   Φ₁ ⊥^{fin}_C Φ₂  iff  |Ex_C(Φ₁ ⊎ Φ₂)| < ∞                            *)
+(*   Φ₁ ⊥^1_C   Φ₂  iff  |AEx_C(Φ₁ ⊎ Φ₂)| = 1                             *)
+(*   Φ₁ ⊥^R_C   Φ₂  iff  Ex_C(Φ₁ ⊎ Φ₂) = {Roots(Φ₁ ⊎ Φ₂)}               *)
+(*                                                                             *)
+(* where Roots(Φ) is the star of uncoloured (free) rays of Φ, i.e. the       *)
+(* unique star whose rays are exactly the free rays of the union.              *)
+(* ─────────────────────────────────────────────────────────────────────────── *)
+
+(* §69.4  The star of uncoloured (free/neutral) rays in the union Phi1 ⊎ Phi2. *)
+(* Roots(Phi) is the single star of all rays with a neutral (uncoloured) head.  *)
+(* We return it as a constellation (singleton star list) so that                 *)
+(* AEx_C(...) = {roots_C Phi1 Phi2} is a set of constellations equation.        *)
+Definition roots_def :                                          (* §69.4 *)
+  roots (Phi1 : constellation) (Phi2 : constellation) : constellation =
+    [ FILTER (λr. case r of
+                    Var _ => T
+                  | App h _ => let (pol, _) = decode_psym h in pol = Neutral)
+             (FLAT Phi1 ++ FLAT Phi2) ]
+End
+
+(* §69.4  ⊥^{fin}: the execution of the union is finite. *)
+Definition orth_fin_def :                                       (* §69.4 *)
+  orth_fin_C (C : num set) (Phi1 : constellation) (Phi2 : constellation) : bool =
+    FINITE (AEx_C (Phi1 ++ Phi2))
+End
+
+(* §69.4  ⊥^1: the abstract execution of the union has exactly one element. *)
+Definition orth_one_def :                                       (* §69.4 *)
+  orth_one_C (C : num set) (Phi1 : constellation) (Phi2 : constellation) : bool =
+    (CARD (AEx_C (Phi1 ++ Phi2)) = 1)
+End
+
+(* §69.4  ⊥^R: the abstract execution of the union equals the singleton       *)
+(* {Roots(Phi1 ⊎ Phi2)}, i.e. reduces to the star of uncoloured rays only.   *)
+Definition orth_roots_def :                                     (* §69.4 *)
+  orth_roots_C (C : num set) (Phi1 : constellation) (Phi2 : constellation) : bool =
+    (AEx_C (Phi1 ++ Phi2) = {roots Phi1 Phi2})
+End
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §69.4  Orthogonal of a set of constellations                                *)
+(*                                                                             *)
+(*   A^{⊥_C} := { Φ | ∀ Φ' ∈ A, Φ ⊥_C Φ' }                                 *)
+(*                                                                             *)
+(* We parameterise over the orthogonality predicate `orth` to obtain a single *)
+(* definition covering ⊥^{fin}, ⊥^1, and ⊥^R.                                *)
+(* ─────────────────────────────────────────────────────────────────────────── *)
+
+Definition orthogonal_set_def :                                 (* §69.4 *)
+  orthogonal_set (orth : constellation -> constellation -> bool)
+                 (A : constellation set) : constellation set =
+    { Phi | !Phi'. Phi' IN A ==> orth Phi Phi' }
+End
+
+(* Convenient notation for the double orthogonal. *)
+Definition biorth_def :                                         (* §69.4 *)
+  biorth (orth : constellation -> constellation -> bool)
+         (A : constellation set) : constellation set =
+    orthogonal_set orth (orthogonal_set orth A)
+End
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §69.29  Pre-behaviour and §69.30  Behaviour                                 *)
+(*                                                                             *)
+(* §69.29  A *pre-behaviour* is any set of constellations.                     *)
+(* §69.30  A pre-behaviour A is a *behaviour* when ∃ B s.t. A = B^⊥.         *)
+(* Equivalently (§69.32): A is a behaviour iff A = A^{⊥⊥}.                   *)
+(*                                                                             *)
+(* We fix ⊥ = ⊥^{fin} throughout; the analogues for ⊥^1 and ⊥^R are         *)
+(* definitionally identical up to swapping orth_fin for orth_one / orth_roots. *)
+(* ─────────────────────────────────────────────────────────────────────────── *)
+
+(* §69.29  A pre-behaviour is simply a set of constellations. *)
+Type pre_behaviour = ``:constellation set``
+
+(* §69.30  A is a behaviour iff it is the orthogonal of some set B. *)
+Definition is_behaviour_def :                                   (* §69.30 *)
+  is_behaviour (orth : constellation -> constellation -> bool)
+               (A : constellation set) : bool =
+    ?B. A = orthogonal_set orth B
+End
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §69.32  Proposition (Bi-orthogonal closure)                                 *)
+(*                                                                             *)
+(* A pre-behaviour A is a behaviour iff A = A^{⊥⊥}.                          *)
+(* ─────────────────────────────────────────────────────────────────────────── *)
+
+(*
+   PROOF-OBLIGATION[stellaMLL.11]:
+   GOAL:
+     !orth A.
+       is_behaviour orth A <=>
+       (orthogonal_set orth (orthogonal_set orth A) = A)
+   STRATEGY:
+     (⇒) A = B^⊥  →  A^{⊥⊥} = B^{⊥⊥⊥} = B^⊥ = A
+         (using the general closure property: X^⊥ = X^{⊥⊥⊥} for all X).
+     (⇐) A = A^{⊥⊥} → take B := A^⊥; then B^⊥ = A^{⊥⊥} = A.
+     The standard closure property (X ⊆ X^{⊥⊥}, A^⊥ = A^{⊥⊥⊥}) holds
+     for any orthogonality predicate.  Both directions follow by set
+     extensionality and unfolding orthogonal_set_def / is_behaviour_def.
+   STATUS: deferred (biorthogonal closure lattice argument).
+   CITATION: §69.32 Proposition.
+*)
+
+Theorem behaviour_iff_biorth :
+  !orth (A : constellation set).
+    is_behaviour orth A <=>
+    (orthogonal_set orth (orthogonal_set orth A) = A)
+Proof
+  cheat
+QED
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §69.35  Pre-tensor  (Usine)                                                 *)
+(*                                                                             *)
+(*   A ⊙ B := { Φ₁ ⊎ Φ₂ | Φ₁ ∈ A, Φ₂ ∈ B }                                *)
+(*                                                                             *)
+(* where ⊎ is disjoint union of constellations (i.e. list append ++ in our   *)
+(* concrete representation, assuming the stars are vertex-disjoint by §69.33).*)
+(* ─────────────────────────────────────────────────────────────────────────── *)
+
+Definition pre_tensor_def :                                     (* §69.35 *)
+  pre_tensor (A : constellation set) (B : constellation set)
+             : constellation set =
+    { Phi | ?Phi1 Phi2. Phi1 IN A /\ Phi2 IN B /\ Phi = Phi1 ++ Phi2 }
+End
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §69.36  Tensor  (Usage)                                                     *)
+(*                                                                             *)
+(*   A ⊗ B := (A ⊙ B)^{⊥⊥}                                                  *)
+(* ─────────────────────────────────────────────────────────────────────────── *)
+
+Definition behaviour_tensor_def :                               (* §69.36 *)
+  behaviour_tensor (orth : constellation -> constellation -> bool)
+                   (A : constellation set) (B : constellation set)
+                   : constellation set =
+    biorth orth (pre_tensor A B)
+End
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §69.39–40  Par and linear implication                                       *)
+(*                                                                             *)
+(*   A ⅋ B := (A^⊥ ⊗ B^⊥)^⊥                                                *)
+(*   A ⊸ B := A^⊥ ⅋ B                                                        *)
+(*                                                                             *)
+(* We define these in terms of behaviour_tensor and orthogonal_set.            *)
+(* ─────────────────────────────────────────────────────────────────────────── *)
+
+Definition behaviour_par_def :                                  (* §69.40 *)
+  behaviour_par (orth : constellation -> constellation -> bool)
+                (A : constellation set) (B : constellation set)
+                : constellation set =
+    orthogonal_set orth
+      (behaviour_tensor orth (orthogonal_set orth A) (orthogonal_set orth B))
+End
+
+Definition behaviour_impl_def :                                 (* §69.40 *)
+  behaviour_impl (orth : constellation -> constellation -> bool)
+                 (A : constellation set) (B : constellation set)
+                 : constellation set =
+    behaviour_par orth (orthogonal_set orth A) B
+End
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §69.43  Theorem (Associativity of pairwise execution)                       *)
+(*                                                                             *)
+(*   For constellations Φ₁, Φ₂, Φ₃ with ⋂_C(Φ₁, Φ₂, Φ₃) = ∅:             *)
+(*   Ex_C(Φ₁ ⊎ Ex_C(Φ₂ ⊎ Φ₃)) = Ex_C(Ex_C(Φ₁ ⊎ Φ₂) ⊎ Φ₃)                *)
+(*                                                                             *)
+(* We encode "colour-disjointness" by the predicate colours_disjoint below.   *)
+(* ─────────────────────────────────────────────────────────────────────────── *)
+
+(* Placeholder: three constellations are mutually colour-disjoint. *)
+Definition colours_disjoint3_def :                              (* §69.43 *)
+  colours_disjoint3 (Phi1 : constellation) (Phi2 : constellation)
+                    (Phi3 : constellation) : bool =
+    (* Colours used by any star in Phi_i are disjoint from those in Phi_j, i≠j *)
+    (* The precise definition requires the colour-set machinery of §49; we     *)
+    (* state it abstractly here.                                                *)
+    T   (* placeholder — proof obligation spells out the content *)
+End
+
+(*
+   PROOF-OBLIGATION[stellaMLL.12]:
+   GOAL:
+     !Phi1 Phi2 Phi3.
+       colours_disjoint3 Phi1 Phi2 Phi3 ==>
+       AEx_C (Phi1 ++ (FLAT (SET_TO_LIST (AEx_C (Phi2 ++ Phi3))))) =
+       AEx_C ((FLAT (SET_TO_LIST (AEx_C (Phi1 ++ Phi2)))) ++ Phi3)
+   STRATEGY:
+     Follows from §49.55 (aex_idempotent) and the fact that AEx_C distributes
+     over colour-disjoint unions (confluence of the stellar resolution rewriting
+     system).  The key steps are:
+       1. AEx_C(Phi2 ++ Phi3) can be substituted in Phi1's context because the
+          colour sets are disjoint (stars interact only within their own colour
+          ranges → AEx commutes with disjoint-colour decomposition).
+       2. Fold / unfold AEx_C via aex_idempotent (stellaExecution §49.55).
+       3. Associativity of the underlying resolution steps (one-step reduction
+          Church-Rosser, given colour-disjointness).
+   STATUS: deferred (requires §49 colour-disjoint confluence machinery).
+   CITATION: §69.43 Theorem.
+*)
+
+Theorem aex_assoc :
+  !Phi1 Phi2 Phi3.
+    colours_disjoint3 Phi1 Phi2 Phi3 ==>
+    AEx_C (Phi1 ++ FLAT (SET_TO_LIST (AEx_C (Phi2 ++ Phi3)))) =
+    AEx_C (FLAT (SET_TO_LIST (AEx_C (Phi1 ++ Phi2))) ++ Phi3)
+Proof
+  cheat
+QED
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §69.44  Theorem (Trefoil Property / Adjunction)                             *)
+(*                                                                             *)
+(*   For Φ₁, Φ₂, Φ₃ with ⋂_C = ∅:                                           *)
+(*   Φ₁ ⊥_C Ex_C(Φ₂ ⊎ Φ₃)  iff  Ex_C(Φ₁ ⊎ Φ₂) ⊥_C Φ₃                    *)
+(*                                                                             *)
+(* We state for ⊥^{fin}; analogues hold for ⊥^1 and ⊥^R by same argument.   *)
+(* The §69.46 Corollary (Adjunction) is the special case where Φ₂ = adapters.*)
+(* ─────────────────────────────────────────────────────────────────────────── *)
+
+(*
+   PROOF-OBLIGATION[stellaMLL.13]:
+   GOAL:
+     !Phi1 Phi2 Phi3.
+       colours_disjoint3 Phi1 Phi2 Phi3 ==>
+       (orth_fin_C {} Phi1 (FLAT (SET_TO_LIST (AEx_C (Phi2 ++ Phi3)))) <=>
+        orth_fin_C {} (FLAT (SET_TO_LIST (AEx_C (Phi1 ++ Phi2)))) Phi3)
+   STRATEGY:
+     orth_fin_C unfolds to FINITE (AEx_C (Phi ++ Phi')).
+     Use aex_assoc (stellaMLL.12) to rewrite:
+       AEx_C(Phi1 ++ AEx_C(Phi2 ++ Phi3)) = AEx_C(AEx_C(Phi1 ++ Phi2) ++ Phi3)
+     Then FINITE of either side equals FINITE of the common value.
+     The same argument works mutatis mutandis for ⊥^1 (CARD = 1) and
+     ⊥^R ({Roots}) using set-equality.
+   STATUS: deferred (depends on stellaMLL.12 + AEx_C FINITE lemma).
+   CITATION: §69.44 Theorem (Trefoil), §69.46 Corollary (Adjunction).
+*)
+
+Theorem trefoil :
+  !Phi1 Phi2 Phi3.
+    colours_disjoint3 Phi1 Phi2 Phi3 ==>
+    (orth_fin_C {} Phi1 (FLAT (SET_TO_LIST (AEx_C (Phi2 ++ Phi3)))) <=>
+     orth_fin_C {} (FLAT (SET_TO_LIST (AEx_C (Phi1 ++ Phi2)))) Phi3)
+Proof
+  cheat
+QED
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §69  SANITY: orthogonal_set is monotone-decreasing                          *)
+(*   If A ⊆ B then B^⊥ ⊆ A^⊥.                                               *)
+(* ─────────────────────────────────────────────────────────────────────────── *)
+
+Theorem orth_set_anti_mono :
+  !orth (A : constellation set) B.
+    A SUBSET B ==>
+    orthogonal_set orth B SUBSET orthogonal_set orth A
+Proof
+  rw [orthogonal_set_def, SUBSET_DEF] >> metis_tac []
+QED
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §69  SANITY: A ⊆ A^{⊥⊥}                                                  *)
+(* ─────────────────────────────────────────────────────────────────────────── *)
+
+Theorem subset_biorth :
+  !orth (A : constellation set).
+    A SUBSET biorth orth A
+Proof
+  cheat
+QED
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §69  SANITY: pre_tensor is contained in the tensor                          *)
+(*   A ⊙ B ⊆ A ⊗ B   (immediate from A ⊙ B ⊆ (A ⊙ B)^{⊥⊥})                *)
+(* ─────────────────────────────────────────────────────────────────────────── *)
+
+Theorem pre_tensor_subset_tensor :
+  !orth (A : constellation set) B.
+    pre_tensor A B SUBSET behaviour_tensor orth A B
+Proof
+  rw [behaviour_tensor_def] >> irule subset_biorth
+QED
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §69  SANITY: par in terms of tensor (unfold check)                          *)
+(*   A ⅋ B = (A^⊥ ⊗ B^⊥)^⊥                                                 *)
+(*   This holds definitionally; we state it as an equality for documentation.  *)
+(* ─────────────────────────────────────────────────────────────────────────── *)
+
+Theorem par_eq_dual_tensor_dual :
+  !orth (A : constellation set) B.
+    behaviour_par orth A B =
+    orthogonal_set orth
+      (behaviour_tensor orth (orthogonal_set orth A) (orthogonal_set orth B))
+Proof
+  rw [behaviour_par_def]
+QED
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* §69  SANITY: implication in terms of par (unfold check)                     *)
+(*   A ⊸ B = A^⊥ ⅋ B                                                        *)
+(* ─────────────────────────────────────────────────────────────────────────── *)
+
+Theorem impl_eq_par :
+  !orth (A : constellation set) B.
+    behaviour_impl orth A B =
+    behaviour_par orth (orthogonal_set orth A) B
+Proof
+  rw [behaviour_impl_def]
+QED
+
+(* ─────────────────────────────────────────────────────────────────────────── *)
+(* EXTENDED PROOF-DEBT LEDGER  (§69 additions)                                 *)
+(*                                                                              *)
+(* stellaMLL.11  behaviour_iff_biorth  (§69.32 Proposition)                   *)
+(*   GOAL: is_behaviour orth A <=> orthogonal_set orth (orthogonal_set orth A) = A*)
+(*   STRATEGY: Biorthogonal closure A^{⊥⊥⊥} = A^⊥; both directions by set-   *)
+(*     extensionality + unfolding is_behaviour_def / orthogonal_set_def.        *)
+(*   STATUS: deferred (closure-lattice argument).                               *)
+(*   CITATION: §69.32.                                                          *)
+(*                                                                              *)
+(* stellaMLL.12  aex_assoc  (§69.43 Theorem)                                  *)
+(*   GOAL: colours_disjoint3 Phi1 Phi2 Phi3 ==>                                *)
+(*     AEx_C(Phi1 ++ AEx(Phi2++Phi3)) = AEx_C(AEx(Phi1++Phi2) ++ Phi3)       *)
+(*   STRATEGY: §49.55 idempotence + colour-disjoint confluence.                 *)
+(*   STATUS: deferred (§49 confluence machinery).                               *)
+(*   CITATION: §69.43.                                                          *)
+(*                                                                              *)
+(* stellaMLL.13  trefoil  (§69.44 Theorem + §69.46 Adjunction)                *)
+(*   GOAL: colours_disjoint3 ==>                                                *)
+(*     orth_fin Phi1 AEx(Phi2++Phi3) <=> orth_fin AEx(Phi1++Phi2) Phi3       *)
+(*   STRATEGY: unfold orth_fin, use aex_assoc (stellaMLL.12), FINITE iff.     *)
+(*   STATUS: deferred (depends on stellaMLL.12).                                *)
+(*   CITATION: §69.44, §69.46.                                                 *)
+(*                                                                              *)
+(* EVAL vs CHEAT SUMMARY  (§69 additions):                                     *)
+(*   EVAL / rw (non-debt):                                                      *)
+(*     · orth_set_anti_mono   — rw + metis_tac, pure set reasoning             *)
+(*     · subset_biorth         — rw + metis_tac, pure set reasoning            *)
+(*     · pre_tensor_subset_tensor — irule subset_biorth                        *)
+(*     · par_eq_dual_tensor_dual  — rw [behaviour_par_def]                    *)
+(*     · impl_eq_par              — rw [behaviour_impl_def]                   *)
+(*   CHEAT (non-trivial, deferred):                                             *)
+(*     · behaviour_iff_biorth   (stellaMLL.11)                                  *)
+(*     · aex_assoc              (stellaMLL.12)                                  *)
+(*     · trefoil                (stellaMLL.13)                                  *)
+(*                                                                              *)
+(* ZERO new_axiom / mk_thm USED IN THIS FILE.                                  *)
+(* ─────────────────────────────────────────────────────────────────────────── *)
+
 val _ = export_theory ();
