@@ -1,0 +1,14 @@
+[package]
+name = "stella-viz"
+version = "0.1.0"
+edition = "2021"
+description = "Interactive stellar-resolution explorer / proto theorem-prover UI"
+
+[[bin]]
+name = "stella-viz"
+path = "src/main.rs"
+
+[dependencies]
+stella-core = { path = "../stella-core" }
+
+[dev-dependencies]
