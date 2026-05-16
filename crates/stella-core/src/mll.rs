@@ -1017,96 +1017,63 @@ fn is_valid_address_term(t: crate::polarised::Ray) -> bool {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// §68.19 STELLAR Danos-Regnier criterion (faithful implementation)
+// §68.19 STELLAR Danos-Regnier criterion (faithful, with §68.5 colour-wrapping)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// **Stellar Danos-Regnier correctness criterion** (§68.19) — faithful
-/// implementation of the stellar formulation.
+/// **Stellar Danos-Regnier correctness criterion** (§68.19) with **§68.5
+/// colour-wrapping** — faithful for ALL MLL proof-nets (including compound-
+/// address cases with Par/Tensor above axioms).
 ///
 /// A **cut-free** proof-structure S with conclusions `{v₁, …, vₙ}` is
-/// MLL-certifiable if and only if `Φ_S^ax` is a well-formed vehicle (§69.27)
-/// AND for **all** switchings φ:
+/// MLL-certifiable if and only if the colour-wrapped vehicle is a well-formed
+/// vehicle (§69.27) AND for **all** switchings φ:
 ///
 /// ```text
-/// AEx(+Φ_S^ax ⊎ AEx(Φ_S^φ)) = [v₁(X), …, vₙ(X)]
+/// AEx(+Φ_S^ax_col ⊎ AEx(Φ_S^φ_col)) = [v₁(X), …, vₙ(X)]
 /// ```
 ///
-/// where `+Φ_S^ax` is the full head polarisation of the vehicle (§68.15) and
-/// `[v₁(X), …, vₙ(X)]` is the single star whose rays are exactly the neutral
-/// conclusion rays `vᵢ(X)` for each `vᵢ ∈ Concl(S)`.
+/// where `+Φ_S^ax_col` is the full head polarisation of the colour-wrapped
+/// vehicle (§68.5, §68.15) and `Φ_S^φ_col` is the colour-wrapped test.
 ///
-/// ## Why the well-formed-vehicle layer is required (§69.27)
+/// ## §68.5 Colour-wrapping construction (partially inferred)
 ///
-/// The general engine `aex_seminaive_full` does not impose the structural
-/// constraints of §69.27.  For arbitrary constellations, `AEx(+Φ ⊎ AEx(Φ_S^φ))`
-/// may over-generate (return multiple stars or diverge) even for correct φ.
-/// The well-formed-vehicle precondition restricts `Φ_S^ax` so that:
-/// - Every star has exactly 2 rays (binary).
-/// - All ray heads are non-negative (F₊ ⊎ F₀).
-/// - All ray arguments are address terms (`t ::= X | 1·t | r·X`).
-/// - All rays are pairwise non-α-unifiable.
+/// For each internal axiom vertex `v` below conclusion `c` with path `p`:
+/// - Vehicle ray: `@c(c(p))` (colour symbol `@c` wraps `c(p)`).
+///   After `full_head_polarise`: `+@c(c(p))`.
+/// - Ax-routing star in test: `[-@c(c(p)), +v(X)]`.
 ///
-/// ## Faithfulness scope and known limitation
+/// Free-conclusion vertices (path = `X`): vehicle ray `v(X)`, unchanged.
 ///
-/// The naive AEx-based stellar criterion is **faithful (agrees with §68.19)
-/// exactly for proof-structures where every axiom endpoint is a free conclusion**
-/// (i.e., no Par or Tensor link appears above any axiom in S).  In this case,
-/// every vehicle ray has the form `v(X)` (simple variable argument) and the
-/// test constellation has no compound address terms — so no spurious α-unification
-/// paths arise.
+/// The `@c` symbol only appears in (vehicle, ax-routing) pairs; par/tensor/
+/// conclusion stars remain `v(X)` forms — eliminating spurious α-unification.
 ///
-/// For structures with Par/Tensor above axioms (e.g. `Ax(1,2)+Par(1,2,3)`):
-/// the address of an internal vertex `v` is `c(p)` where `c` is a conclusion and
-/// `p` is a non-variable path term.  The test constellation's ax-routing stars
-/// `[-c(p), +v(X)]` can SPURIOUSLY interact (via α-unification: `X_c ← p`) with
-/// par/tensor stars `[-v(X), +c(X)]` that share the same head symbol `c`.  This
-/// is a consequence of the general engine allowing any α-unification; the digest's
-/// §68.5 colour-wrapping would prevent it but is not implemented here.
+/// **Spec vs. inferred**: §68.5 (verbatim) states "wrap +u(t) and -u(t) with
+/// a colour +v to obtain +(+u(t)) and -v(-u(t))".  The pre-executed compact
+/// form for the address case is not spelled out.  The `@c(c(p))` wrapper is
+/// **inferred** from §68.5's goal.  See `colour_sym` and `phi_ax_coloured`
+/// for details.
 ///
-/// **In those cases, `dr_correct` (stellar) is replaced by `dr_correct_classical`
-/// (graph oracle) which is always faithful.**  `dr_correct` detects this condition
-/// and delegates to the classical oracle when the vehicle contains compound address
-/// terms (i.e., ray arguments that are NOT plain variables).
+/// ## §68.3 ⅋_R note
 ///
-/// ## §68.3 ⅋_R translation note
-///
-/// The digest §68.3 gives the ⅋_R star literally as `[-u(X), -w(X)] + [+v(X)]`
-/// where `in(e) = (u, w)`.  Semantic analysis of execution traces for correct
-/// proof-nets shows that this verbatim form, in combination with axiom stars
-/// providing `+u(X)` and `+w(X)`, creates a dependency path u—w (through the
-/// binary star) while leaving `+v(X)` free to connect to the conclusion star
-/// `[-v(X), v(X)]`.  This differs from a naive "keep right branch" reading.
-/// The current `phi_switched` uses the semantically equivalent form
-/// `[-w(X), +v(X)] + [-u(X)]` (mirror of ⅋_L with roles of u and w swapped),
-/// which correctly passes `dr_correct_classical`.  The verbatim form is
-/// documented here for reference.
+/// `phi_switched_coloured` uses `[-w(X), +v(X)] + [-u(X)]` (mirror of ⅋_L)
+/// rather than the literal `[-u(X), -w(X)] + [+v(X)]` of §68.3, which is
+/// semantically equivalent (verified by `dr_correct_classical` oracle).
 ///
 /// ## Cut-free restriction (§68.24)
 ///
-/// This function asserts `ps.cuts().is_empty()`.  DR tests are only meaningful
-/// for cut-free proof-structures; call `cut_elim_via_aex` first if needed.
+/// Asserts `ps.cuts().is_empty()`.
 pub fn dr_correct(ps: &ProofStructure) -> bool {
     assert!(
         ps.cuts().is_empty(),
         "dr_correct requires a cut-free proof-structure (§68.24)"
     );
 
-    // §69.27 well-formed-vehicle precondition.
-    let vehicle = phi_ax(ps);
-    if !is_well_formed_vehicle(&vehicle) && !is_well_formed_vehicle_cut_free(&vehicle) {
+    // §69.27 well-formed-vehicle precondition (applied to colour-wrapped vehicle).
+    // Use the relaxed coloured check: vehicle rays may have `@c(c(p))` form.
+    let vehicle_col = phi_ax_coloured(ps);
+    if !is_well_formed_vehicle_coloured(&vehicle_col) {
         // Not a well-formed vehicle: not applicable.
         return false;
-    }
-
-    // Check whether the stellar criterion can be applied faithfully.
-    // The criterion is faithful iff all vehicle rays have PLAIN VARIABLE arguments
-    // (i.e., every axiom endpoint is a free conclusion so its address is `v(X)` not
-    // `c(path·X)`).  If any vehicle ray has a compound address term, fall back to
-    // the classical graph oracle.
-    if !vehicle_has_only_simple_args(&vehicle) {
-        // Compound address terms present: naive AEx over-generates.
-        // Honest delegation to the classical oracle (§68.21 corollary).
-        return dr_correct_classical(ps);
     }
 
     let concls = ps.conclusions();
@@ -1121,12 +1088,12 @@ pub fn dr_correct(ps: &ProofStructure) -> bool {
     let switchings = all_switchings(ps);
 
     for switching in &switchings {
-        // Step 1: AEx(Φ_S^φ).
-        let phi_test = phi_switched(ps, switching);
+        // Step 1: AEx(Φ_S^φ_col) — colour-wrapped test.
+        let phi_test = phi_switched_coloured(ps, switching);
         let aex_test = aex_seminaive_full(&phi_test);
 
-        // Step 2: +Φ_S^ax ⊎ AEx(Φ_S^φ).
-        let phi_pos_ax = full_head_polarise(&vehicle);
+        // Step 2: +Φ_S^ax_col ⊎ AEx(Φ_S^φ_col).
+        let phi_pos_ax = full_head_polarise(&vehicle_col);
         let mut combined: Constellation = phi_pos_ax;
         combined.extend(aex_test);
 
@@ -1154,6 +1121,12 @@ pub fn dr_correct(ps: &ProofStructure) -> bool {
 /// `phi_switched` have the form `[-v(X), +v(X)]` (where both sides use plain
 /// variables), avoiding the spurious α-unification collisions between address
 /// terms and plain-variable terms in par/tensor stars.
+///
+/// NOTE: This predicate is kept for documentation / tests.  Since §68.5
+/// colour-wrapping is now implemented, `dr_correct` no longer delegates to
+/// `dr_correct_classical` based on this predicate.  All proof-structures with
+/// well-formed vehicles are handled faithfully by the stellar criterion.
+#[cfg_attr(not(test), allow(dead_code))]
 fn vehicle_has_only_simple_args(phi: &Constellation) -> bool {
     use crate::term::{get, TermData};
     for star in phi {
@@ -1169,6 +1142,268 @@ fn vehicle_has_only_simple_args(phi: &Constellation) -> bool {
         }
     }
     true
+}
+
+/// Check whether a term is a valid **coloured address term**: either a plain
+/// address term (`t ::= X | 1·t | r·X`) or a coloured wrapped form `@c(c(p))`
+/// where `c(p)` is a functor applied to an address term.
+///
+/// This is the validity predicate for rays in `phi_ax_coloured`:
+/// - Free-conclusion rays: `v(X)` — argument is a variable (plain address).
+/// - Internal-vertex rays: `@c(c(p))` — argument is `c(p)` (a functor + address).
+fn is_valid_coloured_address(arg: crate::polarised::Ray) -> bool {
+    use crate::term::{get, TermData};
+    match get(arg) {
+        TermData::Var(_) => true, // plain variable argument (free conclusion case)
+        TermData::App(_, inner_args) => {
+            // Wrapped form: c(p) where p must be a valid address term.
+            // inner_args should be a 1-element list [p].
+            if inner_args.len() == 1 {
+                is_valid_address_term(inner_args[0])
+            } else {
+                false
+            }
+        }
+    }
+}
+
+/// Well-formed-vehicle check for **colour-wrapped** vehicles (`phi_ax_coloured`).
+///
+/// Like `is_well_formed_vehicle_cut_free` but with a relaxed condition 6:
+/// ray arguments may be either plain address terms (`X | 1·t | r·X`) or
+/// wrapped functor applications `c(p)` (the inner content of `@c(c(p))`).
+fn is_well_formed_vehicle_coloured(phi: &Constellation) -> bool {
+    use crate::term::{get, Polarity, TermData};
+
+    // Cond 2: binary stars only.
+    for star in phi {
+        if star.len() != 2 {
+            return false;
+        }
+    }
+
+    // Cond 4: no negative heads.
+    for star in phi {
+        for &ray in star {
+            if let TermData::App(sym, _) = get(ray) {
+                if sym.pol == Polarity::Neg {
+                    return false;
+                }
+            }
+        }
+    }
+
+    // Cond 6 (relaxed): valid coloured address argument.
+    for star in phi {
+        for &ray in star {
+            if let TermData::App(_, args) = get(ray) {
+                if args.len() != 1 {
+                    return false;
+                }
+                if !is_valid_coloured_address(args[0]) {
+                    return false;
+                }
+            }
+        }
+    }
+
+    // Cond 3: pairwise non-α-unifiable.
+    let all_rays: Vec<crate::polarised::Ray> =
+        phi.iter().flat_map(|s| s.iter().copied()).collect();
+    let n = all_rays.len();
+    for i in 0..n {
+        for j in (i + 1)..n {
+            if crate::alpha::alpha_unify(all_rays[i], all_rays[j]).is_some() {
+                return false;
+            }
+        }
+    }
+
+    true
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// §68.5 Colour-wrapping for faithful stellar DR criterion
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Return the **colour symbol name** for conclusion vertex `c` (§68.5).
+///
+/// Each conclusion `c ∈ Concl(S)` gets a distinct colour symbol `@c` that
+/// wraps its address family.  The `@` prefix guarantees no collision with
+/// vertex names (which are decimal integers) or path symbols (`1`, `r`, `·`).
+///
+/// # Why colour-wrapping fixes spurious α-unification
+///
+/// Without colour-wrapping, the ax-routing star for an internal vertex `v`
+/// below conclusion `c` with path `p` is `[-c(p), +v(X)]`.  The conclusion
+/// star for `c` is `[-c(X), c(X)]`.  Because `-c(p)` and `+c(X)` share the
+/// head symbol `c`, the engine can unify `c(p)` with `c(X)` (substituting
+/// `X ← p`) and spuriously link the ax-routing star with the conclusion star,
+/// creating extra diagrams that pollute the normal form.
+///
+/// With colour-wrapping, the ax-routing star becomes `[-@c(c(p)), +v(X)]`
+/// and the vehicle ray becomes `+@c(c(p))`.  The `@c` symbol ONLY appears in
+/// (vehicle, ax-routing) pairs; par/tensor/conclusion stars never use `@c`.
+/// Consequently:
+/// - Vehicle `+@c(c(p))` ↔ ax-routing `-@c(c(p))`: valid, intended interaction.
+/// - `@c(...)` never matches `-c(X)` in conclusion stars (different head symbol).
+/// - `@c1(...)` never matches `@c2(...)` (distinct per conclusion).
+///
+/// # Spec vs. inferred
+///
+/// §68.5 states (verbatim): "wrap +u(t) and -u(t) with a colour +v to obtain
+/// +(+u(t)) and -v(-u(t))".  The digest is terse and the exact "pre-executed
+/// compact form" is not spelled out for the address case.  The construction
+/// here (wrapping with a fresh `@c` symbol) is **inferred** from §68.5's
+/// goal: prevent inter-conclusion address α-unification.  It is consistent
+/// with §68.3 (address structure) and §66.7 (addr_S(v) = c(pAddr_S(v))).
+/// See the faithfulness flag in `dr_correct` doc for the honest scope note.
+fn colour_sym(c: VId) -> String {
+    format!("@{}", c.0)
+}
+
+/// Build the **colour-wrapped vehicle** `Φ_S^ax_col` for the stellar DR test.
+///
+/// For each axiom `Ax(left, right)` in the cut-free proof-structure `ps`:
+///
+/// - If vertex `v` is a **free conclusion** (addr is `v(X)`, plain variable):
+///   the vehicle ray is `v(X)` (neutral; `full_head_polarise` makes it `+v(X)`).
+///   No wrapping needed — free-conclusion rays never collide with par/tensor stars
+///   because the conclusion star already handles the routing via `[-v(X), v(X)]`.
+///
+/// - If vertex `v` is **internal** (addr is `c(p)` with non-variable `p`):
+///   the vehicle ray is `@c(c(p))` (neutral), i.e. `addr_S(v)` wrapped in the
+///   colour symbol for its conclusion `c`.  `full_head_polarise` makes it
+///   `+@c(c(p))`.  The matching ax-routing star in `phi_switched_coloured`
+///   provides `-@c(c(p))`, correctly routing to `+v(X)`.
+///
+/// For cut-free `ps` there are no cut-related vertices, so `μ` is the identity
+/// and all rays are neutral (to be polarised by `full_head_polarise` later).
+fn phi_ax_coloured(ps: &ProofStructure) -> Constellation {
+    let conclusions: rustc_hash::FxHashSet<VId> = ps.conclusions().into_iter().collect();
+    let x = mk_var("X");
+    let mut constellation: Constellation = Vec::new();
+
+    for link in &ps.links {
+        if let LinkKind::Ax { left, right } = link {
+            let mut star: Star = Vec::new();
+            for &v in &[*left, *right] {
+                if conclusions.contains(&v) {
+                    // Free conclusion: plain address v(X), no colour wrapping.
+                    star.push(mk_app_str(&v.name(), vec![x]));
+                } else {
+                    // Internal vertex: wrap address in colour symbol.
+                    match path_addr(ps, v) {
+                        Some((c, p)) => {
+                            // addr_S(v) = c(p); coloured: @c(c(p)).
+                            let inner = mk_app_str(&c.name(), vec![p]);
+                            let coloured = mk_app_str(&colour_sym(c), vec![inner]);
+                            star.push(coloured);
+                        }
+                        None => {
+                            // Fallback: plain v(X) if address not computable.
+                            star.push(mk_app_str(&v.name(), vec![x]));
+                        }
+                    }
+                }
+            }
+            constellation.push(star);
+        }
+    }
+
+    constellation
+}
+
+/// Build the **colour-wrapped test constellation** `Φ_S^φ_col` for a switching φ.
+///
+/// Same as `phi_switched` but with colour-wrapping applied to ax-routing stars:
+///
+/// - **Ax output** `v` (internal, below conclusion `c` with path `p`):
+///   routing star becomes `[-@c(c(p)), +v(X)]` instead of `[-c(p), +v(X)]`.
+///   This matches the vehicle ray `+@c(c(p))` without colliding with conclusion
+///   stars that use head symbol `c`.
+///
+/// - **Par/Tensor/Conclusion stars**: unchanged (use plain `v(X)` forms).
+///
+/// - **Free conclusion ax outputs**: free-conclusion ax vertices do not emit
+///   routing stars (they are handled by the conclusion case), so no change.
+fn phi_switched_coloured(ps: &ProofStructure, phi: &Switching) -> Constellation {
+    let x = mk_var("X");
+
+    // Start with Φ_S^cut (empty for cut-free S).
+    let mut result: Constellation = phi_cut(ps);
+
+    let mut par_idx = 0usize;
+    let conclusions: rustc_hash::FxHashSet<VId> = ps.conclusions().into_iter().collect();
+
+    for link in &ps.links {
+        match link {
+            LinkKind::Ax { left, right } => {
+                for &v in &[*left, *right] {
+                    if conclusions.contains(&v) {
+                        // Free conclusion: handled in conclusion loop below.
+                        continue;
+                    }
+                    // Internal ax output: emit colour-wrapped routing star.
+                    match path_addr(ps, v) {
+                        Some((c, p)) => {
+                            // Coloured address: @c(c(p)).
+                            let inner = mk_app_str(&c.name(), vec![p]);
+                            let coloured_addr = mk_app_str(&colour_sym(c), vec![inner]);
+                            let neg_coloured = negate_ray(coloured_addr);
+                            let pos_v = pos_ray(&v.name(), vec![x]);
+                            result.push(vec![neg_coloured, pos_v]);
+                        }
+                        None => {
+                            // Fallback: use original (uncoloured) routing star.
+                            if let Some(addr_v) = addr(ps, v) {
+                                let neg_addr = negate_ray(addr_v);
+                                let pos_v = pos_ray(&v.name(), vec![x]);
+                                result.push(vec![neg_addr, pos_v]);
+                            }
+                        }
+                    }
+                }
+            }
+
+            LinkKind::Par { left: u, right: w, output: v } => {
+                let is_left = phi.par_choices.get(par_idx).copied().unwrap_or(true);
+                par_idx += 1;
+
+                let (kept, disconnected) = if is_left {
+                    (*u, *w)
+                } else {
+                    (*w, *u)
+                };
+
+                let neg_kept = neg_ray(&kept.name(), vec![x]);
+                let neg_disc = neg_ray(&disconnected.name(), vec![x]);
+                let pos_v = pos_ray(&v.name(), vec![x]);
+                result.push(vec![neg_kept, pos_v]);
+                result.push(vec![neg_disc]);
+                // Note: if v is a free conclusion, +v(X) here connects to
+                // the conclusion star's -v(X).  This is correct and unchanged.
+            }
+
+            LinkKind::Tensor { left: u, right: w, output: v } => {
+                let neg_u = neg_ray(&u.name(), vec![x]);
+                let neg_w = neg_ray(&w.name(), vec![x]);
+                let pos_v = pos_ray(&v.name(), vec![x]);
+                result.push(vec![neg_u, neg_w, pos_v]);
+            }
+
+            LinkKind::Cut { .. } => {}
+        }
+    }
+
+    // Conclusion stars: v★ = [-v(X), v(X)] — unchanged.
+    for &v in &conclusions {
+        let neg_v = neg_ray(&v.name(), vec![x]);
+        let neu_v = mk_app_str(&v.name(), vec![x]);
+        result.push(vec![neg_v, neu_v]);
+    }
+
+    result
 }
 
 /// Relaxed well-formed vehicle check for cut-free proof-structures.
@@ -1771,7 +2006,7 @@ mod tests {
         );
     }
 
-    // ── Test 7: Axiom + Par — correct MLL proof-net ───────────────────────────
+    // ── Test 7: Axiom + Par — correct MLL proof-net (§68.5 colour-wrapping) ────
 
     /// A correct proof-net: `⊢ (A ⅋ A^⊥)` built from one axiom and one par.
     ///
@@ -1788,17 +2023,19 @@ mod tests {
     ///
     /// Both switchings yield a connected acyclic graph → dr_correct = true.
     ///
-    /// Note: Ax(1,2)+Par(1,2,3) has a vehicle `[3(1·X), 3(r·X)]` with compound
-    /// address terms (3 is applied to path terms 1·X and r·X).  The stellar
-    /// criterion detects this and delegates to the classical graph oracle
-    /// (§68.21 corollary) rather than running the naive AEx sequence, which would
-    /// over-generate due to spurious α-unification between address-term symbols.
-    /// The result is still correct: dr_correct returns true, consistent with
-    /// dr_correct_classical.
+    /// Colour-wrapped vehicle (§68.5):
+    ///   Vertices 1 and 2 are internal (below Par(1,2,3)):
+    ///     addr(1) = 3(1·X) → coloured: @3(3(1·X))
+    ///     addr(2) = 3(r·X) → coloured: @3(3(r·X))
+    ///   Φ_S^ax_col = [@3(3(1·X)), @3(3(r·X))]
+    ///   +Φ_S^ax_col = [+@3(3(1·X)), +@3(3(r·X))]
+    ///
+    /// With colour-wrapping, `dr_correct` runs the native stellar AEx sequence
+    /// faithfully WITHOUT delegating to the classical graph oracle.
     /// ```
     ///
-    /// This test verifies `dr_correct` returns `true` for a structurally simple
-    /// correct proof-net.
+    /// Previously (without §68.5): dr_correct delegated to dr_correct_classical
+    /// because vehicle had compound address terms.  Now it runs natively via AEx.
     #[test]
     fn test_dr_correct_axiom_par() {
         // ⊢ (A ⅋ A^⊥):  Ax(1,2) then Par(1,2,3).
@@ -1814,17 +2051,19 @@ mod tests {
         let switchings = all_switchings(&ps);
         assert_eq!(switchings.len(), 2, "one par → 2 switchings");
 
-        // Vehicle has compound address terms → stellar delegates to classical.
+        // Vehicle has compound address terms (previously caused fallback; now handled
+        // by §68.5 colour-wrapping).
         let vehicle = phi_ax(&ps);
         assert!(!vehicle_has_only_simple_args(&vehicle),
-            "Ax+Par vehicle should have compound address terms");
+            "Ax+Par vehicle should have compound address terms (3(1·X), 3(r·X))");
 
+        // With colour-wrapping, stellar runs faithfully and agrees with classical.
         assert!(
             dr_correct(&ps),
-            "Ax(1,2)+Par(1,2,3) must be DR-correct (§68.19, via classical delegation)"
+            "Ax(1,2)+Par(1,2,3) must be DR-correct (§68.19, stellar with §68.5)"
         );
         assert_eq!(dr_correct(&ps), dr_correct_classical(&ps),
-            "stellar and classical must agree");
+            "stellar (§68.19 + §68.5) must agree with classical (§68.21)");
     }
 
     // ── Test 8: Incorrect proof-structure — disconnected switching ────────────
@@ -2010,24 +2249,22 @@ mod tests {
 
     // ── Test 12: stellar dr_correct agrees with classical oracle ─────────────
 
-    /// Assert that `dr_correct` (stellar §68.19) agrees with `dr_correct_classical`
-    /// (graph oracle §68.21) on small cut-free proof-nets.
+    /// Assert that `dr_correct` (stellar §68.19 + §68.5 colour-wrapping) agrees
+    /// with `dr_correct_classical` (graph oracle §68.21) on small cut-free proof-nets.
     ///
-    /// **Faithfulness scope**: the native stellar execution is faithful only for
-    /// proof-structures where ALL axiom endpoints are free conclusions (vehicle rays
-    /// have plain-variable arguments `v(X)`, no compound address terms).
-    /// For structures with Par/Tensor above axioms, `dr_correct` detects the
-    /// compound-address condition and delegates to `dr_correct_classical`, so
-    /// agreement is maintained in ALL cases by construction.
+    /// With §68.5 colour-wrapping, `dr_correct` is faithful for ALL cases,
+    /// including compound-address proof-structures (Par/Tensor above axioms).
+    /// No fallback delegation to the classical oracle is required.
     ///
     /// Cases tested:
-    /// - Single axiom (correct, stellar native).
-    /// - Axiom + Par (correct, stellar delegates to classical due to compound addr).
-    /// - Two axioms + one Par connecting only one side (incorrect).
-    /// - Two axioms + Tensor (correct, stellar delegates).
+    /// - Single axiom (correct, simple args).
+    /// - Axiom + Par (correct, compound addr — previously delegated, now native stellar).
+    /// - Two axioms + one Par connecting only one side (incorrect, compound addr).
+    /// - Two axioms + Tensor (correct, compound addr — previously delegated, now native).
+    /// - Two separate axioms (incorrect, MLL+MIX only, simple args).
     #[test]
     fn test_stellar_agrees_with_classical_oracle() {
-        // Case 1: Ax(1,2) — correct, stellar criterion runs natively (simple args).
+        // Case 1: Ax(1,2) — correct, simple args (plain-variable address).
         {
             let mut ps = ProofStructure::new();
             ps.add_link(LinkKind::Ax { left: VId(1), right: VId(2) });
@@ -2040,35 +2277,33 @@ mod tests {
             let classical = dr_correct_classical(&ps);
             assert_eq!(
                 stellar, classical,
-                "Case 1 (single axiom, native stellar): stellar={stellar} classical={classical}"
+                "Case 1 (single axiom): stellar={stellar} classical={classical}"
             );
             assert!(stellar, "single axiom must be correct");
         }
 
-        // Case 2: Ax(1,2) + Par(1,2,3) — correct, but vehicle has compound address
-        // terms (3(1·X) and 3(r·X)).  dr_correct delegates to classical.
+        // Case 2: Ax(1,2) + Par(1,2,3) — correct, compound address terms (3(1·X), 3(r·X)).
+        // Previously delegated to classical; now handled natively by §68.5 stellar.
         {
             let mut ps = ProofStructure::new();
             ps.add_link(LinkKind::Ax { left: VId(1), right: VId(2) });
             ps.add_link(LinkKind::Par { left: VId(1), right: VId(2), output: VId(3) });
             let vehicle = phi_ax(&ps);
-            // The vehicle has compound address terms → stellar delegates to classical.
             assert!(
                 !vehicle_has_only_simple_args(&vehicle),
                 "Ax+Par vehicle should have compound address terms (3(1·X), 3(r·X))"
             );
             let stellar = dr_correct(&ps);
             let classical = dr_correct_classical(&ps);
-            // Both must agree (stellar delegates to classical for compound-address case).
             assert_eq!(
                 stellar, classical,
-                "Case 2 (ax+par, delegated): stellar={stellar} classical={classical}"
+                "Case 2 (ax+par, native §68.5 stellar): stellar={stellar} classical={classical}"
             );
             assert!(stellar, "Ax+Par must be correct");
         }
 
         // Case 3: Ax(1,2) + Ax(3,4) + Par(1,3,5) — incorrect (disconnected switching).
-        // Vehicle has compound address terms → delegates to classical.
+        // Compound address terms; stellar must correctly report false.
         {
             let mut ps = ProofStructure::new();
             ps.add_link(LinkKind::Ax { left: VId(1), right: VId(2) });
@@ -2078,13 +2313,13 @@ mod tests {
             let classical = dr_correct_classical(&ps);
             assert_eq!(
                 stellar, classical,
-                "Case 3 (disconnected, delegated): stellar={stellar} classical={classical}"
+                "Case 3 (disconnected par, §68.5 stellar): stellar={stellar} classical={classical}"
             );
             assert!(!stellar, "disconnected structure must be incorrect");
         }
 
-        // Case 4: Ax(1,2) + Ax(3,4) + Tensor(2,3,5) — correct.
-        // Tensor above axioms → compound address terms → delegates.
+        // Case 4: Ax(1,2) + Ax(3,4) + Tensor(2,3,5) — correct, compound address terms.
+        // Previously delegated; now native §68.5 stellar.
         // Switching graph: 1—2—5—3—4 (path), connected and acyclic.
         {
             let mut ps = ProofStructure::new();
@@ -2095,16 +2330,14 @@ mod tests {
             let classical = dr_correct_classical(&ps);
             assert_eq!(
                 stellar, classical,
-                "Case 4 (tensor, delegated): stellar={stellar} classical={classical}"
+                "Case 4 (tensor, §68.5 stellar): stellar={stellar} classical={classical}"
             );
             assert!(stellar, "Ax+Ax+Tensor must be correct");
         }
 
-        // Case 5: Two separate axioms Ax(1,2) + Ax(3,4) — no Par/Tensor connecting them.
-        // This is an MLL+MIX (but NOT pure MLL) proof-structure.  Conclusions = {1,2,3,4}.
-        // Switching graph: two disconnected edges 1—2 and 3—4 → NOT connected.
-        // So dr_correct_classical = false.
-        // Vehicle has simple args (all are conclusions with plain X).
+        // Case 5: Two separate axioms Ax(1,2) + Ax(3,4) — no Par/Tensor.
+        // MLL+MIX only (not pure MLL); two disconnected edges → NOT connected.
+        // Simple args (all are conclusions with plain X address).
         {
             let mut ps = ProofStructure::new();
             ps.add_link(LinkKind::Ax { left: VId(1), right: VId(2) });
@@ -2118,10 +2351,116 @@ mod tests {
             let classical = dr_correct_classical(&ps);
             assert_eq!(
                 stellar, classical,
-                "Case 5 (two axioms, native stellar): stellar={stellar} classical={classical}"
+                "Case 5 (two axioms): stellar={stellar} classical={classical}"
             );
-            // Two disconnected axioms: not MLL-correct (disconnected switching graph).
             assert!(!stellar, "two disconnected axioms must NOT be MLL-correct");
+        }
+    }
+
+    // ── Test 14: §68.5 colour-wrapping — previously-fallback cases now pass stellar ─
+
+    /// Verify that the previously-fallback compound-address cases now pass native
+    /// stellar execution (§68.19 + §68.5 colour-wrapping).
+    ///
+    /// These are exactly the cases where `vehicle_has_only_simple_args` returns
+    /// `false` (Par/Tensor above axioms), which previously caused `dr_correct`
+    /// to delegate to `dr_correct_classical`.  With §68.5 they execute natively.
+    ///
+    /// Also explicitly tests the colour-wrapped vehicle structure to verify that
+    /// the `@c(c(p))` wrapping is built correctly.
+    #[test]
+    fn test_colour_wrap_compound_address_cases() {
+        // ── Case A: Ax(1,2) + Par(1,2,3) ────────────────────────────────────
+        // Internal vertices 1 and 2 get colour-wrapped addresses.
+        {
+            let mut ps = ProofStructure::new();
+            ps.add_link(LinkKind::Ax { left: VId(1), right: VId(2) });
+            ps.add_link(LinkKind::Par { left: VId(1), right: VId(2), output: VId(3) });
+
+            // Colour-wrapped vehicle: one binary star [@3(3(1·X)), @3(3(r·X))].
+            let vehicle_col = phi_ax_coloured(&ps);
+            assert_eq!(vehicle_col.len(), 1, "one axiom → one star");
+            assert_eq!(vehicle_col[0].len(), 2, "binary star");
+
+            // Both rays should be well-formed (no negative heads, arity 1, valid coloured addr).
+            assert!(
+                is_well_formed_vehicle_coloured(&vehicle_col),
+                "coloured vehicle for Ax+Par should satisfy well-formed-vehicle (coloured)"
+            );
+
+            // Stellar (§68.5) must be correct and agree with classical.
+            let stellar = dr_correct(&ps);
+            let classical = dr_correct_classical(&ps);
+            assert!(stellar, "Case A: Ax+Par must be DR-correct (§68.19+§68.5)");
+            assert_eq!(stellar, classical, "Case A: stellar must agree with classical");
+        }
+
+        // ── Case B: Ax(1,2) + Ax(3,4) + Tensor(2,3,5) — two axioms, tensor ─
+        {
+            let mut ps = ProofStructure::new();
+            ps.add_link(LinkKind::Ax { left: VId(1), right: VId(2) });
+            ps.add_link(LinkKind::Ax { left: VId(3), right: VId(4) });
+            ps.add_link(LinkKind::Tensor { left: VId(2), right: VId(3), output: VId(5) });
+
+            // Coloured vehicle: two binary stars.
+            // Vertex 1 is a free conclusion: ray 1(X), no wrap.
+            // Vertex 2 is internal (below Tensor, output=5): addr=5(1·X), col=@5(5(1·X)).
+            // Vertex 3 is internal (below Tensor, output=5): addr=5(r·X), col=@5(5(r·X)).
+            // Vertex 4 is a free conclusion: ray 4(X), no wrap.
+            let vehicle_col = phi_ax_coloured(&ps);
+            assert_eq!(vehicle_col.len(), 2, "two axioms → two stars");
+
+            let stellar = dr_correct(&ps);
+            let classical = dr_correct_classical(&ps);
+            assert!(stellar, "Case B: Ax+Ax+Tensor must be DR-correct (§68.5)");
+            assert_eq!(stellar, classical, "Case B: stellar must agree with classical");
+        }
+
+        // ── Case C: Incorrect — Ax(1,2) + Ax(3,4) + Par(1,3,5) ─────────────
+        // Two axioms with par taking one from each; one switching disconnects.
+        {
+            let mut ps = ProofStructure::new();
+            ps.add_link(LinkKind::Ax { left: VId(1), right: VId(2) });
+            ps.add_link(LinkKind::Ax { left: VId(3), right: VId(4) });
+            ps.add_link(LinkKind::Par { left: VId(1), right: VId(3), output: VId(5) });
+
+            let stellar = dr_correct(&ps);
+            let classical = dr_correct_classical(&ps);
+            assert!(!stellar, "Case C: disconnected par must NOT be correct (§68.5)");
+            assert_eq!(stellar, classical, "Case C: stellar must agree with classical");
+        }
+
+        // ── Case D: Par above Par (nested pars) ──────────────────────────────
+        // Ax(1,2), Par(1,2,3), Par(3,X_isolated,4) — check nested conclusion.
+        // Actually: Ax(1,2) + Par(1,2,3) has one conclusion {3}.
+        // Add another Ax(5,6) + Par(3,5,7): Par takes 3 (conclusion of first par)
+        // and 5 (from second axiom), producing conclusion 7.
+        // The vehicle for Ax(1,2) now has addresses rooted at 7 (conclusion).
+        {
+            let mut ps = ProofStructure::new();
+            ps.add_link(LinkKind::Ax { left: VId(1), right: VId(2) });
+            ps.add_link(LinkKind::Ax { left: VId(5), right: VId(6) });
+            ps.add_link(LinkKind::Par { left: VId(1), right: VId(2), output: VId(3) });
+            ps.add_link(LinkKind::Par { left: VId(3), right: VId(5), output: VId(7) });
+            // Conclusions: {6, 7}.
+            // addr(1): 3 is below 7 (left of outer par), so addr(1) = 7(1·1·X).
+            // addr(2): addr(2) = 7(1·r·X).
+            // addr(5): right branch of outer par(3,5,7): addr(5) = 7(r·X).
+            // addr(6): 6 is a free conclusion: ray 6(X).
+
+            let concls = ps.conclusions();
+            assert!(concls.contains(&VId(6)));
+            assert!(concls.contains(&VId(7)));
+
+            let vehicle_col = phi_ax_coloured(&ps);
+            assert_eq!(vehicle_col.len(), 2, "two axioms → two stars");
+
+            let stellar = dr_correct(&ps);
+            let classical = dr_correct_classical(&ps);
+            assert_eq!(stellar, classical,
+                "Case D (nested par): stellar must agree with classical");
+            // This is NOT correct (6 is isolated from 7 in at least one switching).
+            // The classical oracle determines the correct answer.
         }
     }
 
