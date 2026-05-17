@@ -1,4 +1,5 @@
 pub mod alpha;
+pub mod antiunify;
 pub mod arith;
 pub mod atm;
 pub mod automata;
