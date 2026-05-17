@@ -58,27 +58,69 @@ pub enum Polarity {
 // Var — interned variable name
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// An interned variable name (§B.1.2).
+/// A first-order (unification) variable (§B.1.2).
 ///
-/// Backed by a process-global `ThreadedRodeo`.  `Copy`; equality is u32 equality.
+/// Two representations, both `Copy` with cheap `Eq`/`Hash`/`Ord`:
+///
+/// - **`Named(Spur)`** — an interned source name from the process-global
+///   `ThreadedRodeo`.  Produced by the parser, by `Var::intern`, and by every
+///   pre-existing call site.  The reference engine's *named* path is built out
+///   of these and is left semantically intact.
+/// - **`Idx(u32)`** — a *canonical-index* / generation variable.  Created by
+///   freshening (`subst::freshen` / `interactive::alpha_rename_star`) as a
+///   pure integer: a monotone generation `base` plus the variable's local
+///   ordinal.  No `format!`, no global interner lock — the freshening of a Φ
+///   star is `O(#distinct vars)` integer work and the per-step cost the
+///   profiler attributed to `freshen`/`Var::intern` disappears.
+///
+/// `Idx` lives in a namespace disjoint from any `Named` var (different enum
+/// variant ⇒ never equal), so a freshened copy is automatically
+/// variable-disjoint from the Ψ it fuses against, exactly as the old
+/// string-prefix scheme guaranteed — provided generation `base`s never repeat
+/// (the role the old `counter` played, preserved).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Var(pub lasso::Spur);
+pub enum Var {
+    /// An interned source name (the original named path).
+    Named(lasso::Spur),
+    /// A canonical generation-index variable (cheap freshening).
+    Idx(u32),
+}
 
 impl Var {
-    /// Intern a variable name.
+    /// Intern a variable name (always yields a [`Var::Named`]).
     pub fn intern(name: &str) -> Self {
-        Var(VAR_INTERNER.get_or_intern(name))
+        Var::Named(VAR_INTERNER.get_or_intern(name))
+    }
+
+    /// Construct a canonical-index variable directly (O(1), no interning).
+    #[inline]
+    pub fn idx(n: u32) -> Self {
+        Var::Idx(n)
     }
 
     /// Retrieve the string for this variable.
+    ///
+    /// `Named` resolves from the interner in `O(1)`.  `Idx(n)` has no source
+    /// name; it is lazily interned as `#n` *only when a string is demanded*
+    /// (display, parsing round-trips, DOT export) — never on the engine hot
+    /// path, which compares `Var`s by value.
     pub fn as_str(self) -> &'static str {
-        VAR_INTERNER.resolve(&self.0)
+        match self {
+            Var::Named(s) => VAR_INTERNER.resolve(&s),
+            Var::Idx(n) => {
+                let key = VAR_INTERNER.get_or_intern(format!("#{n}"));
+                VAR_INTERNER.resolve(&key)
+            }
+        }
     }
 }
 
 impl fmt::Display for Var {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.as_str())
+        match self {
+            Var::Named(s) => write!(f, "{}", VAR_INTERNER.resolve(s)),
+            Var::Idx(n) => write!(f, "#{n}"),
+        }
     }
 }
 

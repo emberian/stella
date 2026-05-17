@@ -158,27 +158,38 @@ impl Renaming {
 
 static FRESH_COUNTER: AtomicU32 = AtomicU32::new(0);
 
-/// Generate a fresh `Var` with a given prefix string and a u32 counter.
+/// Generate a fresh `Var` from a u32 counter.
 ///
-/// The prefix is a `&str` that will be interned; the counter avoids collision.
-/// After construction, variable identity is tracked by `Var` (u32), not `String`.
-pub fn fresh_var(prefix: &str, counter: &mut u32) -> Var {
-    // Build the name only for the purpose of interning; no cloned String escapes.
-    let name = format!("{prefix}{counter}");
+/// The `prefix` is retained only for API compatibility with the historical
+/// string scheme; it is **ignored** — the result is a canonical-index
+/// [`Var::Idx`] consuming one slot of `counter`.  No `format!`, no global
+/// interner lock: `Var::Idx(n)` is disjoint from every `Var::Named` (different
+/// enum variant) and from any other `Idx` with a different `n`, so a
+/// monotone `counter` is exactly the freshness guarantee the old
+/// `"{prefix}{counter}"` string scheme provided.
+#[inline]
+pub fn fresh_var(_prefix: &str, counter: &mut u32) -> Var {
+    let n = *counter;
     *counter += 1;
-    Var::intern(&name)
+    Var::Idx(n)
 }
 
-/// Generate a globally-unique fresh `Var` (for use when no local counter is available).
-pub fn fresh_var_global(prefix: &str) -> Var {
+/// Generate a globally-unique fresh `Var` (for use when no local counter is
+/// available).  Pulls one slot from a process-global atomic generation; the
+/// `prefix` is ignored for the same reason as [`fresh_var`].
+pub fn fresh_var_global(_prefix: &str) -> Var {
     let n = FRESH_COUNTER.fetch_add(1, Ordering::Relaxed);
-    Var::intern(&format!("{prefix}{n}"))
+    Var::Idx(n)
 }
 
 /// Rename all variables in `t` to fresh names, returning the renamed term and
 /// the renaming used.  Used for producing variable-disjoint copies (§B.1.19).
 ///
-/// No `String` allocation escapes — variables are tracked as `Var` (u32).
+/// O(#distinct vars) integer work: each source var is mapped to a fresh
+/// `Var::Idx` consuming one `counter` slot — **no string formatting, no
+/// global-interner lock** (the cost the KS profiler attributed to
+/// `freshen`/`Var::intern`).  The resulting term is variable-disjoint from
+/// anything carrying `Named` vars or `Idx` vars of a lower generation.
 pub fn freshen(t: TermId, prefix: &str, counter: &mut u32) -> (TermId, Renaming) {
     let vars: Vec<Var> = t.vars().into_iter().collect();
     let mut map = FxHashMap::default();
