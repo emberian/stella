@@ -6,6 +6,7 @@
 
 pub mod build;
 pub mod exsem;
+pub mod logic;
 pub mod presets;
 pub mod stepper;
 

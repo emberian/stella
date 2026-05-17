@@ -856,6 +856,13 @@ figure.stx-figure figcaption .num {
   font-family: var(--font-mono); font-size: 13px; line-height: 1.55;
   white-space: pre; overflow: auto; box-shadow: var(--inner-1);
 }
+.stx-modal[data-role="lpanel"] .stx-ta { min-height: 150px; }
+.stx-lout {
+  display: flex; flex-direction: column; gap: 12px;
+  max-height: 46vh; overflow: auto; padding-top: 4px;
+}
+.stx-lout:empty { display: none; }
+.stx-lout .stx-obs__s sup { font-size: 0.7em; }
 
 /* ── Prev / next pager ────────────────────────────────────── */
 .fj-pager {
