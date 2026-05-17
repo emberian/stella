@@ -509,3 +509,24 @@ All psi_compatible/reference-iex/two-tier-gated, staged-falsifiable,
 must answer "does this actually execute galaxy". PLAN: harvest all 4
 (forensic) → synthesize a decision doc (docs/16) → IMPLEMENT the chosen
 path CAREFULLY now (user: careful≠rushed; doing-things-now is wanted).
+
+## A1-CLOSED. Research swarm harvested → DECISION docs/16 (ba6078c)
+docs/12-15 all harvested+committed (885173b/672433c/b2b193c/966c81a),
+worktrees cleaned. Convergent decision (docs/16): galaxy data[0] = a
+long NON-REDUNDANT TRANSITION-COUNT reduction (GoI docs/15 proved
+eval_forced already space-optimal; Lever-C proved not subterm-redundant)
+⇒ ONLY a step-count collapse terminates it. Two falsifiable hypotheses:
+H1 redex-family redundancy → interaction-net (docs/12, big build); H2
+affine recurrence → KA2 (docs/13, KERNEL ALREADY BUILT). docs/14 Σ(Φ) =
+orthogonal compounding per-step companion. docs/15 §1-4 = theory
+closure (χ = non-nilpotency σu ≡ §49.57; fold into docs/08).
+
+NEXT CONCRETE (docs/16 §3, the decisive cheap read-only experiment —
+MUST be trustworthy, it picks a weeks-long build): a bounded data[0]
+reduction-trace harness → accel_detect::detect_recurrence (H2 probe,
+[Built] infra) + redex-family-duplication instrumentation (H1) +
+transition-vs-space confirm; SETTLE docs/08 §7 (final_ray = faithful
+AEx-layer boundary, galaxy.rs:864-893) in the same harness. Then build
+KA2 (if H2; fastest) or interaction-net (if H1). Then Σ(Φ) companion.
+Faithfulness invariant unchanged (iex oracle / psi_compatible gate /
+two-tier deopt / N-KA-cover honest negative).
