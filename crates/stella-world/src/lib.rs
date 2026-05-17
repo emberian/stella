@@ -53,6 +53,17 @@ pub fn substrate_partner() -> Star {
     ]
 }
 
+/// Generic sensorimotor *capacity* Φ: `[ −sense(X), +act(X) ]`. This is
+/// **board, not a designated self** (P9/P2): it is the mechanism by which
+/// *some* sub-constellation *could* sense-then-act; it names no agent, sets no
+/// goal. Whether any reafferent closure exists is still solved-for by the
+/// N1-guarded detector, which refuses hand-placed ones (cf. the substantiated
+/// triple-null). Mirrors loop_phi's agent half, which the L2a positive test
+/// accepts as a *genuine* closure precisely because it is solved-for.
+pub fn substrate_agent_capacity() -> Constellation {
+    vec![vec![neg_ray("sense", vec![mk_var("X")]), pos_ray("act", vec![mk_var("X")])]]
+}
+
 /// What a world run found. No verdict; counts + per-closure §3.2 status.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorldReport {
@@ -184,6 +195,81 @@ mod tests {
             with_env.closures
         );
         // No assertion on `coupled`: this is a measurement, not a target.
+    }
+
+    /// THE P5.2b MEASUREMENT (couple-without-valuing). Φ = generic
+    /// sensorimotor *capacity* (board); Ψ₀ = seed `[+sense(zero)]` plus the
+    /// LM environment-body. Compare {no env, v1 neutral env, v2 sensorimotor
+    /// env}. Does the *value-free* affordance let a reafferent closure
+    /// self-organise where neutral-inert gave zero? Measured, not targeted.
+    #[test]
+    fn value_free_sensorimotor_env_coupling_measured() {
+        use stella_core::reafference::solve_for_closure;
+        use stella_core::term::mk_app_str;
+        let phi = substrate_agent_capacity();
+        let seed = || vec![pos_ray("sense", vec![mk_app_str("zero", vec![])])];
+
+        let none = solve_for_closure(&phi, vec![seed()], 60).len();
+
+        let v1 = FixedEnvCodec::canonical();
+        let mut psi_v1 = vec![seed()];
+        psi_v1.extend(perturb(&FakeWorldText, &v1, "troy").into_psi_stars());
+        let c_v1 = solve_for_closure(&phi, psi_v1, 60).len();
+
+        let v2 = FixedEnvCodec::canonical_sensorimotor();
+        let mut psi_v2 = vec![seed()];
+        let env_v2 = perturb(&FakeWorldText, &v2, "troy");
+        let env_n = env_v2.len();
+        psi_v2.extend(env_v2.into_psi_stars());
+        let c_v2 = solve_for_closure(&phi, psi_v2, 60).len();
+
+        eprintln!(
+            "[P5.2b] agent-capacity Φ + seed: none={none} | v1-neutral-env={c_v1} \
+             | v2-sensorimotor-env({env_n} stars)={c_v2}"
+        );
+        eprintln!(
+            "[P5.2b finding] value-free affordance {} (v1 {} → v2 {})",
+            if c_v2 > c_v1 { "COUPLES — a reafferent closure self-organised" }
+            else if c_v2 == c_v1 && c_v1 == none { "still inert OR no agent self-organises (deeper finding)" }
+            else { "changed the structure (inspect)" },
+            c_v1, c_v2
+        );
+        // No assertion on counts: measurement, not target (P7/P8).
+    }
+
+    /// VERIFY-DON'T-TRUST the 0→12 jump: inspect the witnesses. Genuine
+    /// reafference = distinct, non-degenerate partitions each with a real
+    /// r<r′ provenance cycle and a non-trivial §3.2 status. Over-count =
+    /// many shimmers of one degenerate loop. A number cannot tell us; this
+    /// dumps the structure for a by-hand (principal) read. No verdict here.
+    #[test]
+    fn inspect_the_twelve_before_believing_them() {
+        use std::collections::BTreeSet;
+        use stella_core::reafference::solve_for_closure;
+        use stella_core::term::mk_app_str;
+        let phi = substrate_agent_capacity();
+        let mut psi0 = vec![vec![pos_ray("sense", vec![mk_app_str("zero", vec![])])]];
+        let v2 = FixedEnvCodec::canonical_sensorimotor();
+        psi0.extend(perturb(&FakeWorldText, &v2, "troy").into_psi_stars());
+
+        let ws = solve_for_closure(&phi, psi0.clone(), 60);
+        eprintln!("[inspect] {} witnesses", ws.len());
+        let mut parts: Vec<BTreeSet<usize>> = Vec::new();
+        for (i, w) in ws.iter().enumerate() {
+            let p: BTreeSet<usize> = w.partition.iter().copied().collect();
+            let st = trajectory(&phi, psi0.clone(), &w.partition, 60).status;
+            eprintln!(
+                "  w{i}: |P|={} r={} r'={} status={:?} P={:?}",
+                p.len(), w.r, w.r_prime, st, p
+            );
+            parts.push(p);
+        }
+        let distinct: BTreeSet<_> = parts.iter().cloned().collect();
+        eprintln!(
+            "[inspect] distinct partitions = {}/{}  (≈1 ⇒ over-count of one \
+             loop; ≈n ⇒ genuine multiplicity of reafferent cuts)",
+            distinct.len(), parts.len()
+        );
     }
 
     /// SANITY (verify-don't-assume): the L2a-validated positive fixture
