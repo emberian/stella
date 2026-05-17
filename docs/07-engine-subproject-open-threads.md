@@ -71,14 +71,36 @@ files ⇒ order doesn't matter; both safe.
   is a clean list (correct-ish) or Opaque-dominated (the honest "NF may be
   wrong" risk realized). Feeds thread B directly.
 
-## B. GALAXY SPINE — reprioritized, the next concrete deliverable
-Measured arc: blocked@5 → KG3b lazy prims → **371-step true NF, NO strict
-stall** (isnil AND arith "blockers" were BOTH census artifacts = unapplied
-data, not redexes; `find_blocked_*` precise-redex detection ≠ head-census —
-recurring lesson). Forcing driver (`galaxy::eval_forced`, disclosed §60,
-isnil + sbinarith arith) BUILT, faithful, additive, 7/7 — but galaxy doesn't
-need it to reduce (0 forcings/0 arith_ops, fully_reduced=true). `div` NOT
-auto-forced (KG1b: stellar div past KS frontier even at −1/2).
+## B. GALAXY SPINE — DIAGNOSED + partially fixed (KG3e/KG3f)
+**The earlier "371-step true NF, fully_reduced=true, 0 arith" was a
+STRUCTURAL FALSE NEGATIVE, now overturned.** KG3e (`galaxy_dump.rs`,
+commit 6baff61): the terminal state is `+P(st(eq, A·B·π))` — galaxy's
+first interaction Push-uncurries `eq` onto the KAM stack and stalls
+because `prim_stars()` omits strict ops. `find_blocked_arith`/`eval_forced`
+only scanned the *curried* `a(a(op,A),B)` form; the KAM **always**
+uncurries operators onto π, so the live redex (`st(op,…·π)`) was in a
+shape the detector never matched. The decoder's `[0,[]]` was an
+unrelated tiny island in the 702-node frozen continuation. (Inverse of
+the census-artifact lesson: here the precise detector itself was
+incomplete.) KG3f (commit 3696dff): added `find_blocked_pushform` +
+recursive Push-form forcing in `eval_forced` (force operands via the
+forced evaluator itself, compute via stellar (s)binarith, tt/ff→t/f,
+`st(result,π_resid)`, continue). **Measured curve now:** galaxy
+genuinely executes strict arithmetic — one `eq` operand forces cleanly
+to numeral `0`; the other resolves **13 nested strict ops** then stalls
+on a *deeper* Push-form `lt`. Residual = arithmetic DEPTH (and/or the
+known `div` frontier), an honest measured stop — NOT a dead end, NOT
+faked. `div` still NOT auto-forced (KG1b: stellar div past KS frontier).
+**Next B = drive the depth:** chase the recursive `lt`/`div` residual
+(deeper budget/fuel, instrument the deepest stall op, decide div policy),
+decoder as the gating oracle, until the first interaction yields a real
+`(flag,newState,data)`. Old decoder-priority note retained below for
+context but the decoder is BUILT (490168f) and is now the oracle.
+
+(Pre-KG3e text, retained for the measured arc:)
+Measured arc: blocked@5 → KG3b lazy prims → 371-step "NF" → KG3e found
+it was a Push-form `eq` stall, not a true NF. Forcing driver
+(`galaxy::eval_forced`, disclosed §60) now Push-form aware (KG3f).
 **NEXT = faithful FULL-RESULT DECODER (= rendering path = validation oracle):**
 decode the whole process ray (NOT `focus`/`st_inner` — output lives on the
 continuation π), decode ICFP cons/nil list-of-(x,y), check vs the known
@@ -202,11 +224,13 @@ conclusion (F). (Was deferred "to next checkpoint" — still owed.)
 ## NEXT ACTIONS (priority order)
 1. ~~Harvest both A agents~~ DONE (490168f galaxy_decode, 308189f
    IexAccel). Thread A CLOSED.
-2. **(NOW TOP)** Investigate WHY galaxy's entry interaction reduces only
-   shallowly to `[0,[]]` — entry/click encoding vs interaction-loop
-   driver vs neg/div placeholder stall; `galaxy_decode::decode_result`
-   is the trustworthy step oracle. This is the de-risked spine
-   deliverable (decoder built+faithful; what's left is correctness).
+2. ~~Investigate WHY shallow~~ DIAGNOSED (KG3e 6baff61): Push-form `eq`
+   stall, not a true NF. Partially fixed (KG3f 3696dff): Push-form
+   forcing resolves 13+ nested strict ops; one operand → numeral 0.
+   **(NOW TOP)** Drive the residual depth: chase the deeper Push-form
+   `lt`/`div` stall (budget/fuel, instrument deepest stall op, div
+   policy), decoder-gated, until the first interaction yields a real
+   `(flag,newState,data)`.
 3. Fold this into `docs/05` §10 (J) — include the KG3d shallow-NF
    finding (decoder faithful; galaxy NF clean-but-shallow, not Opaque).
 4. Then: KA1 cheap-key+cross-run table (D, valence) → rayon (D) → KA2
