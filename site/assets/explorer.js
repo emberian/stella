@@ -85,25 +85,108 @@ function styleSvg(svg) {
   svg.removeAttribute("height");
 }
 
-const TEMPLATE = (compact) => `
+// Tokenize the surface syntax into highlighted HTML (no dependency).
+function tokenizeStella(src) {
+  let out = "";
+  const re =
+    /(#[^\n]*)|([\[\]()])|([+\-−](?=[A-Za-z_]))|([,;])|([A-Za-z_$.][\w$.'\-]*|ε|□|★)|(\s+)|([^\s])/g;
+  let m;
+  while ((m = re.exec(src))) {
+    if (m[1]) out += `<span class="tk-c">${esc(m[1])}</span>`;
+    else if (m[2]) out += `<span class="tk-b">${esc(m[2])}</span>`;
+    else if (m[3]) out += `<span class="tk-p">${esc(m[3])}</span>`;
+    else if (m[4]) out += `<span class="tk-s">${esc(m[4])}</span>`;
+    else if (m[5]) {
+      const cls = /^[A-Z]/.test(m[5]) ? "tk-v" : "tk-f";
+      out += `<span class="${cls}">${esc(m[5])}</span>`;
+    } else if (m[6]) out += esc(m[6]);
+    else out += esc(m[7]);
+  }
+  return out;
+}
+
+// Turn a <textarea> into a syntax-highlighted code field with a line-number
+// gutter and an error-line marker. A transparent textarea sits over a
+// highlighted <pre>; metrics are pinned identical in CSS.
+function enhanceField(ta, onInput) {
+  const code = document.createElement("div");
+  code.className = "stx-code";
+  const gutter = document.createElement("div");
+  gutter.className = "stx-gutter";
+  gutter.setAttribute("aria-hidden", "true");
+  const wrap = document.createElement("div");
+  wrap.className = "stx-wrap";
+  const pre = document.createElement("pre");
+  pre.className = "stx-hl";
+  pre.setAttribute("aria-hidden", "true");
+  const codeEl = document.createElement("code");
+  pre.appendChild(codeEl);
+  ta.parentNode.insertBefore(code, ta);
+  wrap.appendChild(pre);
+  wrap.appendChild(ta);
+  code.appendChild(gutter);
+  code.appendChild(wrap);
+
+  let errLine = -1;
+  const refresh = () => {
+    const v = ta.value;
+    codeEl.innerHTML = tokenizeStella(v) + "\n";
+    const lines = v.split("\n").length;
+    let g = "";
+    for (let i = 1; i <= lines; i++) {
+      g += `<div class="${i - 1 === errLine ? "is-err" : ""}">${i}</div>`;
+    }
+    gutter.innerHTML = g;
+    // auto-grow
+    ta.style.height = "auto";
+    ta.style.height = ta.scrollHeight + "px";
+    pre.style.height = ta.style.height;
+  };
+  ta.addEventListener("input", () => { refresh(); onInput && onInput(); });
+  ta.addEventListener("scroll", () => {
+    codeEl.style.transform = `translateX(${-ta.scrollLeft}px)`;
+  });
+  ta.addEventListener("keydown", (e) => {
+    if (e.key === "Tab") {
+      e.preventDefault();
+      const s = ta.selectionStart, en = ta.selectionEnd;
+      ta.value = ta.value.slice(0, s) + "  " + ta.value.slice(en);
+      ta.selectionStart = ta.selectionEnd = s + 2;
+      refresh(); onInput && onInput();
+    } else if (e.key === "(" || e.key === "[") {
+      const close = e.key === "(" ? ")" : "]";
+      const s = ta.selectionStart, en = ta.selectionEnd;
+      if (s === en) {
+        e.preventDefault();
+        ta.value = ta.value.slice(0, s) + e.key + close + ta.value.slice(en);
+        ta.selectionStart = ta.selectionEnd = s + 1;
+        refresh(); onInput && onInput();
+      }
+    }
+  });
+  return {
+    refresh,
+    setValue(v) { ta.value = v; refresh(); },
+    markError(line) { errLine = line; refresh(); },
+    clearError() { if (errLine !== -1) { errLine = -1; refresh(); } },
+  };
+}
+
+// Inline (primer) widget — unchanged minimal layout.
+const TEMPLATE_INLINE = `
   <div class="stx-bar">
-    <span class="stx-bar__title">
-      <img src="assets/stella/glyphs/star.svg" alt="" />
-      Stellar resolution — interactive execution
-    </span>
+    <span class="stx-bar__title"><img src="assets/stella/glyphs/star.svg" alt="" />
+      Stellar resolution — interactive execution</span>
     <span class="stx-bar__spacer"></span>
     <span class="st-pulse" data-role="pulse">starting engine</span>
     <select class="stx-select" data-role="presets" aria-label="Choose a constellation"></select>
   </div>
-
   <div class="stx-views" role="tablist">
     <button class="stx-viewbtn is-active" data-view="constellation" role="tab">Constellation</button>
     <button class="stx-viewbtn" data-view="depgraph" role="tab">Dependency graph</button>
-    ${compact ? "" : '<button class="stx-viewbtn" data-view="editor" role="tab">Editor</button>'}
     <span class="stx-bar__spacer"></span>
-    <a class="stx-permalink" data-role="permalink" href="#" title="Copy a link to this constellation">Permalink</a>
+    <a class="stx-permalink" data-role="permalink" href="#">Permalink</a>
   </div>
-
   <div class="stx-stage" data-role="stage">
     <div class="stx-pane stx-pane--constellation is-active" data-pane="constellation">
       <div class="stx-canvas" data-role="canvas"></div>
@@ -112,73 +195,126 @@ const TEMPLATE = (compact) => `
         <div class="stx-redexes" data-role="redexes"></div>
       </div>
     </div>
-    <div class="stx-pane" data-pane="depgraph">
-      <div class="stx-graph" data-role="graph"></div>
-    </div>
-    ${compact ? "" : `
-    <div class="stx-pane" data-pane="editor">
-      <div class="stx-editor">
-        <label>Reference constellation Φ — the rules
-          <textarea data-role="phi" spellcheck="false" autocapitalize="off"
-            autocomplete="off" rows="5"
-            placeholder="[+add(0, Y, Y)] + [-add(X, Y, Z), +add(s(X), Y, s(Z))]"></textarea></label>
-        <label>Interaction space Ψ — the query
-          <textarea data-role="psi" spellcheck="false" autocapitalize="off"
-            autocomplete="off" rows="2"
-            placeholder="[-add(s(s(0)), s(s(0)), R), R]"></textarea></label>
-        <div class="stx-editor__row">
-          <button class="st-btn st-btn--sm" data-role="run">Resolve&nbsp;▸<span class="stx-kbd">⌘⏎</span></button>
-          <select class="stx-select stx-select--light" data-role="examples" aria-label="Load an example"></select>
-          <span class="stx-bar__spacer"></span>
-          <span class="stx-validity" data-role="validity"></span>
-        </div>
-        <pre class="stx-frame" data-role="frame" hidden></pre>
-        <p class="stx-syntax">Uppercase&nbsp;=&nbsp;variable&nbsp;·
-          <code>+</code>/<code>-</code>&nbsp;=&nbsp;polarity&nbsp;·
-          <code>+</code>&nbsp;or newline separates stars&nbsp;·
-          <a href="r/notation.html" target="_blank" rel="noopener">notation&nbsp;↗</a></p>
-      </div>
-    </div>`}
+    <div class="stx-pane" data-pane="depgraph"><div class="stx-graph" data-role="graph"></div></div>
   </div>
-
   <div class="stx-controls">
     <button class="st-btn st-btn--secondary st-btn--sm" data-role="reset" title="Step 0">↺</button>
     <button class="st-btn st-btn--secondary st-btn--sm" data-role="prev" title="Previous (←)">◂</button>
-    <button class="st-btn st-btn--secondary st-btn--sm" data-role="play" title="Play / pause (space)">▶ Play</button>
+    <button class="st-btn st-btn--secondary st-btn--sm" data-role="play" title="Play / pause">▶ Play</button>
     <button class="st-btn st-btn--secondary st-btn--sm" data-role="next" title="Next (→)">▸</button>
     <input type="range" class="stx-scrub" data-role="scrub" min="0" max="0" value="0" aria-label="Step" />
     <select class="stx-select stx-select--light" data-role="speed" aria-label="Speed">
       <option value="1400">0.5×</option><option value="750" selected>1×</option>
       <option value="380">2×</option><option value="160">4×</option>
     </select>
-    ${compact ? "" : '<button class="st-btn st-btn--secondary st-btn--sm" data-role="fork" title="Send this state to the editor and continue from it" hidden>⑂ Fork here</button>'}
     <span class="step-readout" data-role="readout"></span>
   </div>
   <div class="stx-desc" data-role="desc"></div>
 `;
 
-const EXAMPLES = [
-  { name: "Horn addition — 2 + 2",
-    phi: "[+add(0, Y, Y)] + [-add(X, Y, Z), +add(s(X), Y, s(Z))]",
-    psi: "[-add(s(s(0)), s(s(0)), R), R]" },
-  { name: "Horn multiplication — 2 × 3",
-    phi: "[+add(0, Y, Y)] + [-add(X, Y, Z), +add(s(X), Y, s(Z))] + [+mul(0, Y, 0)] + [-mul(X, Y, Z), -add(Y, Z, W), +mul(s(X), Y, W)]",
-    psi: "[-mul(s(s(0)), s(s(s(0))), R), R]" },
-  { name: "Identity / self-interaction",
-    phi: "[+f(X), -f(X)]",
-    psi: "[-f(a), R] + [+f(a)]" },
-  { name: "List membership",
-    phi: "[+mem(X, cons(X, T))] + [-mem(X, T), +mem(X, cons(Y, T))]",
-    psi: "[-mem(b, cons(a, cons(b, nil))), R]" },
-  { name: "List append",
-    phi: "[+app(nil, Y, Y)] + [-app(X, Y, Z), +app(cons(H, X), Y, cons(H, Z))]",
-    psi: "[-app(cons(a, cons(b, nil)), cons(c, nil), R), R]" },
-  { name: "Even / odd (mutual recursion)",
-    phi: "[+even(0)] + [-odd(X), +even(s(X))] + [-even(X), +odd(s(X))]",
-    psi: "[-even(s(s(s(s(0))))), R] + [-odd(s(s(s(0)))), S]" },
-  { name: "Concurrency — two queries, two redexes",
-    phi: "[+add(0, Y, Y)] + [-add(X, Y, Z), +add(s(X), Y, s(Z))]",
-    psi: "[-add(s(0), s(0), R), R] + [-add(s(s(0)), 0, S), S]" },
+// Full educational IDE: a library rail, a syntax-highlighted editor, a live
+// constellation, and an inspector — all on one screen.
+const TEMPLATE_IDE = `
+  <div class="stx-bar">
+    <span class="stx-bar__title"><img src="assets/stella/glyphs/star.svg" alt="" />
+      Stellar resolution — a playground</span>
+    <span class="stx-bar__spacer"></span>
+    <span class="st-pulse" data-role="pulse">starting engine</span>
+    <button class="stx-iconbtn" data-role="copytrace" title="Copy the whole step-by-step trace">⧉ trace</button>
+    <a class="stx-permalink" data-role="permalink" href="#" title="Copy a sharable link">↪ share</a>
+  </div>
+
+  <div class="stx-ide">
+    <aside class="stx-rail" data-role="lib" aria-label="Example library"></aside>
+
+    <section class="stx-work">
+      <div class="stx-edit">
+        <div class="stx-edit__head"><span>Reference constellation Φ — the rules</span>
+          <span class="stx-validity" data-role="validity"></span></div>
+        <textarea data-role="phi" class="stx-ta" spellcheck="false" wrap="off"
+          autocapitalize="off" autocomplete="off"
+          placeholder="[+add(0, Y, Y)] + [-add(X, Y, Z), +add(s(X), Y, s(Z))]"></textarea>
+        <div class="stx-edit__head"><span>Interaction space Ψ — the query</span></div>
+        <textarea data-role="psi" class="stx-ta" spellcheck="false" wrap="off"
+          autocapitalize="off" autocomplete="off"
+          placeholder="[-add(s(s(0)), s(s(0)), R), R]"></textarea>
+        <div class="stx-edit__row">
+          <button class="st-btn st-btn--sm" data-role="run">Resolve&nbsp;▸<span class="stx-kbd">⌘⏎</span></button>
+          <button class="st-btn st-btn--secondary st-btn--sm" data-role="fork"
+            title="Snip the current state back into the editor" hidden>⑂ Fork here</button>
+          <span class="stx-bar__spacer"></span>
+          <a class="stx-syntax-link" href="r/notation.html" target="_blank" rel="noopener">notation ↗</a>
+        </div>
+        <p class="stx-syntax" data-role="hint">Uppercase = variable · <code>+</code>/<code>-</code> = polarity ·
+          <code>+</code> or newline separates stars · ⌘⏎ to resolve</p>
+      </div>
+
+      <div class="stx-out">
+        <div class="stx-views" role="tablist">
+          <button class="stx-viewbtn is-active" data-view="constellation" role="tab">Constellation</button>
+          <button class="stx-viewbtn" data-view="depgraph" role="tab">Dependency graph</button>
+          <span class="stx-bar__spacer"></span>
+          <span class="step-readout" data-role="readout"></span>
+        </div>
+        <div class="stx-stage" data-role="stage">
+          <div class="stx-pane stx-pane--constellation is-active" data-pane="constellation">
+            <div class="stx-canvas" data-role="canvas"></div>
+            <div class="stx-readout">
+              <div class="stx-mgu" data-role="mgu"></div>
+              <div class="stx-redexes" data-role="redexes"></div>
+            </div>
+          </div>
+          <div class="stx-pane" data-pane="depgraph"><div class="stx-graph" data-role="graph"></div></div>
+        </div>
+        <div class="stx-controls">
+          <button class="st-btn st-btn--secondary st-btn--sm" data-role="reset" title="Step 0 (Home)">↺</button>
+          <button class="st-btn st-btn--secondary st-btn--sm" data-role="prev" title="Previous (←)">◂</button>
+          <button class="st-btn st-btn--secondary st-btn--sm" data-role="play" title="Play / pause (space)">▶ Play</button>
+          <button class="st-btn st-btn--secondary st-btn--sm" data-role="next" title="Next (→)">▸</button>
+          <input type="range" class="stx-scrub" data-role="scrub" min="0" max="0" value="0" aria-label="Step" />
+          <select class="stx-select stx-select--light" data-role="speed" aria-label="Speed">
+            <option value="1400">0.5×</option><option value="750" selected>1×</option>
+            <option value="380">2×</option><option value="160">4×</option>
+          </select>
+        </div>
+      </div>
+    </section>
+  </div>
+  <div class="stx-desc" data-role="desc"></div>
+  <select data-role="presets" hidden></select>
+`;
+
+const TEMPLATE = (compact) => (compact ? TEMPLATE_INLINE : TEMPLATE_IDE);
+
+// The example library — the editable, pedagogical core. Each entry has a
+// note pointing at *what to watch for*.
+const LIBRARY = [
+  { group: "Logic programming", items: [
+    { name: "Addition — 2 + 2", note: "Peano addition; watch the request peel one s each step.",
+      phi: "[+add(0, Y, Y)] + [-add(X, Y, Z), +add(s(X), Y, s(Z))]",
+      psi: "[-add(s(s(0)), s(s(0)), R), R]" },
+    { name: "Multiplication — 2 × 3", note: "mul calls add — nested resolution.",
+      phi: "[+add(0, Y, Y)] + [-add(X, Y, Z), +add(s(X), Y, s(Z))] + [+mul(0, Y, 0)] + [-mul(X, Y, Z), -add(Y, Z, W), +mul(s(X), Y, W)]",
+      psi: "[-mul(s(s(0)), s(s(s(0))), R), R]" },
+    { name: "List membership", note: "Backtracking-free search down a list.",
+      phi: "[+mem(X, cons(X, T))] + [-mem(X, T), +mem(X, cons(Y, T))]",
+      psi: "[-mem(b, cons(a, cons(b, nil))), R]" },
+    { name: "List append", note: "The classic relational append.",
+      phi: "[+app(nil, Y, Y)] + [-app(X, Y, Z), +app(cons(H, X), Y, cons(H, Z))]",
+      psi: "[-app(cons(a, cons(b, nil)), cons(c, nil), R), R]" },
+    { name: "Even / odd", note: "Mutual recursion across two predicates.",
+      phi: "[+even(0)] + [-odd(X), +even(s(X))] + [-even(X), +odd(s(X))]",
+      psi: "[-even(s(s(s(s(0))))), R] + [-odd(s(s(s(0)))), S]" },
+  ]},
+  { group: "Concurrency & non-determinism", items: [
+    { name: "Two queries, two redexes", note: "Two independent requests — pick which fires.",
+      phi: "[+add(0, Y, Y)] + [-add(X, Y, Z), +add(s(X), Y, s(Z))]",
+      psi: "[-add(s(0), s(0), R), R] + [-add(s(s(0)), 0, S), S]" },
+    { name: "Self-interaction", note: "A star resolves against itself.",
+      phi: "[+f(X), -f(X)]", psi: "[-f(a), R] + [+f(a)]" },
+    { name: "Divergence", note: "No normal form — the engine caps at 300 steps.",
+      phi: "[+f(X), -f(X)]", psi: "[-f(a)]" },
+  ]},
 ];
 
 export async function mountExplorer(root, opts = {}) {
@@ -203,7 +339,8 @@ export async function mountExplorer(root, opts = {}) {
 
   let steps = [], idx = 0, presetIdx = -1, view = "constellation",
     playTimer = null, sourceMode = false, lastPhi = "", lastPsi = "",
-    choicePath = []; // chosen (star,ray) per step; [] = pure IEx order
+    choicePath = [], // chosen (star,ray) per step; [] = pure IEx order
+    phiEd = null, psiEd = null; // code-editor handles (set in IDE wiring)
 
   // ── view switching ─────────────────────────────────────────────────────────
   root.querySelectorAll(".stx-viewbtn").forEach((b) =>
@@ -424,23 +561,22 @@ export async function mountExplorer(root, opts = {}) {
     v.className = "stx-validity " + (ok ? "is-ok" : "is-err");
     v.textContent = msg;
   }
-  function showFrame(src, pos) {
-    const fr = $("frame");
-    if (!fr) return;
+  // pos is a byte/char offset into the *trimmed* source the parser saw.
+  function lineOf(src, pos) {
     const s = (src || "").trimStart();
     const p = Math.max(0, Math.min(pos | 0, s.length));
-    let line = 0, col = 0;
-    for (let i = 0; i < p; i++) {
-      if (s[i] === "\n") { line++; col = 0; } else col++;
-    }
-    const text = s.split("\n")[line] ?? "";
-    fr.hidden = false;
-    fr.textContent = text + "\n" + " ".repeat(col) + "^";
+    let line = 0;
+    for (let i = 0; i < p; i++) if (s[i] === "\n") line++;
+    return line;
   }
-  function clearFrame() { const fr = $("frame"); if (fr) { fr.hidden = true; fr.textContent = ""; } }
+  function clearFrame() { phiEd && phiEd.clearError(); psiEd && psiEd.clearError(); }
   function showParseError(res, phi, psi) {
     setValidity(false, `✗ ${res.where} · ${res.error}`);
-    showFrame(res.where === "Ψ" ? psi : phi, res.pos);
+    const onPsi = res.where === "Ψ";
+    const ed = onPsi ? psiEd : phiEd;
+    const other = onPsi ? phiEd : psiEd;
+    other && other.clearError();
+    ed && ed.markError(lineOf(onPsi ? psi : phi, res.pos));
   }
 
   function runPath(phi, psi, gotoIdx) {
@@ -476,9 +612,7 @@ export async function mountExplorer(root, opts = {}) {
   }
 
   function runEditor() {
-    const ok = runSource($("phi").value.trim(), $("psi").value.trim());
-    // Show the result on success; stay in the editor (with the caret) on error.
-    if (ok) setView("constellation");
+    runSource($("phi").value.trim(), $("psi").value.trim());
   }
 
   // Snip the interaction space at the current step back into the editor and
@@ -486,24 +620,81 @@ export async function mountExplorer(root, opts = {}) {
   function forkFromHere() {
     if (!sourceMode || !steps[idx]) return;
     const psi = steps[idx].psi_stars.join(" + ");
-    $("psi").value = psi;
-    $("phi").value = lastPhi;
+    if (psiEd) psiEd.setValue(psi); else $("psi").value = psi;
+    if (phiEd) phiEd.setValue(lastPhi); else $("phi").value = lastPhi;
     choicePath = [];
-    if (runSource(lastPhi, psi)) setView("constellation");
-    else setView("editor");
+    runSource(lastPhi, psi);
+  }
+
+  function loadIntoEditor(phi, psi) {
+    if (phiEd) phiEd.setValue(phi); else $("phi").value = phi;
+    if (psiEd) psiEd.setValue(psi); else $("psi").value = psi;
+    runEditor();
+  }
+
+  // Plain-text dump of the whole trace, for sharing / lecture notes.
+  function traceText() {
+    const lines = [
+      `Φ = ${lastPhi}`,
+      `Ψ = ${lastPsi}`,
+      `— ${steps.length} step(s) —`,
+      "",
+    ];
+    steps.forEach((s) => {
+      lines.push(`step ${s.step}${s.is_final ? " (normal form)" : ""}`);
+      s.psi_stars.forEach((st) => lines.push(`  ${st}`));
+      if (s.mgu && s.mgu.length) {
+        lines.push(`  mgu: ${s.mgu.map(([v, t]) => `${v} ↦ ${t}`).join(" · ")}`);
+      }
+      lines.push("");
+    });
+    return lines.join("\n");
   }
 
   if (!compact) {
-    const elEx = $("examples");
-    elEx.innerHTML = `<option value="">Load an example…</option>` +
-      EXAMPLES.map((e, i) => `<option value="${i}">${esc(e.name)}</option>`).join("");
-    elEx.addEventListener("change", () => {
-      const e = EXAMPLES[+elEx.value];
-      if (e) { $("phi").value = e.phi; $("psi").value = e.psi; runEditor(); }
-    });
-    $("run").addEventListener("click", runEditor);
+    phiEd = enhanceField($("phi"));
+    psiEd = enhanceField($("psi"));
 
-    // Live, debounced parse feedback — you see ✓/✗ before running.
+    // Library rail — categorised, editable, with "what to watch for".
+    const lib = $("lib");
+    lib.innerHTML =
+      `<div class="stx-rail__h">Examples</div>` +
+      LIBRARY.map((g) =>
+        `<div class="stx-rail__g">${esc(g.group)}</div>` +
+        g.items.map((it, k) =>
+          `<button class="stx-rail__i" data-g="${esc(g.group)}" data-k="${k}">
+             <span class="stx-rail__n">${esc(it.name)}</span>
+             <span class="stx-rail__note">${esc(it.note)}</span></button>`
+        ).join("")
+      ).join("") +
+      `<div class="stx-rail__g">Engine showcases (read-only)</div>` +
+      presets.map((p, i) =>
+        `<button class="stx-rail__i stx-rail__i--ro" data-preset="${i}">
+           <span class="stx-rail__n">${esc(p.name)}</span>
+           <span class="stx-rail__note">${esc(p.description)}</span></button>`
+      ).join("");
+    lib.querySelectorAll(".stx-rail__i").forEach((b) => {
+      b.addEventListener("click", () => {
+        lib.querySelectorAll(".stx-rail__i").forEach((x) =>
+          x.classList.toggle("is-active", x === b));
+        if (b.dataset.preset != null) { loadPreset(+b.dataset.preset); return; }
+        const g = LIBRARY.find((x) => x.group === b.dataset.g);
+        const it = g && g.items[+b.dataset.k];
+        if (it) loadIntoEditor(it.phi, it.psi);
+      });
+    });
+
+    $("run").addEventListener("click", runEditor);
+    const ct = $("copytrace");
+    if (ct) ct.addEventListener("click", () => {
+      if (!steps.length) return;
+      navigator.clipboard?.writeText(traceText()).then(() => {
+        const o = ct.textContent; ct.textContent = "copied";
+        setTimeout(() => (ct.textContent = o), 1400);
+      });
+    });
+
+    // Live, debounced parse feedback — ✓/✗ and an in-gutter error line.
     let vt = null;
     const validate = () => {
       const phi = $("phi").value.trim();
@@ -519,7 +710,6 @@ export async function mountExplorer(root, opts = {}) {
     ["phi", "psi"].forEach((r) => {
       const t = $(r);
       t.addEventListener("input", debounced);
-      // ⌘⏎ / Ctrl+⏎ resolves from either field.
       t.addEventListener("keydown", (e) => {
         if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
           e.preventDefault(); runEditor();
@@ -545,8 +735,9 @@ export async function mountExplorer(root, opts = {}) {
   const pl = $("permalink");
   if (pl) pl.addEventListener("click", (e) => {
     e.preventDefault();
+    const orig = pl.textContent;
     navigator.clipboard?.writeText(pl.href).then(() => {
-      pl.textContent = "Copied"; setTimeout(() => (pl.textContent = "Permalink"), 1400);
+      pl.textContent = "copied ✓"; setTimeout(() => (pl.textContent = orig), 1400);
     });
   });
 
@@ -556,8 +747,8 @@ export async function mountExplorer(root, opts = {}) {
   const q = new URLSearchParams(location.search);
   const qPhi = q.get("phi"), qPsi = q.get("psi"), qPreset = q.get("preset");
   if (qPhi != null && !compact) {
-    setView("editor");
-    $("phi").value = qPhi; $("psi").value = qPsi || "";
+    if (phiEd) phiEd.setValue(qPhi); else $("phi").value = qPhi;
+    if (psiEd) psiEd.setValue(qPsi || ""); else $("psi").value = qPsi || "";
     runSource(qPhi.trim(), (qPsi || "").trim());
   } else if (qPreset != null) {
     let i = parseInt(qPreset, 10);
@@ -566,10 +757,16 @@ export async function mountExplorer(root, opts = {}) {
         p.name.toLowerCase().includes(qPreset.toLowerCase()));
     }
     await loadPreset(i >= 0 && i < presets.length ? i : 0);
-  } else {
+  } else if (compact) {
     await loadPreset(
       Number.isInteger(opts.initialPreset) && opts.initialPreset < presets.length
         ? opts.initialPreset : 0);
+  } else {
+    // The IDE opens on an editable example, with the rail item marked.
+    const first = LIBRARY[0].items[0];
+    const b = $("lib").querySelector('.stx-rail__i[data-g][data-k="0"]');
+    if (b) b.classList.add("is-active");
+    loadIntoEditor(first.phi, first.psi);
   }
   return { loadPreset };
 }
