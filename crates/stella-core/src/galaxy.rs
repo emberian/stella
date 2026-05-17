@@ -609,10 +609,20 @@ fn force_numeral(
     fuel: usize,
     budget: usize,
 ) -> Option<(TermId, usize)> {
+    TR_DEPTH.with(|c| c.set(c.get() + 1));
     let f = eval_forced(phi, term, fuel, budget);
+    TR_DEPTH.with(|c| c.set(c.get().saturating_sub(1)));
     if crate::sbinarith::dsint(f.value).is_some() {
         Some((f.value, f.steps))
     } else {
+        gtrace(format_args!(
+            "  └ operand did NOT reduce to numeral: focus={} fully_reduced={} arith_ops={}",
+            match term::get(f.value) {
+                TermData::Var(_) => "<var>".into(),
+                TermData::App(s, a) => format!("{}/{}", s.name.as_str(), a.len()),
+            },
+            f.fully_reduced, f.arith_ops
+        ));
         None
     }
 }
@@ -636,6 +646,7 @@ fn find_blocked_arith(t: TermId) -> Option<(TermId, &'static str, Vec<TermId>)> 
                     ("mul", 2) => Some("mul"),
                     ("eq", 2) => Some("eq"),
                     ("lt", 2) => Some("lt"),
+                    ("div", 2) => Some("div"),
                     ("neg", 1) => Some("neg"),
                     _ => None,
                 };
@@ -682,7 +693,7 @@ fn find_blocked_arith(t: TermId) -> Option<(TermId, &'static str, Vec<TermId>)> 
 /// Returns `(op, operands, residual_π)` — operands are the popped stack frames
 /// (the actual argument closures), residual is π after they are consumed. Not
 /// enough frames ⇒ a genuine partial-application value, NOT a redex ⇒ `None`.
-fn find_blocked_pushform(ray: TermId) -> Option<(&'static str, Vec<TermId>, TermId)> {
+pub fn find_blocked_pushform(ray: TermId) -> Option<(&'static str, Vec<TermId>, TermId)> {
     // Unwrap +P(st(M, π)) (polarity-agnostic on the `P` head name).
     let TermData::App(p, pa) = term::get(ray) else { return None };
     if p.name.as_str() != "P" || pa.len() != 1 {
@@ -704,6 +715,7 @@ fn find_blocked_pushform(ray: TermId) -> Option<(&'static str, Vec<TermId>, Term
         "mul" => ("mul", 2),
         "eq" => ("eq", 2),
         "lt" => ("lt", 2),
+        "div" => ("div", 2),
         "neg" => ("neg", 1),
         _ => return None,
     };
@@ -739,6 +751,25 @@ pub struct Forced {
     /// No blocked `isnil` AND no blocked `add/mul/eq/lt/neg` remains. `div`
     /// and non-numeral-operand residuals are honest measured stops, not faked.
     pub fully_reduced: bool,
+    /// The full surviving process ray `+P(st(M,π))` at termination (the
+    /// protocol's `(flag,newState,data)` lives on the continuation `π`, NOT
+    /// in `value`/focus). `None` only if no single ray survived. Feed this to
+    /// `galaxy_decode::decode_result` for the real result.
+    pub final_ray: Option<TermId>,
+}
+
+thread_local! {
+    /// Recursion depth for `STELLA_GALAXY_TRACE` indentation.
+    static TR_DEPTH: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+/// Env-gated (`STELLA_GALAXY_TRACE=1`) one-line forcing trace — the
+/// instrument that shows exactly which Push-form op resolves and where the
+/// chain actually stops. No-op (one env read) unless enabled.
+fn gtrace(args: std::fmt::Arguments) {
+    if std::env::var_os("STELLA_GALAXY_TRACE").is_some() {
+        let d = TR_DEPTH.with(|c| c.get());
+        eprintln!("[gtrace]{}{}", "  ".repeat(d), args);
+    }
 }
 
 /// Disclosed §60 host-forcing evaluator (slice 1: `isnil`). Interleaves
@@ -749,9 +780,12 @@ pub fn eval_forced(phi: &Constellation, prog: TermId, fuel: usize, max_forcings:
     let mut total = 0usize;
     let mut forcings = 0usize;
     let mut arith_ops = 0usize;
-    // Bounded inner fuel for stellar sbinarith ops: small ops resolve; a slow
-    // one fails-fast → honest measured stop (the KS/KA2 frontier), never a hang.
-    let sub_fuel = 20_000usize;
+    // Bounded inner fuel for stellar sbinarith ops. Galaxy-scale integer
+    // arithmetic needs materially more than the original 20k (that cap was
+    // the real cause of the arith_ops=1 stall — operands DO resolve, the
+    // sbinarith *computation* was being truncated). Still bounded ⇒ a
+    // genuinely slow op fails-fast to an honest measured stop, never hangs.
+    let sub_fuel = 2_000_000usize;
     loop {
         let res = crate::interactive::iex_fast(phi, psi.clone(), fuel);
         total += res.steps;
@@ -760,7 +794,7 @@ pub fn eval_forced(phi: &Constellation, prog: TermId, fuel: usize, max_forcings:
             None => {
                 let v = psi.first().and_then(|s| s.first().copied()).unwrap_or(prog);
                 return Forced {
-                    value: v, steps: total, forcings, arith_ops,
+                    value: v, steps: total, forcings, arith_ops, final_ray: None,
                     isnil_complete: false, fully_reduced: false,
                 };
             }
@@ -770,7 +804,7 @@ pub fn eval_forced(phi: &Constellation, prog: TermId, fuel: usize, max_forcings:
         if let Some((node, arg)) = find_blocked_isnil(ray) {
             if forcings + arith_ops >= max_forcings {
                 return Forced {
-                    value: focus, steps: total, forcings, arith_ops,
+                    value: focus, steps: total, forcings, arith_ops, final_ray: Some(ray),
                     isnil_complete: false, fully_reduced: false,
                 };
             }
@@ -782,7 +816,7 @@ pub fn eval_forced(phi: &Constellation, prog: TermId, fuel: usize, max_forcings:
             let ray2 = replace_subterm(ray, node, ap_node(cst("isnil"), arg_v));
             if ray2 == ray {
                 return Forced {
-                    value: focus, steps: total, forcings, arith_ops,
+                    value: focus, steps: total, forcings, arith_ops, final_ray: Some(ray),
                     isnil_complete: false, fully_reduced: false,
                 };
             }
@@ -803,18 +837,28 @@ pub fn eval_forced(phi: &Constellation, prog: TermId, fuel: usize, max_forcings:
                 // `st(result, π_residual)`, continue.
                 let Some((op, operands, resid_pi)) = find_blocked_pushform(ray)
                 else {
+                    gtrace(format_args!(
+                        "FULLY REDUCED: no isnil/arith/pushform redex; focus={} arith_ops={arith_ops}",
+                        match term::get(focus) {
+                            TermData::Var(_) => "<var>".into(),
+                            TermData::App(s, a) => format!("{}/{}", s.name.as_str(), a.len()),
+                        }
+                    ));
                     return Forced {
-                        value: focus, steps: total, forcings, arith_ops,
+                        value: focus, steps: total, forcings, arith_ops, final_ray: Some(ray),
                         isnil_complete: true, fully_reduced: true,
                     };
                 };
                 if forcings + arith_ops >= max_forcings {
                     return Forced {
-                        value: focus, steps: total, forcings, arith_ops,
+                        value: focus, steps: total, forcings, arith_ops, final_ray: Some(ray),
                         isnil_complete: true, fully_reduced: false,
                     };
                 }
                 arith_ops += 1;
+                gtrace(format_args!(
+                    "pushform op={op} (arith_ops={arith_ops}, total_steps={total})"
+                ));
                 // Each operand is forced with a strictly smaller budget than
                 // the current level (decrement ≥1 ⇒ well-founded), bounded
                 // also by fuel. Linear decrement (not halving) so deeply
@@ -831,7 +875,7 @@ pub fn eval_forced(phi: &Constellation, prog: TermId, fuel: usize, max_forcings:
                             // Operand has a genuine deeper non-numeral
                             // residual ⇒ honest measured stop, not faked.
                             return Forced {
-                                value: focus, steps: total, forcings, arith_ops,
+                                value: focus, steps: total, forcings, arith_ops, final_ray: Some(ray),
                                 isnil_complete: true, fully_reduced: false,
                             };
                         }
@@ -843,14 +887,32 @@ pub fn eval_forced(phi: &Constellation, prog: TermId, fuel: usize, max_forcings:
                     "mul" => crate::sbinarith::mul(nums[0], nums[1], sub_fuel),
                     "eq" => crate::sbinarith::eq(nums[0], nums[1], sub_fuel),
                     "lt" => crate::sbinarith::lt(nums[0], nums[1], sub_fuel),
+                    // div: disclosed §60 (user-authorised). sbinarith::div is
+                    // ICFP-correct (truncate toward zero). DivByZero is stuck
+                    // BY SPEC (ICFP assigns no value) ⇒ honest stop, not faked.
+                    "div" => match crate::sbinarith::div(nums[0], nums[1], sub_fuel) {
+                        Some(crate::sbinarith::DivResult::Ok(q)) => {
+                            Some(crate::sbinarith::sint(q))
+                        }
+                        Some(crate::sbinarith::DivResult::DivByZero) | None => None,
+                    },
                     _ => None,
                 };
                 let Some(result) = computed else {
+                    gtrace(format_args!(
+                        "STOP: sbinarith({op}) returned None  nums={:?}",
+                        nums.iter().map(|&n| crate::sbinarith::dsint(n)).collect::<Vec<_>>()
+                    ));
                     return Forced {
-                        value: focus, steps: total, forcings, arith_ops,
+                        value: focus, steps: total, forcings, arith_ops, final_ray: Some(ray),
                         isnil_complete: true, fully_reduced: false,
                     };
                 };
+                gtrace(format_args!(
+                    "  {op}({:?}) = {}",
+                    nums.iter().map(|&n| crate::sbinarith::dsint(n)).collect::<Vec<_>>(),
+                    crate::galaxy_decode::pretty(&crate::galaxy_decode::decode(result))
+                ));
                 // `sbinarith::eq`/`lt` yield its internal booleans `tt`/`ff`;
                 // galaxy consumes the result as the church booleans `t`/`f`
                 // (prim_stars: `t x y → x`, `f x y → y`). Translate so the
@@ -872,26 +934,35 @@ pub fn eval_forced(phi: &Constellation, prog: TermId, fuel: usize, max_forcings:
             Some((node, op, operands)) => {
                 if forcings + arith_ops >= max_forcings {
                     return Forced {
-                        value: focus, steps: total, forcings, arith_ops,
+                        value: focus, steps: total, forcings, arith_ops, final_ray: Some(ray),
                         isnil_complete: true, fully_reduced: false,
                     };
                 }
                 arith_ops += 1;
-                // Force each operand to a numeral value.
+                gtrace(format_args!(
+                    "curried op={op} (arith_ops={arith_ops}, total_steps={total})"
+                ));
+                // Force each operand with the SAME recursive, Push-form-aware
+                // forcer the Push-stack branch uses (force_numeral, not plain
+                // force_whnf). A curried `a(a(lt,A),B)` whose operand is itself
+                // a Push-form strict expression was exactly the residual stall
+                // (KG3g trace): plain WHNF couldn't resolve it. Well-founded:
+                // budget strictly decreases ≥1 per level.
+                let sub_budget = max_forcings.saturating_sub(forcings + arith_ops + 1);
                 let mut nums: Vec<TermId> = Vec::with_capacity(operands.len());
                 for &o in &operands {
-                    let ov = match force_whnf(phi, o, fuel) {
-                        Some((fo, fst)) => { total += fst; fo }
-                        None => o,
-                    };
-                    if crate::sbinarith::dsint(ov).is_none() {
-                        // Operand didn't reduce to a numeral ⇒ deeper residual.
-                        return Forced {
-                            value: focus, steps: total, forcings, arith_ops,
-                            isnil_complete: true, fully_reduced: false,
-                        };
+                    match force_numeral(phi, o, fuel, sub_budget) {
+                        Some((ov, ost)) => {
+                            total += ost;
+                            nums.push(ov);
+                        }
+                        None => {
+                            return Forced {
+                                value: focus, steps: total, forcings, arith_ops, final_ray: Some(ray),
+                                isnil_complete: true, fully_reduced: false,
+                            };
+                        }
                     }
-                    nums.push(ov);
                 }
                 let computed: Option<TermId> = match op {
                     "neg" => crate::sbinarith::neg(nums[0]),
@@ -899,20 +970,52 @@ pub fn eval_forced(phi: &Constellation, prog: TermId, fuel: usize, max_forcings:
                     "mul" => crate::sbinarith::mul(nums[0], nums[1], sub_fuel),
                     "eq" => crate::sbinarith::eq(nums[0], nums[1], sub_fuel),
                     "lt" => crate::sbinarith::lt(nums[0], nums[1], sub_fuel),
+                    // div: disclosed §60 (user-authorised). sbinarith::div is
+                    // ICFP-correct (truncate toward zero). DivByZero is stuck
+                    // BY SPEC (ICFP assigns no value) ⇒ honest stop, not faked.
+                    "div" => match crate::sbinarith::div(nums[0], nums[1], sub_fuel) {
+                        Some(crate::sbinarith::DivResult::Ok(q)) => {
+                            Some(crate::sbinarith::sint(q))
+                        }
+                        Some(crate::sbinarith::DivResult::DivByZero) | None => None,
+                    },
                     _ => None,
                 };
                 let Some(result) = computed else {
+                    gtrace(format_args!(
+                        "STOP: sbinarith({op}) None (curried)  nums={:?}",
+                        nums.iter().map(|&n| crate::sbinarith::dsint(n)).collect::<Vec<_>>()
+                    ));
                     // sbinarith couldn't compute within sub_fuel (the stellar-
                     // arith KS frontier — KG1b-measured) ⇒ honest stop.
                     return Forced {
-                        value: focus, steps: total, forcings, arith_ops,
+                        value: focus, steps: total, forcings, arith_ops, final_ray: Some(ray),
                         isnil_complete: true, fully_reduced: false,
                     };
+                };
+                gtrace(format_args!(
+                    "  {op}({:?}) = {} (curried)",
+                    nums.iter().map(|&n| crate::sbinarith::dsint(n)).collect::<Vec<_>>(),
+                    crate::galaxy_decode::pretty(&crate::galaxy_decode::decode(result))
+                ));
+                // Same tt/ff → galaxy church t/f translation the Push-form
+                // branch does — without it, splicing raw sbinarith `tt`/`ff`
+                // into the galaxy term sticks (galaxy has no `tt`/`ff` rule;
+                // it consumes booleans as `t x y → x`). This omission was the
+                // KG3g residual stall (`lt(-3,0)=tt` → focus=tt, false NF).
+                let result = match term::get(result) {
+                    TermData::App(s, a) if a.is_empty() && s.name.as_str() == "tt" => {
+                        cst("t")
+                    }
+                    TermData::App(s, a) if a.is_empty() && s.name.as_str() == "ff" => {
+                        cst("f")
+                    }
+                    _ => result,
                 };
                 let ray2 = replace_subterm(ray, node, result);
                 if ray2 == ray {
                     return Forced {
-                        value: focus, steps: total, forcings, arith_ops,
+                        value: focus, steps: total, forcings, arith_ops, final_ray: Some(ray),
                         isnil_complete: true, fully_reduced: false,
                     };
                 }
