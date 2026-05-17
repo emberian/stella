@@ -1,0 +1,9 @@
+[package]
+name = "stella-world"
+version = "0.1.0"
+edition = "2021"
+description = "Phase-5 P5.2 — multi-agent solved-for closures sharing the LM-scaled world. The wiring layer (NOT firewalled): it may see the closure machinery; the LM still only contributes EnvPerturbation."
+
+[dependencies]
+stella-core = { path = "../stella-core" }
+stella-env = { path = "../stella-env" }
