@@ -21,15 +21,32 @@ Measured KS speedups (release, faithful, vs original reference): binarith/Horn
 `iex_eq_iex_fast` byte-identical, `iex_tabled_result_eq_iex` result-equiv,
 20k `matchable_fast` fuzz, antiunify 6/6).
 
-## A. IN FLIGHT — ONE subagent left (galaxy_decode HARVESTED 490168f)
-**galaxy_decode HARVESTED & forensic-verified in main tree → commit
-`490168f` (KG3d).** Result fed into B below. Process learning: that
-agent's worktree was branched from an OLD base (pre-sbinarith /
-pre-docs07) so its self-report falsely claimed sbinarith/eval_forced
-"don't exist" — main-tree forensic verify (NEVER trust self-report)
-caught it; its local dsint/sint is faithful to galaxy::enc anyway, kept.
-Only **IexAccel-caching** `a253857384cc7bd43` (interactive.rs) remains
-in flight; harvest recipe below still applies to it.
+## A. BOTH subagents HARVESTED — thread A CLOSED
+- **galaxy_decode** → `490168f` (KG3d). Forensic-verified in main tree.
+  Result fed thread B (below).
+- **IexAccel-caching** → `308189f`. **PORTED, not cp'd** — its worktree
+  was branched from a stale base (f06730f, merge-base 445af70) predating
+  the whole KA1 arc (`cf28558`); a blind `cp` of its interactive.rs
+  would have OBLITERATED committed KA1 tabling. Hand-ported the additive
+  delta onto the live file; KA1 byte-preserved (`iex_tabled_result_eq_iex`
+  still green). New valence-loop API: `build_accel`, `iex_fast_with_accel`,
+  `iex_tabled_with_accel` (composes KA1 + accel-hoist). Honest bench:
+  1.50× on real binarith Φ (agent's 7.32× was a synthetic wide-Φ
+  worst-case); win scales with |Φ|, kills the per-call O(|Φ|) RayIndex
+  rebuild the valence search does millions of times. Both worktrees
+  removed + branches deleted + pruned.
+
+**HARDENED PROCESS LEARNING (bit BOTH agents):** worktree subagents
+branch from whatever base they were spawned at, which can be ARBITRARILY
+STALE (here: a user-parallel commit predating the engine arc). Their
+self-reports will then truthfully-but-misleadingly claim current modules
+"don't exist." Mandatory: parent forensic-verifies in the LIVE main tree
+and DIFF-AND-PORTS shared/long-lived files (interactive.rs, galaxy.rs,
+lib.rs) — **never blind-`cp`** a shared file from a worktree. `cp` is
+only safe for genuinely-new disjoint files (galaxy_decode.rs). 4 stale
+prior-session worktrees (a00225d4/a12156a8/a3d0a69f/af5325dc, bases
+f06730f/9fc8987) remain locked+orphaned — not in any in-flight set;
+left intact (unknown provenance; clean only on user confirm).
 
 ## A-orig. IN FLIGHT — TWO subagents, harvest BOTH (worktree-harvest model)
 For each: read its final report (self-describing) → `cp` its new/changed
@@ -169,8 +186,11 @@ claims (there it's existential, the project's whole credibility — not larp).
 Z3 allowed where it helps. Process learnings: NEVER put `git stash` cycles in
 killable bg jobs (caused a scare); never two write-agents same file; ≤2
 concurrent write-agents (RAM); worktree-harvest + parent forensic-verify
-(never trust self-report); "blockers" keep turning out to be census artifacts
-— always confirm via precise-redex detection, not head-census.
+(never trust self-report); **subagent worktrees can be spawned on an
+arbitrarily stale base ⇒ DIFF-AND-PORT shared files, never blind-`cp`;
+`cp` only for new disjoint files** (bit both A agents — now hardened in
+§A); "blockers" keep turning out to be census artifacts — always confirm
+via precise-redex detection, not head-census.
 
 ## J. OUTSTANDING DOC TODO
 `docs/05` needs a strengthen-only §10/§11 addendum folding in: the
@@ -180,12 +200,13 @@ rendering=oracle), the §49.50-polarity track (E), the theory-modulo
 conclusion (F). (Was deferred "to next checkpoint" — still owed.)
 
 ## NEXT ACTIONS (priority order)
-1. Harvest IexAccel agent (A) on completion — forensic-verify, commit
-   (touches interactive.rs; one-writer; still in flight).
-2. ~~Galaxy decoder~~ DONE (490168f). New B: investigate WHY galaxy's
-   entry interaction reduces only shallowly to `[0,[]]` — entry/click
-   encoding vs interaction-loop driver vs neg/div placeholder stall;
-   `galaxy_decode::decode_result` is now the trustworthy step oracle.
+1. ~~Harvest both A agents~~ DONE (490168f galaxy_decode, 308189f
+   IexAccel). Thread A CLOSED.
+2. **(NOW TOP)** Investigate WHY galaxy's entry interaction reduces only
+   shallowly to `[0,[]]` — entry/click encoding vs interaction-loop
+   driver vs neg/div placeholder stall; `galaxy_decode::decode_result`
+   is the trustworthy step oracle. This is the de-risked spine
+   deliverable (decoder built+faithful; what's left is correctness).
 3. Fold this into `docs/05` §10 (J) — include the KG3d shallow-NF
    finding (decoder faithful; galaxy NF clean-but-shallow, not Opaque).
 4. Then: KA1 cheap-key+cross-run table (D, valence) → rayon (D) → KA2
