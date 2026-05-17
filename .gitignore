@@ -12,3 +12,7 @@ index/
 
 target/
 hol/.hol
+
+# Static site: generated artifacts (hand-authored HTML/CSS/JS is tracked)
+site/content/
+site/pkg/
