@@ -1,0 +1,21 @@
+[package]
+name = "stella-env"
+version = "0.1.0"
+edition = "2021"
+description = "Phase-5 P5.1 — the firewalled LM-as-environment harness. The firewall IS the crate boundary."
+
+[dependencies]
+# THE FIREWALL: this crate may depend on stella-core for star/term
+# constructors ONLY. It must never gain a path to the closure/valence/
+# certificate machinery. See lib.rs header + the firewall_* tests.
+stella-core = { path = "../stella-core" }
+
+# Real LM transport is opt-in and behind a feature so the firewall and its
+# tests compile and pass with ZERO network deps (the firewall is provable
+# without the LM even present — docs/04: build the gate before the thing).
+ureq = { version = "=2.10.1", optional = true }
+serde_json = { version = "=1.0.128", optional = true }
+
+[features]
+default = []
+lm = ["dep:ureq", "dep:serde_json"]
