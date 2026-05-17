@@ -31,6 +31,33 @@ export function build_machine(kind, json) {
 }
 
 /**
+ * Ex semantics (bounded): ɟ of CEx at copy budget `k`, the exact IEx ɟ,
+ * and whether they coincide (confluence at k, demonstrated). Returns
+ * `{"ok":true,"result":[…],"iex_obs":[…],"k":N,"confluent":bool,"note":"…"}`.
+ * @param {string} phi_src
+ * @param {string} psi_src
+ * @param {number} k
+ * @param {number} fuel
+ * @returns {string}
+ */
+export function ex_run(phi_src, psi_src, k, fuel) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(phi_src, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(psi_src, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.ex_run(ptr0, len0, ptr1, len1, k, fuel);
+        deferred3_0 = ret[0];
+        deferred3_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
  * Return the dep-graph DOT + execution summary for preset `idx` as JSON:
  * `{"name": "…", "dep_graph_dot": "…", "execution_summary": "…"}`
  *

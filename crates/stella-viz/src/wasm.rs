@@ -19,6 +19,7 @@
 use wasm_bindgen::prelude::*;
 
 use crate::build::build as build_machine_impl;
+use crate::exsem::ex_summary;
 use crate::presets::{all_presets, all_step_data, preset_io};
 use crate::stepper::{capture_path, capture_steps, StepSnapshot};
 use stella_core::constellation::Constellation;
@@ -296,6 +297,30 @@ pub fn build_machine(kind: &str, json: &str) -> String {
             json_str(&psi)
         ),
         Err(e) => format!("{{\"ok\":false,\"error\":{}}}", json_str(&e)),
+    }
+}
+
+/// Ex semantics (bounded): ɟ of CEx at copy budget `k`, the exact IEx ɟ,
+/// and whether they coincide (confluence at k, demonstrated). Returns
+/// `{"ok":true,"result":[…],"iex_obs":[…],"k":N,"confluent":bool,"note":"…"}`.
+#[wasm_bindgen]
+pub fn ex_run(phi_src: &str, psi_src: &str, k: usize, fuel: usize) -> String {
+    match ex_summary(phi_src, psi_src, k, fuel_or(fuel)) {
+        Err(e) => format!("{{\"ok\":false,\"error\":{}}}", json_str(&e)),
+        Ok(s) => {
+            let j = |v: &[String]| -> String {
+                v.iter().map(|x| json_str(x)).collect::<Vec<_>>().join(",")
+            };
+            format!(
+                "{{\"ok\":true,\"result\":[{}],\"alt\":[{}],\"order_independent\":{},\"cex\":[{}],\"cex_k\":{},\"note\":{}}}",
+                j(&s.result),
+                j(&s.alt),
+                s.order_independent,
+                j(&s.cex),
+                s.cex_k,
+                json_str(&s.note)
+            )
+        }
     }
 }
 
