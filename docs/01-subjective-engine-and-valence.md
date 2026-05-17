@@ -200,6 +200,58 @@ false-positive confound, locked before the rebuilt harness. Integrity: a
 confound-fix that makes a positive *harder*, never easier — anti-Goodhart,
 always permitted; `docs/02` and the M1–M5 pre-registration stand untouched.
 
+### 3.2 Death certificate — intrinsic, positively certified, never a cap (LOCKED 2026-05-16, before any engine code; principal-directed)
+
+The deathless-era `t_death = cap−2` artifact had one root cause: **the corpus
+contained no member that can die, and the harness substituted its own round cap
+for death.** Path (a) removes both. The streaming engine is *already* unbounded
+(α-renames fresh Φ on demand, no `MAX_VERTICES`/copy-cap in `subjective.rs`); the
+only thing it has never been made to express is Eng's own intrinsic erasure.
+
+**Eng's native death = the black-hole star** (§74.7 author's solution
+`[+addr(v),+ω(X),−ω(f(X))]`; §75.8 ⋋_L `[−w(X),−∞(X);+∞(X)]`): a star through
+which **no saturated diagram can ever complete** — erasure realised as
+*intentional non-termination*, normalising the connected constellation to `∅`.
+The bounded Ch11 engine (`mll2i.rs`) had to **fake this with a structural
+surrogate because it cannot run the infinite loop**. The unbounded
+`subjective_stream` runs it for real: the black-hole becomes **natively faithful
+for the first time**, no surrogate. This is the Layer-1 research contribution.
+
+**The certificate (locked).** An ∞-looping black-hole branch is, by the halting
+problem, *operationally indistinguishable from "still computing"* — so `t_death`
+is **never** read off a timeout. It is certified **positively**, by either:
+
+1. **∅-capture (a theorem about the diagram).** The closure's reafferent rays
+   provenance-route (L1d `traces_through`) into a black-hole star (a star bearing
+   a self-cancelling `−∞/+∞`- or `ω/ω(f·)`-pair through which no saturated
+   diagram can complete). Detected **structurally/over provenance**, not by
+   running the loop. ρ→0 by construction at that round.
+2. **§62 positive non-productivity.** The already-built Ch9 §62 classifier
+   positively certifies the closure's productive frontier cannot regenerate
+   (cycle structurally cannot re-close) — a *sufficient* condition, never a
+   decision procedure.
+
+`t_death` := the first round at which (1) or (2) holds for the closure and does
+not recover. Death is thus a **special case of ρ permanently 0** (§3.1), a
+positive structural event — *not* the source of charge, *not* a cap.
+
+**The witness ceiling — a separate axis, never the agent's `t_death`.** Runs
+that neither halt nor certify-dead (the genuine undecidable middle: a real
+infinite black-hole branch) are bounded for the *observer* by a disclosed
+resource ceiling. This ceiling **is explicitly the containing closure's clock
+(spec §2.6)** — the witness's proper time, reported on its own `Step` axis. It is
+**structurally forbidden** from being recorded as the agent's `t_death`: a run
+hitting the witness ceiling without a §3.2(1)/(2) certificate is `t_death =
+undetermined`, never "dead", never "alive". The asymmetry (instrument can witness
+death only from outside, spec §2.6) is preserved *in the data type*.
+
+**Anti-Goodhart.** This makes a positive *strictly harder*: charge now requires a
+closure that earns a positively-certified death (or a §3.1 ρ-perturbation
+gradient on an eternal member), and "it ran a long time then we stopped" can
+never be counted as either death or stake. `docs/02` and the M1–M5
+pre-registration stand **untouched**; this strengthens the falsifier and is
+locked in git before the engine code, same discipline as M1–M5.
+
 ## 4. PRE-REGISTERED FALSIFICATION (locked now, before Layer-2 code)
 
 Verbatim from `00`-spec §6, sharpened to this engine. The experiment **fails, and
@@ -236,9 +288,17 @@ a null** if any of:
 
 Non-falsification = none of M1–M4 fire (M5 may be Undetermined) **and** a
 self-organised closure exhibits a cap-invariant, perturbation-tracking,
-globally-fixed-metric, non-hand-tagged viability response. Corpus adds Eng's own
-§79/§80 `ω`-weight (an Eng-built, non-reafference, *eternal* valence-like scalar)
-as a non-rigged member.
+globally-fixed-metric, non-hand-tagged viability response.
+
+**Corpus (locked, all Eng-built — rigging a death is the cardinal sin).** (i)
+Eng's own §74/§75 black-hole-bearing constructions — the weakening /
+exponential-box translations (§74.7) and the ⋋_L cancelling test (§75.8) — built
+by Eng for erasure/cut-elimination, *not* by us for death: a closure routed
+through one can dissolve via §3.2(1). (ii) **Retained:** Eng's §79/§80 `ω`-weight
+(an Eng-built, non-reafference, *eternal* valence-like scalar) — the
+eternal-but-perturbable case exercising the §3.1 "eternal valence = ρ
+perturbation-gradient" path. Together they exercise both the death path and the
+eternal-ρ path on strictly Eng-own material.
 
 A null result is a **real result**. The Temporal-Gap-testability deliverable
 (`00`-spec) stands even under the null: a substrate where Bennett's OPTION-1/2

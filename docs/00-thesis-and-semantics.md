@@ -220,6 +220,14 @@ Then §56 NFA acceptance, with `open-hypergraphs-dot` visualization.
 
 The Rust prototype's `expand_constellation` uses a fixed finite copy-supply (k copies of animist stars) as a finiteness cutoff; Eng's reference constellation is non-linear/infinite supply (§51.13); this is a prototype bound, not Eng semantics. The HOL4 track must implement the unbounded supply.
 
+**RESOLVED (2026-05-16) for the subjective fragment.** `subjective.rs`
+(`subjective_stream`, L1a–d) carries no copy-cap and is genuinely unbounded; the
+deathless artifact was the *harness* round-cap + a corpus with no dissoluble
+member. Path (a): Eng's §74.7/§75.8 black-hole (intentional non-termination ⇒
+`∅`) wired into the subjective stream — natively faithful where the bounded Ch11
+engine could only surrogate it. Death is positively certified, never a timeout;
+see `docs/01` §3.2 (death certificate, LOCKED before code) and §4 (corpus).
+
 ## 6. Pre-registered falsification (the nulls)
 
 Specified *before* the code, sharpened to the subjective/animist fragment. The
