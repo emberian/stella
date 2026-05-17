@@ -181,3 +181,166 @@ pub fn matchable(r: Ray, r_prime: Ray) -> bool {
     }
     alpha_unify_with(r, r_prime, &PolarisedCompat).is_some()
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// matchable_fast — substitution-free boolean equivalent of `matchable` (KS B1)
+//
+// `matchable` decides only a yes/no, yet `alpha_unify_with` rebuilds BOTH terms
+// via `freshen` (new nodes through the global term store + interned names) and
+// runs full Martelli–Montanari building an mgu it discards — proven ~95 % of
+// the engine's `find` cost. `matchable_fast` decides the *same boolean* with a
+// recursive unifiability check over a `(Side, Var)` binding env: the two rays'
+// variables live in disjoint side-tagged namespaces (≡ `alpha_unify_with`'s
+// freshen), no term rebuild, no interning, allocation bounded by #bound vars.
+//
+// Rule-for-rule equivalent to `unify_with` + α-disjointness: var-bind with
+// occurs-check (≡ Replace+occur), App ⇒ `compat.compatible` + equal arity +
+// pairwise (≡ Open), identical side+var (≡ Clear), symmetric (≡ Orient).
+// Gated by the differential fuzz `matchable_fast ≡ matchable` (tests) **and**
+// the N-KS byte-identity gate; `matchable` stays the reference oracle.
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum Side {
+    L,
+    R,
+}
+
+type SideTerm = (Side, TermId);
+type MfEnv = rustc_hash::FxHashMap<(Side, crate::term::Var), SideTerm>;
+
+fn mf_walk(mut s: Side, mut t: TermId, env: &MfEnv) -> SideTerm {
+    while let TermData::Var(v) = get(t) {
+        match env.get(&(s, v)) {
+            Some(&(s2, t2)) => {
+                s = s2;
+                t = t2;
+            }
+            None => break,
+        }
+    }
+    (s, t)
+}
+
+fn mf_occurs(s: Side, v: crate::term::Var, ts: Side, tt: TermId, env: &MfEnv) -> bool {
+    let (rs, rt) = mf_walk(ts, tt, env);
+    match get(rt) {
+        TermData::Var(w) => rs == s && w == v,
+        TermData::App(_, args) => args.iter().any(|&a| mf_occurs(s, v, rs, a, env)),
+    }
+}
+
+fn mf_unify(sa: Side, a: TermId, sb: Side, b: TermId, env: &mut MfEnv) -> bool {
+    let (sa, a) = mf_walk(sa, a, env);
+    let (sb, b) = mf_walk(sb, b, env);
+    match (get(a), get(b)) {
+        (TermData::Var(x), TermData::Var(y)) if sa == sb && x == y => true,
+        (TermData::Var(x), _) => {
+            if mf_occurs(sa, x, sb, b, env) {
+                return false;
+            }
+            env.insert((sa, x), (sb, b));
+            true
+        }
+        (_, TermData::Var(y)) => {
+            if mf_occurs(sb, y, sa, a, env) {
+                return false;
+            }
+            env.insert((sb, y), (sa, a));
+            true
+        }
+        (TermData::App(f, fa), TermData::App(g, ga)) => {
+            if !PolarisedCompat.compatible(f, g) || fa.len() != ga.len() {
+                return false;
+            }
+            fa.iter()
+                .zip(ga.iter())
+                .all(|(&x, &y)| mf_unify(sa, x, sb, y, env))
+        }
+        _ => false,
+    }
+}
+
+/// Substitution-free boolean equivalent of [`matchable`] (see section header).
+pub fn matchable_fast(r: Ray, r_prime: Ray) -> bool {
+    match (get(r), get(r_prime)) {
+        (TermData::App(f, _), TermData::App(g, _)) => {
+            if !PolarisedCompat.compatible(f, g) {
+                return false;
+            }
+        }
+        _ => return false,
+    }
+    let mut env: MfEnv = rustc_hash::FxHashMap::default();
+    mf_unify(Side::L, r, Side::R, r_prime, &mut env)
+}
+
+#[cfg(test)]
+mod matchable_fast_tests {
+    use super::*;
+    use crate::term::{mk_app_str, mk_var};
+
+    /// Deterministic LCG — reproducible fuzz, no dev-deps.
+    struct Lcg(u64);
+    impl Lcg {
+        fn next(&mut self) -> u64 {
+            self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1);
+            self.0 >> 17
+        }
+        fn pick<'a, T>(&mut self, xs: &'a [T]) -> &'a T {
+            &xs[(self.next() as usize) % xs.len()]
+        }
+    }
+
+    /// Random term: variable names are deliberately SHARED across the two rays
+    /// (`X`/`Y`/`Z`) to stress α-disjointness — the exact thing the `(Side,Var)`
+    /// namespacing must get right vs `alpha_unify_with`'s freshen.
+    fn gen(rng: &mut Lcg, depth: u32) -> TermId {
+        if depth == 0 || rng.next() % 3 == 0 {
+            return *rng.pick(&[mk_var("X"), mk_var("Y"), mk_var("Z")]);
+        }
+        let head = *rng.pick(&["f", "g", "h"]); // neutral inner functors
+        let ar = (rng.next() % 3) as usize; // 0..2
+        let args: Vec<TermId> = (0..ar).map(|_| gen(rng, depth - 1)).collect();
+        mk_app_str(head, args)
+    }
+
+    /// Top-level polarised ray (matchable requires App heads).
+    fn gen_ray(rng: &mut Lcg) -> TermId {
+        let head = *rng.pick(&["+p", "-p", "+q", "-q", "p", "q"]);
+        let ar = 1 + (rng.next() % 3) as usize; // 1..3
+        let args: Vec<TermId> = (0..ar).map(|_| gen(rng, 3)).collect();
+        mk_app_str(head, args)
+    }
+
+    /// **B1 faithfulness gate**: `matchable_fast ≡ matchable` over a broad
+    /// fuzz, including var-sharing across rays, nesting, and all polarity
+    /// combinations. Any disagreement ⇒ B1 is unfaithful and must be reverted.
+    #[test]
+    fn matchable_fast_equiv_matchable_fuzz() {
+        let mut rng = Lcg(0x5314_2718_2845_9045);
+        let mut checked = 0u32;
+        for _ in 0..20_000 {
+            let a = gen_ray(&mut rng);
+            let b = gen_ray(&mut rng);
+            assert_eq!(
+                matchable_fast(a, b),
+                matchable(a, b),
+                "matchable_fast disagrees with matchable on ({a:?}, {b:?})"
+            );
+            checked += 1;
+        }
+        assert_eq!(checked, 20_000);
+    }
+
+    /// Targeted: shared var must NOT couple across rays (α-disjointness).
+    /// `+p(X)` vs `-p(g(X))`: with disjoint namespaces this unifies
+    /// (Xᴸ ↦ g(Xᴿ)); a naive shared-var unifier would wrongly occurs-fail.
+    #[test]
+    fn shared_var_is_alpha_disjoint() {
+        let a = mk_app_str("+p", vec![mk_var("X")]);
+        let b = mk_app_str("-p", vec![mk_app_str("g", vec![mk_var("X")])]);
+        assert_eq!(matchable_fast(a, b), matchable(a, b));
+        assert!(matchable_fast(a, b), "α-disjoint: +p(Xᴸ) ⋈ -p(g(Xᴿ))");
+    }
+}
