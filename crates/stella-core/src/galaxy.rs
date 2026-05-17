@@ -597,6 +597,59 @@ fn force_whnf(phi: &Constellation, term: TermId, fuel: usize) -> Option<(TermId,
         .map(|m| (m, res.steps))
 }
 
+/// An unreduced arithmetic-operator node `a(a(op,A),B)` (binary) or
+/// `a(op,A)` (unary `neg`) with `op ∈ {add,mul,eq,lt,neg}`, not yet a value.
+/// Returns `(node, op, operands)`. `div` is intentionally NOT auto-forced
+/// here (KG1b: stellar `div` is past the reference-interpreter KS frontier
+/// even at `-1/2`) — it is reported as a residual blocker, not faked.
+fn find_blocked_arith(t: TermId) -> Option<(TermId, &'static str, Vec<TermId>)> {
+    // Already a numeral value ⇒ not a blocked op.
+    if crate::sbinarith::dsint(t).is_some() {
+        return None;
+    }
+    if let TermData::App(s, args) = term::get(t) {
+        if s.name.as_str() == "a" && args.len() == 2 {
+            let (h, len) = spine_head(t);
+            if let Some(name) = h.map(|n| n.as_str()) {
+                let op: Option<&'static str> = match (name, len) {
+                    ("add", 2) => Some("add"),
+                    ("mul", 2) => Some("mul"),
+                    ("eq", 2) => Some("eq"),
+                    ("lt", 2) => Some("lt"),
+                    ("neg", 1) => Some("neg"),
+                    _ => None,
+                };
+                if let Some(op) = op {
+                    let operands = if op == "neg" {
+                        vec![args[1]]
+                    } else {
+                        // a(a(op,A),B): A = inner.args[1], B = args[1]
+                        match term::get(args[0]) {
+                            TermData::App(_, inner) if inner.len() == 2 => {
+                                vec![inner[1], args[1]]
+                            }
+                            _ => return None,
+                        }
+                    };
+                    return Some((t, op, operands));
+                }
+            }
+            for &a in args.iter() {
+                if let Some(r) = find_blocked_arith(a) {
+                    return Some(r);
+                }
+            }
+        } else {
+            for &a in args.iter() {
+                if let Some(r) = find_blocked_arith(a) {
+                    return Some(r);
+                }
+            }
+        }
+    }
+    None
+}
+
 /// Outcome of [`eval_forced`].
 #[derive(Debug)]
 pub struct Forced {
@@ -604,11 +657,15 @@ pub struct Forced {
     pub value: TermId,
     /// Total stellar steps across all engine passes.
     pub steps: usize,
-    /// Number of host `isnil`-forcings performed (the §60 strategy's work).
+    /// Host `isnil`-forcings performed (the §60 strategy's work).
     pub forcings: usize,
-    /// `true` if no blocked `isnil` remains (isnil-complete; other strict
-    /// blockers like `eq`/`add` may still be residual — measured, not faked).
+    /// Host arith-op resolutions performed (force operands → stellar sbinarith).
+    pub arith_ops: usize,
+    /// No blocked `isnil` remains.
     pub isnil_complete: bool,
+    /// No blocked `isnil` AND no blocked `add/mul/eq/lt/neg` remains. `div`
+    /// and non-numeral-operand residuals are honest measured stops, not faked.
+    pub fully_reduced: bool,
 }
 
 /// Disclosed §60 host-forcing evaluator (slice 1: `isnil`). Interleaves
@@ -618,6 +675,10 @@ pub fn eval_forced(phi: &Constellation, prog: TermId, fuel: usize, max_forcings:
     let mut psi: Vec<Star> = vec![vec![pp(st(prog, cst("eps")))]];
     let mut total = 0usize;
     let mut forcings = 0usize;
+    let mut arith_ops = 0usize;
+    // Bounded inner fuel for stellar sbinarith ops: small ops resolve; a slow
+    // one fails-fast → honest measured stop (the KS/KA2 frontier), never a hang.
+    let sub_fuel = 20_000usize;
     loop {
         let res = crate::interactive::iex_fast(phi, psi.clone(), fuel);
         total += res.steps;
@@ -625,34 +686,92 @@ pub fn eval_forced(phi: &Constellation, prog: TermId, fuel: usize, max_forcings:
             Some(r) => r,
             None => {
                 let v = psi.first().and_then(|s| s.first().copied()).unwrap_or(prog);
-                return Forced { value: v, steps: total, forcings, isnil_complete: false };
+                return Forced {
+                    value: v, steps: total, forcings, arith_ops,
+                    isnil_complete: false, fully_reduced: false,
+                };
             }
         };
         let focus = st_inner(ray).unwrap_or(ray);
         // Scan the whole process ray (covers M and the stack π).
-        match find_blocked_isnil(ray) {
-            None => {
-                return Forced { value: focus, steps: total, forcings, isnil_complete: true }
-            }
-            Some((node, arg)) => {
-                if forcings >= max_forcings {
-                    return Forced { value: focus, steps: total, forcings, isnil_complete: false };
-                }
-                forcings += 1;
-                // Force the isnil argument to WHNF in a fresh sub-process —
-                // the disclosed §60 strategy doing the demand propagation.
-                let arg_v = match force_whnf(phi, arg, fuel) {
-                    Some((fa, fst)) => {
-                        total += fst;
-                        fa
-                    }
-                    None => arg,
+        if let Some((node, arg)) = find_blocked_isnil(ray) {
+            if forcings + arith_ops >= max_forcings {
+                return Forced {
+                    value: focus, steps: total, forcings, arith_ops,
+                    isnil_complete: false, fully_reduced: false,
                 };
-                let ray2 = replace_subterm(ray, node, ap_node(cst("isnil"), arg_v));
+            }
+            forcings += 1;
+            let arg_v = match force_whnf(phi, arg, fuel) {
+                Some((fa, fst)) => { total += fst; fa }
+                None => arg,
+            };
+            let ray2 = replace_subterm(ray, node, ap_node(cst("isnil"), arg_v));
+            if ray2 == ray {
+                return Forced {
+                    value: focus, steps: total, forcings, arith_ops,
+                    isnil_complete: false, fully_reduced: false,
+                };
+            }
+            psi = vec![vec![ray2]];
+            continue;
+        }
+        // No blocked isnil. Try a blocked arith op (disclosed §60: force
+        // operands to numerals, let stellar sbinarith compute — no i128
+        // smuggling; bounded sub_fuel ⇒ slow ⇒ honest measured stop).
+        match find_blocked_arith(ray) {
+            None => {
+                return Forced {
+                    value: focus, steps: total, forcings, arith_ops,
+                    isnil_complete: true, fully_reduced: true,
+                };
+            }
+            Some((node, op, operands)) => {
+                if forcings + arith_ops >= max_forcings {
+                    return Forced {
+                        value: focus, steps: total, forcings, arith_ops,
+                        isnil_complete: true, fully_reduced: false,
+                    };
+                }
+                arith_ops += 1;
+                // Force each operand to a numeral value.
+                let mut nums: Vec<TermId> = Vec::with_capacity(operands.len());
+                for &o in &operands {
+                    let ov = match force_whnf(phi, o, fuel) {
+                        Some((fo, fst)) => { total += fst; fo }
+                        None => o,
+                    };
+                    if crate::sbinarith::dsint(ov).is_none() {
+                        // Operand didn't reduce to a numeral ⇒ deeper residual.
+                        return Forced {
+                            value: focus, steps: total, forcings, arith_ops,
+                            isnil_complete: true, fully_reduced: false,
+                        };
+                    }
+                    nums.push(ov);
+                }
+                let computed: Option<TermId> = match op {
+                    "neg" => crate::sbinarith::neg(nums[0]),
+                    "add" => crate::sbinarith::add(nums[0], nums[1], sub_fuel),
+                    "mul" => crate::sbinarith::mul(nums[0], nums[1], sub_fuel),
+                    "eq" => crate::sbinarith::eq(nums[0], nums[1], sub_fuel),
+                    "lt" => crate::sbinarith::lt(nums[0], nums[1], sub_fuel),
+                    _ => None,
+                };
+                let Some(result) = computed else {
+                    // sbinarith couldn't compute within sub_fuel (the stellar-
+                    // arith KS frontier — KG1b-measured) ⇒ honest stop.
+                    return Forced {
+                        value: focus, steps: total, forcings, arith_ops,
+                        isnil_complete: true, fully_reduced: false,
+                    };
+                };
+                let ray2 = replace_subterm(ray, node, result);
                 if ray2 == ray {
-                    // No progress: arg didn't become a list value ⇒ a deeper
-                    // residual blocker (eq/arith). Honest stop, measured.
-                    return Forced { value: focus, steps: total, forcings, isnil_complete: false };
+                    return Forced {
+                        value: focus, steps: total, forcings, arith_ops,
+                        isnil_complete: true, fully_reduced: false,
+                    };
                 }
                 psi = vec![vec![ray2]];
             }
