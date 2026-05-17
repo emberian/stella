@@ -603,3 +603,53 @@ the galaxy `eval_forced` tier + KS-PROF Φ=405 before/after (steps
 identical, wall ↓ — the find+freshen+fuse+unify+apply envelope
 collapsing on the 392 δ-heads). Σ(Φ) stays the per-step companion,
 NOT the galaxy termination-crosser (docs/16 unchanged).
+
+## DISCRIMINATOR RESULT — docs/16 §1 PREMISE FALSIFIED (measured)
+`examples/galaxy_data_discriminator.rs` + `galaxy_img_forcings.rs` +
+`galaxy_img_stuck.rs` (cheap, read-only, bounded — the docs/16 §3
+experiment, finally run). Result, unambiguous:
+
+* Reach `img0=data[0]` cheaply (descent: triple/flag/state/data force
+  in 4311/14/6/19 steps, fully). Then force `img0`:
+* It performs **exactly 1 isnil forcing**, ~33–206 lazy steps, then
+  reaches `+P(st( isnil , [ a(:1225,:1029) · nil · … · eps ] ))` —
+  `isnil` applied to an **unforced application thunk** `a(:1225,:1029)`,
+  NOT a `nil`/`cons` constructor. `readback` msize ≡ 37, RAW ray msize
+  ≡ 40 — **flat**.
+* `prim_stars` has only constructor-guarded isnil and **deliberately
+  omits strict isnil** (galaxy.rs:456-463, the §58/§60 punt). No Φ
+  rule fires; the host does not force isnil's arg ⇒ **stuck residual**.
+* `eval_forced`'s outer loop then **spins non-productively**: steps
+  grow super-linearly with the `max_forcings` *budget* (33→89→117→206
+  →2079 for mf=1‥16) while `forcings`≡1, `arith`≡0, decoded state
+  constant `<a/2>`. The historic "data[0] diverges in 150 s" **is that
+  spin**, not a long productive reduction.
+
+Consequence: **docs/16 §1's load-bearing premise — "galaxy data[0] is
+a long NON-REDUNDANT TRANSITION-COUNT reduction" — is falsified by
+measurement.** The reachable obstruction is the **§58/§60
+constructor-strict `isnil`** (isnil must force its argument to WHNF
+before matching), a *faithfulness-completion / correctness* gap that
+docs/08 explicitly anticipated — NOT a step-count asymptotic. The
+H1/H2/H3 fork (KA2 / interaction-nets) is **not** the right build for
+the measured blocker; the recurrence "whistle" the discriminator
+reported is an artifact of a ≤6-element near-constant trace (span=1,
+generalisation = the constant state; `recurrence=false`) and is NOT a
+real affine recurrence. This is exactly why measure-don't-guess is the
+rule: it averted building a large termination-crosser for the wrong
+problem.
+
+NEXT (measured, staged, oracle-gated): (1) implement faithful
+constructor-strict `isnil` — when `isnil ⋆ [arg·π]` and `arg` is not
+already `nil`/`cons`, recursively `force_value(arg)` to WHNF (the
+SAME mechanism galaxy.rs:705 already uses faithfully for arith
+operands), then re-match; behind the differential oracle (the
+accepted intrinsic/jet model). (2) Make `eval_forced` report a
+`stuck` outcome instead of spinning when a layer makes no progress and
+no strict redex is forceable (robustness; turns a 40-min hang into a
+named negative). (3) Re-measure `data[0]` past the unstuck isnil — the
+NEXT obstruction is then itself an empirical question (do not assume
+strict isnil alone makes it terminate; measure the next wall). (4)
+Revise docs/16 (the decision record) to record the falsified premise
+and the re-aimed plan. docs/14/17 Σ(Φ) work is unaffected (it was
+always the per-step companion, never the crosser) and stays shipped.
