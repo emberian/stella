@@ -51,7 +51,7 @@
 
 use crate::binarith;
 use crate::constellation::{Constellation, Star};
-use crate::term::{self, Term, TermId};
+use crate::term::{self, Term, TermData, TermId};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // AST
@@ -486,6 +486,178 @@ pub fn constellation(g: &Galaxy) -> Constellation {
 /// `Φ` directly from `galaxy.txt` source text (parse → build).
 pub fn constellation_from_src(src: &str) -> Result<Constellation, ParseError> {
     Ok(constellation(&parse(src)?))
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// KG3c slice 1 — disclosed §60 host-forcing driver (isnil only)
+//
+// FAITHFULNESS DISCLOSURE: this is the epidictic §58/§60 concession, made
+// honestly. Every *reduction* is the stellar engine over `Φ`
+// (`iex_fast`); the host contributes ONLY the §60 *strategy* — the order in
+// which a strict primitive's argument is driven to WHNF — exactly
+// embershot's own `ForceArgs`. Slice 1 forces only `isnil` (constructor-
+// strict, no arithmetic ⇒ no KG1b dependency). `eq`/`add`/… stay residual
+// and are *measured*, not faked.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// The leftmost non-`a` atom of an application spine, and the spine length.
+fn spine_head(mut t: TermId) -> (Option<crate::term::SymName>, usize) {
+    let mut n = 0usize;
+    loop {
+        match term::get(t) {
+            TermData::App(s, args) if s.name.as_str() == "a" && args.len() == 2 => {
+                n += 1;
+                t = args[0];
+            }
+            TermData::App(s, args) if args.is_empty() => return (Some(s.name), n),
+            _ => return (None, n),
+        }
+    }
+}
+
+/// Is `t` a list value `isnil` can match — the `nil` atom or a `cons _ _`
+/// cell (`a(a(cons,_),_)`) — i.e. forced enough for the pure isnil rule.
+fn is_listish_value(t: TermId) -> bool {
+    match term::get(t) {
+        TermData::App(s, a) if a.is_empty() && s.name.as_str() == "nil" => true,
+        _ => {
+            let (h, len) = spine_head(t);
+            h.map(|n| n.as_str()) == Some("cons") && len == 2
+        }
+    }
+}
+
+/// Find the leftmost `a(isnil, X)` node whose `X` is not yet a list value.
+fn find_blocked_isnil(t: TermId) -> Option<(TermId, TermId)> {
+    if let TermData::App(s, args) = term::get(t) {
+        if s.name.as_str() == "a" && args.len() == 2 {
+            if let TermData::App(h, ha) = term::get(args[0]) {
+                if ha.is_empty() && h.name.as_str() == "isnil" && !is_listish_value(args[1])
+                {
+                    return Some((t, args[1]));
+                }
+            }
+            for &a in args.iter() {
+                if let Some(r) = find_blocked_isnil(a) {
+                    return Some(r);
+                }
+            }
+        } else {
+            for &a in args.iter() {
+                if let Some(r) = find_blocked_isnil(a) {
+                    return Some(r);
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Replace the first occurrence of subterm `target` with `repl`.
+fn replace_subterm(t: TermId, target: TermId, repl: TermId) -> TermId {
+    if t == target {
+        return repl;
+    }
+    match term::get(t) {
+        TermData::App(s, args) if !args.is_empty() => {
+            let new: Vec<TermId> = args.iter().map(|&a| replace_subterm(a, target, repl)).collect();
+            term::mk_app_interned(s, new)
+        }
+        _ => t,
+    }
+}
+
+/// The surviving single-ray process star's ray `+P(st(M, π))` (whole ray —
+/// the stack `π` need NOT be `ε`; galaxy blocks mid-application).
+fn single_ray(psi: &[Star]) -> Option<TermId> {
+    psi.iter().find(|s| s.len() == 1).map(|s| s[0])
+}
+
+/// `M` inside a `+P(st(M, π))` ray (the focused term), if shaped so.
+fn st_inner(ray: TermId) -> Option<TermId> {
+    if let TermData::App(p, pa) = term::get(ray) {
+        if p.name.as_str() == "P" && pa.len() == 1 {
+            if let TermData::App(s2, sa) = term::get(pa[0]) {
+                if s2.name.as_str() == "st" && sa.len() == 2 {
+                    return Some(sa[0]);
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Run a fresh sub-process `[+P(st(term, ε))]` to its engine normal form and
+/// return the focused value term `M` (WHNF of `term`), with step count.
+fn force_whnf(phi: &Constellation, term: TermId, fuel: usize) -> Option<(TermId, usize)> {
+    let psi = vec![vec![pp(st(term, cst("eps")))]];
+    let res = crate::interactive::iex_fast(phi, psi, fuel);
+    single_ray(&res.psi)
+        .and_then(st_inner)
+        .map(|m| (m, res.steps))
+}
+
+/// Outcome of [`eval_forced`].
+#[derive(Debug)]
+pub struct Forced {
+    /// The most-evaluated term reached (constructor structure / residual).
+    pub value: TermId,
+    /// Total stellar steps across all engine passes.
+    pub steps: usize,
+    /// Number of host `isnil`-forcings performed (the §60 strategy's work).
+    pub forcings: usize,
+    /// `true` if no blocked `isnil` remains (isnil-complete; other strict
+    /// blockers like `eq`/`add` may still be residual — measured, not faked).
+    pub isnil_complete: bool,
+}
+
+/// Disclosed §60 host-forcing evaluator (slice 1: `isnil`). Interleaves
+/// stellar reduction with demand-driven forcing of `isnil` arguments.
+pub fn eval_forced(phi: &Constellation, prog: TermId, fuel: usize, max_forcings: usize) -> Forced {
+    // State = the process Ψ (preserving the KAM stack across resumes).
+    let mut psi: Vec<Star> = vec![vec![pp(st(prog, cst("eps")))]];
+    let mut total = 0usize;
+    let mut forcings = 0usize;
+    loop {
+        let res = crate::interactive::iex_fast(phi, psi.clone(), fuel);
+        total += res.steps;
+        let ray = match single_ray(&res.psi) {
+            Some(r) => r,
+            None => {
+                let v = psi.first().and_then(|s| s.first().copied()).unwrap_or(prog);
+                return Forced { value: v, steps: total, forcings, isnil_complete: false };
+            }
+        };
+        let focus = st_inner(ray).unwrap_or(ray);
+        // Scan the whole process ray (covers M and the stack π).
+        match find_blocked_isnil(ray) {
+            None => {
+                return Forced { value: focus, steps: total, forcings, isnil_complete: true }
+            }
+            Some((node, arg)) => {
+                if forcings >= max_forcings {
+                    return Forced { value: focus, steps: total, forcings, isnil_complete: false };
+                }
+                forcings += 1;
+                // Force the isnil argument to WHNF in a fresh sub-process —
+                // the disclosed §60 strategy doing the demand propagation.
+                let arg_v = match force_whnf(phi, arg, fuel) {
+                    Some((fa, fst)) => {
+                        total += fst;
+                        fa
+                    }
+                    None => arg,
+                };
+                let ray2 = replace_subterm(ray, node, ap_node(cst("isnil"), arg_v));
+                if ray2 == ray {
+                    // No progress: arg didn't become a list value ⇒ a deeper
+                    // residual blocker (eq/arith). Honest stop, measured.
+                    return Forced { value: focus, steps: total, forcings, isnil_complete: false };
+                }
+                psi = vec![vec![ray2]];
+            }
+        }
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

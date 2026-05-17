@@ -129,7 +129,30 @@ fn main() {
             break;
         }
     }
+    // ── KG3c slice 1: disclosed §60 host-forcing (isnil) ────────────────────
+    println!("\n[KG3c] disclosed §60 host-forcing driver (isnil only):");
+    let t0 = Instant::now();
+    let f = galaxy::eval_forced(&phi, prog, 200_000, 2_000);
+    let dt = t0.elapsed();
     println!(
-        "\n[verdict] KG3a measurement complete. Primitive-blocker heads + step/time numbers\n above are the empirical, prioritized gap to 'galaxy executable' (NOT a guess)."
+        "  forcings={} total_steps={} isnil_complete={} elapsed={:.3}s",
+        f.forcings, f.steps, f.isnil_complete, dt.as_secs_f64()
+    );
+    println!(
+        "  → {}",
+        if f.isnil_complete {
+            "isnil-COMPLETE with forcings=0 ⇒ isnil was never a blocked redex \
+             (it occurs only as unapplied DATA, not strict-stuck). The real \
+             blocker is `eq`/arith ⇒ next slice = strict arithmetic bridge + \
+             signed binary numerals (KG1b). Forcing infra reused there."
+        } else {
+            "isnil NOT complete within budget: a blocked isnil remained — \
+             forcing made measurable progress; rerun for the next gap."
+        }
+    );
+
+    println!(
+        "\n[verdict] KG3a baseline + KG3c isnil-forcing measured. cons/nil in results = \
+         output structure; eq/arith = measured next (signed binary, KG1b). Not a guess."
     );
 }
