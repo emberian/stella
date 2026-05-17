@@ -597,6 +597,26 @@ fn force_whnf(phi: &Constellation, term: TermId, fuel: usize) -> Option<(TermId,
         .map(|m| (m, res.steps))
 }
 
+/// Force `term` toward a numeral using the FULL forced evaluator (Push-form
+/// aware) rather than plain WHNF — so a strict op nested inside an operand
+/// (galaxy's arithmetic is deeply nested) resolves instead of stalling. The
+/// `budget` bounds the recursion (each nesting level gets a strictly smaller
+/// forcing budget; fuel also bounds it). `None` = the operand has a genuine
+/// deeper non-numeral residual (an honest measured stop, not faked).
+fn force_numeral(
+    phi: &Constellation,
+    term: TermId,
+    fuel: usize,
+    budget: usize,
+) -> Option<(TermId, usize)> {
+    let f = eval_forced(phi, term, fuel, budget);
+    if crate::sbinarith::dsint(f.value).is_some() {
+        Some((f.value, f.steps))
+    } else {
+        None
+    }
+}
+
 /// An unreduced arithmetic-operator node `a(a(op,A),B)` (binary) or
 /// `a(op,A)` (unary `neg`) with `op ∈ {add,mul,eq,lt,neg}`, not yet a value.
 /// Returns `(node, op, operands)`. `div` is intentionally NOT auto-forced
@@ -648,6 +668,59 @@ fn find_blocked_arith(t: TermId) -> Option<(TermId, &'static str, Vec<TermId>)> 
         }
     }
     None
+}
+
+/// A strict numeric op stuck in **Push/KAM-stack form**: the process is
+/// `+P(st(OP, A · B · π'))` (or `st(neg, A · π')`) where `OP` is one of the
+/// deliberately-omitted strict primitives. The KAM's `Push` rule
+/// (`a(M,N)⋆π → M⋆(N·π)`) *always* uncurries an operator's arguments onto the
+/// stack before the head is examined, so a strict op blocks here — NOT in the
+/// curried `a(a(op,A),B)` shape [`find_blocked_arith`] scans. That mismatch is
+/// exactly why the lazy fragment falsely looked "fully reduced": the live
+/// redex is on π, where the applicative detector never looked (KG3e).
+///
+/// Returns `(op, operands, residual_π)` — operands are the popped stack frames
+/// (the actual argument closures), residual is π after they are consumed. Not
+/// enough frames ⇒ a genuine partial-application value, NOT a redex ⇒ `None`.
+fn find_blocked_pushform(ray: TermId) -> Option<(&'static str, Vec<TermId>, TermId)> {
+    // Unwrap +P(st(M, π)) (polarity-agnostic on the `P` head name).
+    let TermData::App(p, pa) = term::get(ray) else { return None };
+    if p.name.as_str() != "P" || pa.len() != 1 {
+        return None;
+    }
+    let TermData::App(stsym, sa) = term::get(pa[0]) else { return None };
+    if stsym.name.as_str() != "st" || sa.len() != 2 {
+        return None;
+    }
+    let (m, pi) = (sa[0], sa[1]);
+    // `Push` runs until M is not an `a`-node, so a rule-less strict op is the
+    // bare atom here with every operand already on π.
+    let TermData::App(h, ha) = term::get(m) else { return None };
+    if !ha.is_empty() {
+        return None;
+    }
+    let (op, arity): (&'static str, usize) = match h.name.as_str() {
+        "add" => ("add", 2),
+        "mul" => ("mul", 2),
+        "eq" => ("eq", 2),
+        "lt" => ("lt", 2),
+        "neg" => ("neg", 1),
+        _ => return None,
+    };
+    // Pop `arity` frames off the right-nested `dot` spine.
+    let mut operands = Vec::with_capacity(arity);
+    let mut cur = pi;
+    for _ in 0..arity {
+        match term::get(cur) {
+            TermData::App(d, da) if d.name.as_str() == "dot" && da.len() == 2 => {
+                operands.push(da[0]);
+                cur = da[1];
+            }
+            // Fewer args than the op needs ⇒ a partial value, not a redex.
+            _ => return None,
+        }
+    }
+    Some((op, operands, cur))
 }
 
 /// Outcome of [`eval_forced`].
@@ -721,10 +794,80 @@ pub fn eval_forced(phi: &Constellation, prog: TermId, fuel: usize, max_forcings:
         // smuggling; bounded sub_fuel ⇒ slow ⇒ honest measured stop).
         match find_blocked_arith(ray) {
             None => {
-                return Forced {
-                    value: focus, steps: total, forcings, arith_ops,
-                    isnil_complete: true, fully_reduced: true,
+                // No curried-form arith redex. The KAM uncurries operators
+                // onto π, so the real strict-op redex (if any) is Push-stack
+                // form `st(op, A·B·π)` — what KG3e proved galaxy stalls on.
+                // Faithful disclosed-§60 resolution: force operands to
+                // numerals via the stellar engine, compute via stellar
+                // (s)binarith (no host i128 smuggling), reduce the process to
+                // `st(result, π_residual)`, continue.
+                let Some((op, operands, resid_pi)) = find_blocked_pushform(ray)
+                else {
+                    return Forced {
+                        value: focus, steps: total, forcings, arith_ops,
+                        isnil_complete: true, fully_reduced: true,
+                    };
                 };
+                if forcings + arith_ops >= max_forcings {
+                    return Forced {
+                        value: focus, steps: total, forcings, arith_ops,
+                        isnil_complete: true, fully_reduced: false,
+                    };
+                }
+                arith_ops += 1;
+                // Each operand is forced with a strictly smaller budget than
+                // the current level (decrement ≥1 ⇒ well-founded), bounded
+                // also by fuel. Linear decrement (not halving) so deeply
+                // nested galaxy arithmetic isn't cut off prematurely.
+                let sub_budget = max_forcings.saturating_sub(forcings + arith_ops + 1);
+                let mut nums: Vec<TermId> = Vec::with_capacity(operands.len());
+                for &o in &operands {
+                    match force_numeral(phi, o, fuel, sub_budget) {
+                        Some((ov, ost)) => {
+                            total += ost;
+                            nums.push(ov);
+                        }
+                        None => {
+                            // Operand has a genuine deeper non-numeral
+                            // residual ⇒ honest measured stop, not faked.
+                            return Forced {
+                                value: focus, steps: total, forcings, arith_ops,
+                                isnil_complete: true, fully_reduced: false,
+                            };
+                        }
+                    }
+                }
+                let computed: Option<TermId> = match op {
+                    "neg" => crate::sbinarith::neg(nums[0]),
+                    "add" => crate::sbinarith::add(nums[0], nums[1], sub_fuel),
+                    "mul" => crate::sbinarith::mul(nums[0], nums[1], sub_fuel),
+                    "eq" => crate::sbinarith::eq(nums[0], nums[1], sub_fuel),
+                    "lt" => crate::sbinarith::lt(nums[0], nums[1], sub_fuel),
+                    _ => None,
+                };
+                let Some(result) = computed else {
+                    return Forced {
+                        value: focus, steps: total, forcings, arith_ops,
+                        isnil_complete: true, fully_reduced: false,
+                    };
+                };
+                // `sbinarith::eq`/`lt` yield its internal booleans `tt`/`ff`;
+                // galaxy consumes the result as the church booleans `t`/`f`
+                // (prim_stars: `t x y → x`, `f x y → y`). Translate so the
+                // engine can keep reducing instead of re-sticking on `tt`.
+                let result = match term::get(result) {
+                    TermData::App(s, a) if a.is_empty() && s.name.as_str() == "tt" => {
+                        cst("t")
+                    }
+                    TermData::App(s, a) if a.is_empty() && s.name.as_str() == "ff" => {
+                        cst("f")
+                    }
+                    _ => result,
+                };
+                // Rebuild the process: result is now the head, operands
+                // consumed, the rest of the continuation preserved.
+                psi = vec![vec![pp(st(result, resid_pi))]];
+                continue;
             }
             Some((node, op, operands)) => {
                 if forcings + arith_ops >= max_forcings {
