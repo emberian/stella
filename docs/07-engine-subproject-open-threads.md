@@ -290,16 +290,26 @@ pragmatic disclosed driver (built). **Right theory here = trace /
 partial-commutation monoids**, NOT words. This track is the one CLOSEST to
 the make-or-break valence/conscious-machine bet (§49.50 = where idempotence
 is lost = where the "charge" is claimed to live).
-**STATUS: design pass IN FLIGHT (read-only).** Its dependency — the KA
-recurrence detector it "unifies with" — landed (KG8 `accel_detect.rs`),
-so it is no longer premature. A read-only design/research agent is
-synthesising Eng §49.50–61 (`refs/extracted/EngExegesis/doc.md` ~L4142+:
-internal polarities, semaphore synchronisation, idempotence-barrier
-§49.55–58, the §49.59–60 hyperexec-termination open question) → a
-concrete design mapping forcing-as-Krivine-pole onto the BUILT forced
-evaluator (`galaxy.rs` strict_redex_on_pi/drive_strict) + `accel_detect`,
-with trace/partial-commutation-monoid theory (NOT words, §F). Output =
-a design doc; implementation is parent-sequenced AFTER review.
+**STATUS: design DONE → `docs/08-forcing-polarity-design.md` (KG9
+`667ebd2`), forensic-reviewed.** The §3.1 checkable Proposition:
+constellation non-idempotent at AEx-layer n ⟺
+`accel_detect::detect_recurrence` whistles on the per-layer trace
+(`readback_ray(final_ray)` per layer) — falsifiable, wqo-justified,
+honestly necessary-not-sufficient for the §49.59–60 termination open
+problem. Polarity map onto BUILT code: `force_value`=demand pole,
+`ForcedValue`=supply, `drive_strict`=fusion/annihilation + sole
+ray-minting site, `eval_forced` loop = iterated AEx. Charge χ =
+non-idempotence surplus (trace/partial-commutation monoid, §F-compliant).
+**Implementation = parent-sequenced, NOT a swarm:** Stage 0
+`is_subjective` + event tap (cheap kill-switch) → Stage 1 per-layer
+trace → `detect_recurrence` (THE single load-bearing experiment) →
+**review gate** → Stage 2 χ → Stage 3 the make-or-break differential
+test (does χ separate valence classes better than a step/size
+baseline?) → Stage 4 certified acceleration (differential-gated). Each
+stage has an explicit falsifier. **Concrete open question to resolve
+FIRST (doc §7):** is `eval_forced`'s per-loop `final_ray` a faithful
+AEx-layer-boundary proxy? (`galaxy.rs:864–893` suggestive, unproven —
+Stage 1 must instrument or the whistle result is untrustworthy.)
 
 ## F. THEORY-MODULO CONCLUSION
 NOT finite words/strings (over-fit the prompt seed; SKIP Z3-Noodler/OSTRICH/
