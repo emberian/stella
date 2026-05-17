@@ -26,7 +26,7 @@ use rustc_hash::FxHashMap;
 use stella_core::constellation::Constellation;
 use stella_core::constellation::Star;
 use stella_core::dep_graph::DepGraph;
-use stella_core::interactive::{iex, mat_phi, step_at};
+use stella_core::interactive::{iex, mat_phi_colored, step_at};
 use stella_core::polarised::{matchable, ray_polarity, underlying_term, Polarity};
 use stella_core::subst::{fresh_var, Renaming};
 use stella_core::term::Var;
@@ -319,7 +319,7 @@ fn mgu_of(phi: &Constellation, psi: &[Star], f: &Fireable) -> Vec<(String, Strin
         return Vec::new();
     }
     // External: first matching Φ[si][ji], freshened apart.
-    if let Some(&(si, ji)) = mat_phi(phi, r).first() {
+    if let Some(&(si, ji)) = mat_phi_colored(phi, psi, r).first() {
         let mut counter = 0u32;
         let renamed = freshen_star_consistent(&phi[si], "Φ_", &mut counter);
         if let Some(s) = unify(vec![Equation::new(
@@ -341,7 +341,7 @@ fn enumerate_fireable(phi: &Constellation, psi: &[Star]) -> Vec<Fireable> {
             if ray_polarity(r) == Polarity::Neutral {
                 continue;
             }
-            let ext = mat_phi(phi, r);
+            let ext = mat_phi_colored(phi, psi, r);
             if !ext.is_empty() {
                 out.push(Fireable {
                     star: i,
@@ -388,7 +388,7 @@ fn find_active_ray(phi: &Constellation, psi: &[Star]) -> String {
                 continue;
             }
             // Check external matches in phi.
-            let ext = mat_phi(phi, r);
+            let ext = mat_phi_colored(phi, psi, r);
             if !ext.is_empty() {
                 let matches: Vec<String> = ext
                     .iter()

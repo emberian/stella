@@ -99,15 +99,36 @@ export function preset_count() {
 }
 
 /**
+ * The editable source `{ "phi": "...", "psi": "..." }` for preset `idx`,
+ * or `null`. This is what makes every showcase a first-class editable
+ * example rather than a read-only trace.
+ * @param {number} idx
+ * @returns {string}
+ */
+export function preset_source(idx) {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.preset_source(idx);
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
+}
+
+/**
  * Like `run_source`, but drives an explicitly chosen resolution path.
  * `path` is `"i,j;i,j;…"` (star,ray per step); steps not named follow the
  * IEx default. Lets the explorer offer "pick which redex fires".
  * @param {string} phi_src
  * @param {string} psi_src
  * @param {string} path
+ * @param {number} fuel
  * @returns {string}
  */
-export function run_path(phi_src, psi_src, path) {
+export function run_path(phi_src, psi_src, path, fuel) {
     let deferred4_0;
     let deferred4_1;
     try {
@@ -117,7 +138,7 @@ export function run_path(phi_src, psi_src, path) {
         const len1 = WASM_VECTOR_LEN;
         const ptr2 = passStringToWasm0(path, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len2 = WASM_VECTOR_LEN;
-        const ret = wasm.run_path(ptr0, len0, ptr1, len1, ptr2, len2);
+        const ret = wasm.run_path(ptr0, len0, ptr1, len1, ptr2, len2, fuel);
         deferred4_0 = ret[0];
         deferred4_1 = ret[1];
         return getStringFromWasm0(ret[0], ret[1]);
@@ -132,9 +153,10 @@ export function run_path(phi_src, psi_src, path) {
  * `{"ok":true,"steps":[…]}` or `{"ok":false,"error":"…","pos":N}`.
  * @param {string} phi_src
  * @param {string} psi_src
+ * @param {number} fuel
  * @returns {string}
  */
-export function run_source(phi_src, psi_src) {
+export function run_source(phi_src, psi_src, fuel) {
     let deferred3_0;
     let deferred3_1;
     try {
@@ -142,7 +164,7 @@ export function run_source(phi_src, psi_src) {
         const len0 = WASM_VECTOR_LEN;
         const ptr1 = passStringToWasm0(psi_src, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len1 = WASM_VECTOR_LEN;
-        const ret = wasm.run_source(ptr0, len0, ptr1, len1);
+        const ret = wasm.run_source(ptr0, len0, ptr1, len1, fuel);
         deferred3_0 = ret[0];
         deferred3_1 = ret[1];
         return getStringFromWasm0(ret[0], ret[1]);

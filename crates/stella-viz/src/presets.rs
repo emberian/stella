@@ -614,3 +614,109 @@ pub fn all_step_data() -> Vec<PresetStepData> {
         step_data_nfta(),         // 5 (curated)
     ]
 }
+
+/// The `(Φ, Ψ)` pair for preset `idx`, in the same order as `all_presets()`.
+/// Exposed so the IDE can render any showcase to editable surface source
+/// (`parse(format(Φ))` is faithful) — no more read-only presets.
+pub fn preset_io(idx: usize) -> Option<(Constellation, Constellation)> {
+    Some(match idx {
+        0 => (
+            horn_add_constellation(),
+            vec![vec![neg_ray("add", vec![nat(2), nat(2), mk_var("R")]), mk_var("R")]],
+        ),
+        1 => (
+            encode_nfa(&eng_fig561_nfa()),
+            vec![encode_word(&["0", "0", "0"])],
+        ),
+        2 => {
+            let word: Vec<String> = vec![];
+            (encode_ntm(&trivial_accept_empty_tm()), vec![encode_word_ntm(&word)])
+        }
+        3 => (
+            horn_mult_constellation(),
+            vec![vec![neg_ray("mult", vec![nat(2), nat(3), mk_var("R")]), mk_var("R")]],
+        ),
+        4 => (
+            eng_fig562_npda_constellation(["0", "1"].len() + 2),
+            vec![encode_word(&["0", "1"])],
+        ),
+        5 => {
+            let tree = Tree::Node(
+                "or".into(),
+                vec![
+                    Tree::Node("not".into(), vec![Tree::Node("1".into(), vec![])]),
+                    Tree::Node("1".into(), vec![]),
+                ],
+            );
+            (bool_formula_nfta().machine_constellation(), vec![tree.tree_star()])
+        }
+        _ => return None,
+    })
+}
+
+#[cfg(test)]
+mod io_tests {
+    use super::*;
+    use stella_core::parse::parse_constellation;
+
+    fn fmt_c(c: &Constellation) -> String {
+        c.iter()
+            .map(|s| {
+                let r: Vec<String> = s.iter().map(|x| format!("{x}")).collect();
+                format!("[{}]", r.join(", "))
+            })
+            .collect::<Vec<_>>()
+            .join(" + ")
+    }
+
+    /// Every preset's Φ and Ψ must survive Display → parse, and the
+    /// re-parsed pair must still reach a normal form (i.e. the showcase
+    /// remains a real, runnable, *editable* example).
+    #[test]
+    fn every_preset_round_trips_and_runs() {
+        for idx in 0..6 {
+            let (phi, psi) = preset_io(idx).expect("preset exists");
+            let phi_s = fmt_c(&phi);
+            let psi_s = fmt_c(&psi);
+            let phi2 = parse_constellation(&phi_s)
+                .unwrap_or_else(|e| panic!("preset {idx} Φ reparse: {e} in {phi_s}"));
+            let psi2 = parse_constellation(&psi_s)
+                .unwrap_or_else(|e| panic!("preset {idx} Ψ reparse: {e} in {psi_s}"));
+            // idempotent: formatting the reparse equals the first format
+            assert_eq!(fmt_c(&phi2), phi_s, "preset {idx} Φ not idempotent");
+            assert_eq!(fmt_c(&psi2), psi_s, "preset {idx} Ψ not idempotent");
+            let snaps = capture_steps(&phi2, psi2, 400);
+            assert!(!snaps.is_empty(), "preset {idx} produced no steps");
+            assert!(
+                snaps.last().unwrap().is_final,
+                "preset {idx} did not reach a normal form within fuel"
+            );
+        }
+    }
+
+    /// The explorer drives editable showcases through `capture_path` (not the
+    /// fuel-replay `capture_steps`). It must be colour-aware, or coloured
+    /// machines (every automaton) never fire. Pin the NFA: "000" accepts.
+    #[test]
+    fn capture_path_runs_coloured_automata() {
+        use crate::stepper::capture_path;
+        let (phi, psi) = preset_io(1).unwrap(); // NFA Fig 56.1, word "000"
+        let phi = parse_constellation(&fmt_c(&phi)).unwrap();
+        let psi = parse_constellation(&fmt_c(&psi)).unwrap();
+        let snaps = capture_path(&phi, psi, &[], 400);
+        assert!(snaps.len() > 1, "NFA must take real steps, not 0");
+        let observable: String = snaps
+            .last()
+            .unwrap()
+            .psi_stars
+            .iter()
+            .filter(|s| !s.contains('+') && !s.contains('-') && !s.contains('−'))
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(" ");
+        assert!(
+            observable.contains("accept"),
+            "NFA '000' must accept via capture_path; observable = {observable}"
+        );
+    }
+}
