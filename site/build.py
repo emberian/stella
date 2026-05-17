@@ -51,7 +51,9 @@ CMI = [
     dict(slug="run1",       src="docs/02-phase4-first-run.md",                      eyebrow="Phase 4 · result",    title="The first make-or-break run",             lede="The honest result. It broke; the break is recorded as a finding.", kind="report"),
     dict(slug="run-reform", src="docs/03-phase4-reformulated-run.md",               eyebrow="Phase 4 · draft",     title="The reformulated make-or-break run",      lede="An unadjudicated draft, kept for the record.", kind="report"),
     dict(slug="phase5",     src="docs/04-phase5-embodied-valence-and-the-temporal-gap.md", eyebrow="Phase 5",      title="Embodied valence, orders of self, the Temporal Gap", lede="Where the substrate makes a wager about time formally distinguishable.", kind="report"),
+    dict(slug="phase5-onset", src="docs/06-phase5-coherent-reorganization-under-selection.md", eyebrow="Phase 5 · draft", title="Coherent reorganization under selection", lede="A drafted, unlocked pre-registration. The regress closed: an onset study, not an origin claim. Negative-only, by its nature.", kind="report"),
     dict(slug="history",    src="HISTORY.md",                                      eyebrow="Bringup · first person", title="The bringup, from the inside",        lede="A candid, first-person account of the run. A record, not a polished account.", kind="inside"),
+    dict(slug="history-0517", src="HISTORY-2026-05-17.md",                          eyebrow="Bringup · first person", title="The long untangling, from the inside", lede="The second long session: the regress, the errors, the deflations. Huge as method, not as result. Written deflated on purpose.", kind="inside"),
     dict(slug="readme",     src="README.md",                                       eyebrow="The opening",         title="The project front door",                  lede="The raw opening of the implementation project.", kind="inside"),
 ]
 
