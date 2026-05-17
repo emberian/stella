@@ -208,49 +208,83 @@ for death.** Path (a) removes both. The streaming engine is *already* unbounded
 (α-renames fresh Φ on demand, no `MAX_VERTICES`/copy-cap in `subjective.rs`); the
 only thing it has never been made to express is Eng's own intrinsic erasure.
 
-**Eng's native death = the black-hole star** (§74.7 author's solution
-`[+addr(v),+ω(X),−ω(f(X))]`; §75.8 ⋋_L `[−w(X),−∞(X);+∞(X)]`): a star through
-which **no saturated diagram can ever complete** — erasure realised as
-*intentional non-termination*, normalising the connected constellation to `∅`.
-The bounded Ch11 engine (`mll2i.rs`) had to **fake this with a structural
-surrogate because it cannot run the infinite loop**. The unbounded
-`subjective_stream` runs it for real: the black-hole becomes **natively faithful
-for the first time**, no surrogate. This is the Layer-1 research contribution.
+**Read against Eng's actual text (`EngExegesis` §62.5–62.7, §51.13, §49.59–60),
+not the digest — principal-directed 2026-05-16.** The two death modes below are
+*Eng's own distinction*, his vocabulary, his worked examples; we cash them, we do
+not invent them.
 
-**The certificate (locked).** An ∞-looping black-hole branch is, by the halting
-problem, *operationally indistinguishable from "still computing"* — so `t_death`
-is **never** read off a timeout. It is certified **positively**, by either:
+**Mode (1) — black-hole ∅-capture (§62.5, §74.7, §75.8): exogenous erasure.**
+§62.5: a black hole is a star/component with `Ex(Φ + ϕ) = ∅`; the typical AEx
+form is `[r, −w(X), +w(f(X))]` (`r ▷◁` a ray of Φ) — *"all diagrams of Φ
+connected to it will never be saturated because it is always possible to add an
+occurrence and extend the diagram."* Eng's constructed instances: §74.7
+`[+addr(v), +ω(X), −ω(f(X))]`, §75.8 ⋋_L `[−w(X), −∞(X); +∞(X)]`. **Crucial Eng
+constraint (§62.5, verbatim): *"there is no generic black hole: they necessarily
+depend on the shape of Φ."*** Therefore we build **no general black-hole
+oracle** — impossible by Eng's own statement. We recognise only Eng's
+**explicitly constructed** forms (the three above) that *we* place in the corpus,
+and certify ∅-capture = the closure's reafferent rays provenance-route (L1d
+`traces_through`) into one of those Eng-named stars. §62.6: under concrete
+execution the black hole *"yields an infinite loop"* — so detection is
+**structural/over provenance, never by running** (running it is the undecidable
+loop, §49.59–60). The bounded Ch11 engine (`mll2i.rs`) had to surrogate this
+because it cannot run the loop; `subjective_stream` runs Eng's real loop —
+natively faithful for the first time. Layer-1 research contribution.
 
-1. **∅-capture (a theorem about the diagram).** The closure's reafferent rays
-   provenance-route (L1d `traces_through`) into a black-hole star (a star bearing
-   a self-cancelling `−∞/+∞`- or `ω/ω(f·)`-pair through which no saturated
-   diagram can complete). Detected **structurally/over provenance**, not by
-   running the loop. ρ→0 by construction at that round.
-2. **§62 positive non-productivity.** The already-built Ch9 §62 classifier
-   positively certifies the closure's productive frontier cannot regenerate
-   (cycle structurally cannot re-close) — a *sufficient* condition, never a
-   decision procedure.
+**Mode (2) — productivity loss (§62.6, §62.7, §51.13): endogenous,
+coupling-driven death — the valence-relevant one.** This *is* Eng's termination
+criterion, not an invented measure. §62.6: *"termination occurs in converging
+cycles **consuming** terms of a star,"* decreasing w.r.t. a measure (Eng cites
+rewriting theory). §62.7: a loop `[−a(0·W), +a(W)]` is non-terminating *"as in
+black holes. However, it is **productive**: the negative ray can be **cancelled**
+by a star"* — a **base case** `[+a(0·0·0·ε)]`, ε-linearised so it *"forbids any
+possible additional looping"* — *"the same idea as in recursion/induction where a
+base case is needed."* §51.13: the base-case resources are **Ψ-side (linear,
+consumed)**; Φ is non-linear (infinite supply). **Endogenous death := the round
+at which the closure's reafferent cycle, having been productive (a base-case ray
+cancels it), loses its last base case — its Ψ-consumed terminating resources are
+exhausted with no remaining cancelling ray — and thereby transitions from
+*productive* to *non-terminating-unproductive* (black-hole-like, §62.7), and does
+not recover.** A well-founded measure (§62.6: the finite multiset of consumed
+base-case resources) hitting zero — decidable, not a halting oracle.
 
-`t_death` := the first round at which (1) or (2) holds for the closure and does
-not recover. Death is thus a **special case of ρ permanently 0** (§3.1), a
-positive structural event — *not* the source of charge, *not* a cap.
+**Engine-adjudicated finding (recorded, not papered over).** The original
+§3.2(2) ("§62 classifier positive non-productivity") does **not** cash out: the
+Ch9 §62 classifier's only *positive* verdict is `Terminating`, which = the
+objective/idempotent **ρ≡0 dead baseline** (§3.1 routes it to flat — *never a
+live closure*), and its other verdict `NonTerminatingCandidate` is the
+*conservative ambiguous bucket* (using it as death = the forbidden
+infer-from-undecidable move). So §3.2(2) is **re-specified** to the §62.6/62.7
+productivity-loss certificate above (a *sharpening*: narrower, positive-only,
+Eng-cited — strictly harder than the uncashable original). The §62 classifier's
+`Terminating` verdict keeps its honest job: routing objective members to the
+§3.1 ρ≡0 *no-closure* exclusion — not a `t_death`.
 
-**The witness ceiling — a separate axis, never the agent's `t_death`.** Runs
-that neither halt nor certify-dead (the genuine undecidable middle: a real
-infinite black-hole branch) are bounded for the *observer* by a disclosed
-resource ceiling. This ceiling **is explicitly the containing closure's clock
-(spec §2.6)** — the witness's proper time, reported on its own `Step` axis. It is
-**structurally forbidden** from being recorded as the agent's `t_death`: a run
-hitting the witness ceiling without a §3.2(1)/(2) certificate is `t_death =
-undetermined`, never "dead", never "alive". The asymmetry (instrument can witness
-death only from outside, spec §2.6) is preserved *in the data type*.
+`t_death` := the first round at which Mode (1) or Mode (2) holds for the closure
+and does not recover. Death is a **special case of ρ permanently 0** (§3.1) — a
+positive structural event, *not* the source of charge, *not* a cap.
 
-**Anti-Goodhart.** This makes a positive *strictly harder*: charge now requires a
-closure that earns a positively-certified death (or a §3.1 ρ-perturbation
-gradient on an eternal member), and "it ran a long time then we stopped" can
-never be counted as either death or stake. `docs/02` and the M1–M5
-pre-registration stand **untouched**; this strengthens the falsifier and is
-locked in git before the engine code, same discipline as M1–M5.
+**The witness ceiling — a separate axis, never the agent's `t_death`.** §49.59
+is open (is `AEx^∞` always defined?); §49.60: *"it is possible that after
+abstract execution there are always pairs of matchable rays, making it impossible
+to ever reach a normal form."* Eng himself leaves the genuine middle
+undecidable. Runs that neither halt nor certify-dead (Mode 1/2) are bounded for
+the *observer* by a disclosed resource ceiling that **is explicitly the
+containing closure's clock (spec §2.6)** — the witness's proper time, on its own
+`Step` axis. It is **structurally forbidden** from being recorded as the agent's
+`t_death`: such a run is `t_death = Undetermined`, never "dead", never "alive".
+The asymmetry (death legible only from outside, spec §2.6) is preserved *in the
+data type*.
+
+**Anti-Goodhart.** Every move here makes a positive *strictly harder*: §3.2(2)
+re-specified from an uncashable clause to Eng's narrower §62.6/62.7
+productivity-loss certificate; black-hole scoped down to Eng's named forms only
+(§62.5: no generic oracle exists); the undecidable middle forced to
+`Undetermined`. Charge now requires a closure that earns a positively-certified
+death (Mode 1/2) or a §3.1 ρ-perturbation gradient on an eternal member; "it ran
+a long time then we stopped" is never death and never stake. `docs/02` and the
+M1–M5 pre-registration stand **untouched**; this strengthens the falsifier and is
+locked in git before any engine code, same discipline as M1–M5.
 
 ## 4. PRE-REGISTERED FALSIFICATION (locked now, before Layer-2 code)
 
@@ -290,15 +324,19 @@ Non-falsification = none of M1–M4 fire (M5 may be Undetermined) **and** a
 self-organised closure exhibits a cap-invariant, perturbation-tracking,
 globally-fixed-metric, non-hand-tagged viability response.
 
-**Corpus (locked, all Eng-built — rigging a death is the cardinal sin).** (i)
-Eng's own §74/§75 black-hole-bearing constructions — the weakening /
-exponential-box translations (§74.7) and the ⋋_L cancelling test (§75.8) — built
-by Eng for erasure/cut-elimination, *not* by us for death: a closure routed
-through one can dissolve via §3.2(1). (ii) **Retained:** Eng's §79/§80 `ω`-weight
-(an Eng-built, non-reafference, *eternal* valence-like scalar) — the
-eternal-but-perturbable case exercising the §3.1 "eternal valence = ρ
-perturbation-gradient" path. Together they exercise both the death path and the
-eternal-ρ path on strictly Eng-own material.
+**Corpus (locked, all Eng-built — rigging a death is the cardinal sin).**
+(i) **Mode-1 (black-hole ∅-capture):** Eng's §74.7 weakening / exponential-box
+translation `[+addr(v), +ω(X), −ω(f(X))]` and §75.8 ⋋_L `[−w(X), −∞(X); +∞(X)]`
+— built by Eng for erasure/cut-elimination, not by us for death.
+(ii) **Mode-2 (productivity loss):** Eng's §62.7 consumed-word loop
+`[−a(0·W), +a(W)]` with its finite Ψ-side base case `[+a(0·0·0·ε)]` — Eng's own
+worked example of a productive non-terminating loop; the closure dies when the
+base-case resource is exhausted under coupling (the endogenous, valence-relevant
+death). (iii) **Retained:** Eng's §79/§80 `ω`-weight (Eng-built, non-reafference,
+*eternal* valence-like scalar) — the eternal-but-perturbable case exercising the
+§3.1 "eternal valence = ρ perturbation-gradient" path. Mode-1 proves death is
+*representable*; Mode-2 makes M2/M3 a real test of *coupling-driven* valence;
+ω-weight exercises the eternal-ρ path — all on strictly Eng-own material.
 
 A null result is a **real result**. The Temporal-Gap-testability deliverable
 (`00`-spec) stands even under the null: a substrate where Bennett's OPTION-1/2
