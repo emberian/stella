@@ -280,9 +280,26 @@ Decode it with `galaxy_decode::decode_result` as the oracle each step.
   experiment-validity-critical: an evolutionary search maximizing viability
   WILL find & amplify any unfaithful fast path (Goodhart at substrate level)
   → evolve fake-viable agents. Faithfulness IS part of experiment validity.
-- lock-free `get` / append-only stable store (B3) — deepest residual constant
-  factor (per-node RwLock), pure-perf, pervasive.
-- triangular/union-find substitution in `fuse` — biggest per-fuse factor.
+- lock-free `get` / append-only stable store (B3) — **RE-HOMED (docs/10,
+  49883df):** B3 + Wilson–Zanasi data-parallel layered rewriting are the
+  SAME array refactor (the store is already an append-only arena morally =
+  the OHG `w/x/s/t` parallel arrays). Do B3 *as* the OHG array substrate,
+  NOT as a standalone lock swap. Sequenced strictly AFTER docs/09 Stage 1
+  (else the galaxy Φ=405 unify% attribution is destroyed); sits BESIDE
+  §49.50 (does NOT subsume it — semaphore/ray-minting is driver dynamics,
+  not representation). Ceiling-determining open question (unknown
+  pre-Stage-0): can the §49.50 semaphore edge `F(op,ℓ)▷R(P)` be encoded
+  AS ADJACENCY before `kahn` layering, cheaply+faithfully? If not, the
+  lever is restricted to the objective/Horn fragment (still useful for
+  galaxy's δ-heavy KAM). Risk: `apply_smc_rewrite`/`pushout_along_span`
+  are `feature="experimental"` in open-hypergraphs 0.3.1 (layering/lax
+  stable). Gate = the SAME proven `psi_compatible` + reference `iex`.
+- triangular/union-find substitution in `fuse` — **DONE (Stage 1a,
+  e3b4030):** `unify_fast.rs` built, differentially proven ≡ the `unify`
+  oracle (3000-case fuzz, mirrored MM cases). NOT yet wired (engine
+  byte-identical). Stage 1b = the `produce_stars_fast` seam (docs/09 §C,
+  2 call sites) + flip `iex_eq_iex_fast`→`psi_compatible` + KS-PROF
+  galaxy Φ=405 before/after.
 - deeper term indexing (discrimination/fingerprint beyond fp_unifiable) —
   matters at galaxy Φ scale (~400 δ-stars).
 - a clean fast `evaluate(constellation)→{NF, closure/viability readout}` API
@@ -424,17 +441,31 @@ falsifier the validator must catch.
 ## NEXT ACTIONS (priority order)
 1. ~~Harvest both A agents~~ DONE (490168f galaxy_decode, 308189f
    IexAccel). Thread A CLOSED.
-2. ~~Diagnose/drive/unify/decoder/protocol~~ DONE: KG3e–h drove galaxy
-   to flag=0; KG4 unified the evaluator (+D1/D2/D3/D6/D7); KG4b
-   honest-marked sbinarith; KG4c decoder→readback; KG5 modulation codec;
-   KG6 interact/multipledraw wired end-to-end. **Measured: galaxy
-   reaches the (flag=0,newState,data) triple; data images still unforced
-   ⇒ no rasterised frame yet (honest stop).**
-   **(NOW TOP)** Deep-force the image-data payload (investigate why the
-   `data` list elements don't reduce to cons/nil/num in `deep_decode` —
-   bound vs deeper structure; the readback/decoder is the oracle).
-   Planned generalization (not a blocker): genuinely-stellar
-   fully-general signed arithmetic = part of the KS stream.
+2. ~~Galaxy diagnose/drive/decoder/protocol~~ DONE through KG6c: galaxy
+   executes the protocol faithfully; the spine forces; the ONE gap to a
+   rendered frame is engine THROUGHPUT on the image-data payload (not a
+   correctness bug). That throughput gap is the KS-rework below.
+3. KS rework (the throughput lever, measured unify=53%):
+   - ✅ Stage 0 `psi_compatible` validator (259befa, forensic-proven).
+   - ✅ Stage 1a `unify_fast` built + proven ≡ `unify` oracle (e3b4030);
+     engine still byte-identical (not wired).
+   - **(NOW TOP) Stage 1b:** wire `unify_fast` into `produce_stars_fast`
+     (docs/09 §C `Unifier::Fast` seam, exactly 2 call sites) + flip
+     `iex_eq_iex_fast`→`iex_fast_result_eq_iex` (psi_compatible) so the
+     tree stays green + a deliberately-wrong-unifier falsifier + KS-PROF
+     galaxy Φ=405 before/after (unify% MUST drop from ≈53%). One-writer,
+     parent, hot path — deserves fresh focused context.
+   - Stage 2 delete dead byte-identity scaffolding (`*counter+=1` parity
+     hack); retarget `iex_tabled_result_eq_iex` onto `psi_compatible`.
+   - Stage 3 `+varsig+size` node metadata; skip domain-disjoint subtrees.
+4. Then re-test the galaxy image-data forcing under the faster engine
+   (the KG6c payoff). Planned generalization (not a blocker):
+   genuinely-stellar fully-general signed arithmetic = the KS stream.
+5. OHG data-parallel substrate (docs/10): Stage-0 prototype STRICTLY
+   AFTER KS Stage 1; = the principled re-homing of B3; resolves the
+   kahn/semaphore-adjacency ceiling question; psi_compatible-gated.
+6. §49.50 Stage 0/1 (docs/08): serialized after the unify seam (shares
+   interactive.rs); the thesis-nearest track, design-complete.
 3. Fold this into `docs/05` §10 (J) — include the KG3d shallow-NF
    finding (decoder faithful; galaxy NF clean-but-shallow, not Opaque).
 4. Then: KA1 cheap-key+cross-run table (D, valence) → rayon (D) → KA2
