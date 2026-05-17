@@ -157,14 +157,58 @@ fn main() {
                         "    decode(readback)    = {}",
                         pretty(&stella_core::galaxy_decode::decode(rb))
                     );
-                    // Deep-force the whole lazy result spine to NF.
-                    let mut budget = 200_000usize;
-                    let full = deep_force(&phi, prog, fuel, maxf, 4000, &mut budget);
+                    // Deep-force the lazy result spine — TIGHTLY bounded
+                    // (depth/node budget + small per-node fuel). Naive
+                    // deep-force re-runs eval_forced per subterm ⇒ explosive;
+                    // a full pixel-level force is a KS-throughput problem, not
+                    // a correctness one. This shows how much structure
+                    // resolves cheaply.
+                    let mut budget = 1500usize;
+                    let full = deep_force(&phi, prog, 60_000, 400, 16, &mut budget);
                     println!(
                         "    decode(deep_force)  = {}  (nodes used {})",
                         pretty(&decode(full)),
-                        200_000 - budget
+                        1500 - budget
                     );
+                    // Drill into data[0]: full = [flag, newState, data].
+                    if let Some((_flag, r1)) = as_cons(full) {
+                        if let Some((_st, r2)) = as_cons(r1) {
+                            if let Some((data, _)) = as_cons(r2) {
+                                if let Some((d0, _)) = as_cons(data) {
+                                    println!("\n  raw data[0] (an image?):");
+                                    let mut s = String::new();
+                                    fn tr(t: TermId, d: usize, md: usize, o: &mut String) {
+                                        let p = "  ".repeat(d);
+                                        if d >= md {
+                                            o.push_str(&format!("{p}…\n"));
+                                            return;
+                                        }
+                                        match term::get(t) {
+                                            TermData::Var(_) => o.push_str(&format!("{p}<var>\n")),
+                                            TermData::App(s, a) => {
+                                                o.push_str(&format!("{p}{}/{}\n", s.name.as_str(), a.len()));
+                                                for c in a.iter() {
+                                                    tr(*c, d + 1, md, o);
+                                                }
+                                            }
+                                        }
+                                    }
+                                    tr(d0, 0, 7, &mut s);
+                                    print!("{s}");
+                                    let fd0 = galaxy::eval_forced(&phi, d0, fuel, maxf);
+                                    println!(
+                                        "  eval_forced(data[0]): fully_reduced={} value_head={:?} readback_decoded={}",
+                                        fd0.fully_reduced,
+                                        match term::get(fd0.value) {
+                                            TermData::Var(_) => "<var>".into(),
+                                            TermData::App(s, a) => format!("{}/{}", s.name.as_str(), a.len()),
+                                        },
+                                        pretty(&decode(readback(fd0.final_ray.unwrap_or(fd0.value))))
+                                    );
+                                }
+                            }
+                        }
+                    }
                 }
                 None => println!("    (no final ray — Ψ shape unexpected)"),
             }
