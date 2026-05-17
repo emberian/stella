@@ -10,6 +10,7 @@ pub mod circuits;
 pub mod combinator;
 pub mod combinator_fuzz;
 pub mod galaxy;
+pub mod galaxy_decode;
 pub mod concrete;
 pub mod nfta;
 pub mod constellation;
