@@ -272,6 +272,49 @@ mod tests {
         );
     }
 
+    /// P5.2c: does v3 composable-chain force a NON-TRIVIAL closure (|P|>1,
+    /// r′>1) where v2 gave only the reflex floor (|P|=1, r=0→r′=1)? Measured
+    /// AND inspected (the count-deflation discipline is now standing law).
+    #[test]
+    fn composable_chain_nontriviality_measured_and_inspected() {
+        use std::collections::BTreeSet;
+        use stella_core::reafference::solve_for_closure;
+        use stella_core::term::mk_app_str;
+        let phi = substrate_agent_capacity();
+        let mut psi0 = vec![vec![pos_ray("sense", vec![mk_app_str("zero", vec![])])]];
+        let v3 = FixedEnvCodec::canonical_composable();
+        psi0.extend(perturb(&FakeWorldText, &v3, "troy").into_psi_stars());
+
+        let ws = solve_for_closure(&phi, psi0.clone(), 80);
+        eprintln!("[P5.2c] v3 composable → {} witnesses", ws.len());
+        let mut shapes: BTreeSet<(usize, usize, usize)> = BTreeSet::new();
+        let mut max_p = 0usize;
+        let mut max_span = 0usize;
+        for (i, w) in ws.iter().enumerate() {
+            let p = w.partition.len();
+            let span = w.r_prime.saturating_sub(w.r);
+            max_p = max_p.max(p);
+            max_span = max_span.max(span);
+            shapes.insert((p, w.r, w.r_prime));
+            if i < 8 {
+                let st = trajectory(&phi, psi0.clone(), &w.partition, 80).status;
+                eprintln!("  w{i}: |P|={p} r={} r'={} span={span} {st:?}", w.r, w.r_prime);
+            }
+        }
+        eprintln!(
+            "[P5.2c finding] max|P|={max_p} max(r'-r)={max_span} distinct-shapes={} \
+             — {}",
+            shapes.len(),
+            if max_p > 1 || max_span > 1 {
+                "NON-TRIVIAL closure formed (past the reflex floor)"
+            } else {
+                "still the reflex floor (|P|=1, span=1) — composition did NOT \
+                 deepen the minimal closure; deeper finding, not tuned away"
+            }
+        );
+        // No assertion on triviality: measurement, not target (P7/P8).
+    }
+
     /// SANITY (verify-don't-assume): the L2a-validated positive fixture
     /// (`loop_phi`: agent `-sense(X)+act(X)`, env `-act(Y)+sense(f(Y))`,
     /// Ψ₀=`[+sense(zero)],[+act(zero)]`) MUST yield ≥1 closure through the

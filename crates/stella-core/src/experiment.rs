@@ -583,6 +583,116 @@ fn corpus_ntm_tm() -> (String, Constellation, Vec<Star>) {
     )
 }
 
+/// Cons term `a · b` (Eng's `·`); constant `k`.
+fn cons(a: Term, b: Term) -> Term {
+    crate::term::mk_app_str("·", vec![a, b])
+}
+fn konst(k: &str) -> Term {
+    crate::term::mk_app_str(k, vec![])
+}
+
+/// **Corpus member 4 — Mode-1 (Eng §75.8 ⋋_L black-hole).**
+///
+/// phi contains Eng's **verbatim** §75.8 black-hole star
+/// `[−w(X), −∞(X); +∞(X)]` (`EngExegesis` p. 6178: "any stars reaching
+/// `[−w(X),−∞(X) +∞(X)]` will never be able to form a saturated diagram")
+/// plus a minimal generic `w`-producer.  **Not rigged to close a reafference
+/// loop** — psi0 is a generic query; whatever `solve_for_closure` finds (a
+/// self-organised closure that ∅-captures, or no closure at all) is honest
+/// evidence.  The black-hole star is Eng's, not ours.
+fn corpus_blackhole_758() -> (String, Constellation, Vec<Star>) {
+    let phi: Constellation = vec![
+        // Eng §75.8 verbatim black-hole.
+        vec![
+            neg_ray("w", vec![var("X")]),
+            neg_ray("∞", vec![var("X")]),
+            pos_ray("∞", vec![var("X")]),
+        ],
+        // Minimal generic w-producer (objective; not a designed agent).
+        vec![pos_ray("w", vec![konst("c")])],
+    ];
+    let psi0: Vec<Star> = vec![vec![neg_ray("w", vec![var("R")]), var("R")]];
+    (
+        "BlackHole §75.8 ⋋_L (Eng verbatim [−w(X),−∞(X);+∞(X)], generic psi0)"
+            .to_string(),
+        phi,
+        psi0,
+    )
+}
+
+/// **Corpus member 5 — Mode-1 (Eng §74.7 author's-solution black-hole).**
+///
+/// Reuses the Eng-validated Ch11 constructor `mll2i::black_hole_star`
+/// (`[+addr(v), +ω(X), −ω(f(X))]`, §74.7) as phi, with a minimal generic
+/// connector and a generic psi0.  Not rigged; the ω-black-hole is Eng's.
+fn corpus_blackhole_747() -> (String, Constellation, Vec<Star>) {
+    let addr = crate::term::mk_app_str("addr", vec![konst("v")]);
+    let phi: Constellation = vec![
+        crate::mll2i::black_hole_star(addr),
+        vec![pos_ray("addr", vec![konst("v")])],
+    ];
+    let psi0: Vec<Star> = vec![vec![neg_ray("addr", vec![var("R")]), var("R")]];
+    (
+        "BlackHole §74.7 ω-weakening (Eng mll2i::black_hole_star, generic psi0)"
+            .to_string(),
+        phi,
+        psi0,
+    )
+}
+
+/// **Corpus member 6 — Mode-2 (Eng §62.7 productive loop + finite base case).**
+///
+/// Eng's **verbatim** §62.7 example (`EngExegesis` p. 5132): the consuming
+/// loop `[−a(0·W), +a(W)]` (non-terminating but *productive*) with its finite
+/// **Ψ-side** ε-linearised base case `[+a(0·0·0·ε)]` (§51.13: Ψ linear,
+/// *consumed*; the constant ε "forbids any possible additional looping").
+/// The loop is productive while the base case is available and **starves**
+/// (productive→unproductive, Mode-2) once it is consumed with no Φ
+/// regeneration.  Eng's own construction; psi0 generic.
+fn corpus_productive_loop_627() -> (String, Constellation, Vec<Star>) {
+    // 0·W
+    let zero_w = cons(konst("0"), var("W"));
+    // 0·0·0·ε
+    let base = cons(
+        konst("0"),
+        cons(konst("0"), cons(konst("0"), konst("ε"))),
+    );
+    let phi: Constellation = vec![
+        // The §62.7 consuming loop.
+        vec![neg_ray("a", vec![zero_w]), pos_ray("a", vec![var("W")])],
+    ];
+    let psi0: Vec<Star> = vec![
+        // Finite Ψ-side base case (linear, consumed) + a generic consumer.
+        vec![pos_ray("a", vec![base])],
+        vec![neg_ray("a", vec![var("R")]), var("R")],
+    ];
+    (
+        "ProductiveLoop §62.7 (Eng verbatim [−a(0·W),+a(W)] + base [+a(0·0·0·ε)])"
+            .to_string(),
+        phi,
+        psi0,
+    )
+}
+
+/// **Corpus member 7 — retained §79/§80 ω-weight (eternal, non-reafference).**
+///
+/// Eng §80 system-free arithmetic behaviour `[[2]]` (`omega_weight::
+/// nat_behaviour`) — an Eng-built, non-reafference, *eternal* valence-like
+/// scalar.  No reafferent closure should self-organise (objective arithmetic)
+/// ⇒ honestly `NoClosure`/flat via the death path; it is here to exercise the
+/// §3.1 "eternal valence = ρ perturbation-gradient" path under L2c-redux, not
+/// the death path.  Retained per docs/01 §4.
+fn corpus_omega_eternal() -> (String, Constellation, Vec<Star>) {
+    let phi: Constellation = crate::omega_weight::nat_behaviour(2);
+    let psi0: Vec<Star> = vec![vec![neg_ray("nat", vec![var("R")]), var("R")]];
+    (
+        "Omega §79/§80 eternal [[2]] (Eng omega_weight::nat_behaviour, generic psi0)"
+            .to_string(),
+        phi,
+        psi0,
+    )
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // run_make_or_break — the parent entry point
 // ─────────────────────────────────────────────────────────────────────────────
@@ -617,6 +727,12 @@ pub fn run_make_or_break(max_rounds: usize) -> EvidenceReport {
         corpus_add_horn(),
         corpus_nfa_automata(),
         corpus_ntm_tm(),
+        // docs/01 §4 (locked): Mode-1 §74.7/§75.8 + Mode-2 §62.7 + retained
+        // §79/§80 ω-weight. All Eng-verbatim; none rigged to close a loop.
+        corpus_blackhole_758(),
+        corpus_blackhole_747(),
+        corpus_productive_loop_627(),
+        corpus_omega_eternal(),
     ];
 
     // Run each member through the evidence pipeline.

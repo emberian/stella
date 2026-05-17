@@ -38,8 +38,8 @@ export interface InitOutput {
     readonly get_preset_dot: (a: number) => [number, number];
     readonly get_preset_steps: (a: number) => [number, number];
     readonly list_presets: () => [number, number];
-    readonly _start: () => void;
     readonly preset_count: () => number;
+    readonly _start: () => void;
     readonly __wbindgen_free: (a: number, b: number, c: number) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
