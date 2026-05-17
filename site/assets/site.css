@@ -450,6 +450,33 @@ a:hover { color: var(--accent-hover); }
   animation: stxPulse 1.4s var(--ease) infinite;
 }
 .stx-ray.is-hover { outline: 2px dashed var(--bark); outline-offset: 1px; }
+.stx-ray.is-result {
+  background: var(--accent-soft);
+  color: color-mix(in oklab, var(--moss) 80%, var(--ink));
+  outline: 2px solid var(--moss); outline-offset: 1px; font-weight: 600;
+}
+.stx-chip--pick { cursor: pointer; }
+.stx-chip--pick:hover {
+  border-color: var(--moss); background: var(--accent-soft);
+  color: var(--canopy);
+}
+.stx-crumb {
+  font-family: var(--font-body); font-size: 12px; color: var(--fg-3);
+  margin-bottom: 10px; display: flex; align-items: center; gap: 6px;
+  flex-wrap: wrap;
+}
+.stx-crumb__c {
+  font-family: var(--font-mono); font-size: 11px; color: var(--bark);
+}
+.stx-crumb__reset {
+  font-family: var(--font-body); font-size: 11px; color: var(--moss);
+  background: none; border: 1px solid var(--border); border-radius: 999px;
+  padding: 3px 9px; cursor: pointer; margin-left: 4px;
+}
+.stx-crumb__reset:hover { background: var(--accent-soft); }
+.stx-branched {
+  font-style: normal; color: var(--lantern); font-weight: 600;
+}
 @keyframes stxPulse {
   0%,100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--lantern) 55%, transparent); }
   60% { box-shadow: 0 0 0 7px transparent; }
@@ -611,6 +638,7 @@ figure.stx-figure figcaption .num {
   .st-badge, .fj-source strong,
   .fj-toc__item.is-active, .stx-viewbtn.is-active,
   .st-tab.is-active, .st-menu__item.is-active,
+  .stx-chip--pick:hover,
   .stx-bind .t { color: var(--fern); }
   .stx-bind .v { color: var(--mushroom); }
   /* Genuinely-dark surfaces whose text was the (now dark) parchment. */

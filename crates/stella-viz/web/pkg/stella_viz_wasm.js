@@ -75,6 +75,34 @@ export function preset_count() {
 }
 
 /**
+ * Like `run_source`, but drives an explicitly chosen resolution path.
+ * `path` is `"i,j;i,j;…"` (star,ray per step); steps not named follow the
+ * IEx default. Lets the explorer offer "pick which redex fires".
+ * @param {string} phi_src
+ * @param {string} psi_src
+ * @param {string} path
+ * @returns {string}
+ */
+export function run_path(phi_src, psi_src, path) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(phi_src, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(psi_src, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(path, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ret = wasm.run_path(ptr0, len0, ptr1, len1, ptr2, len2);
+        deferred4_0 = ret[0];
+        deferred4_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
  * Parse and run a user-supplied constellation. `phi_src` is the reference
  * constellation Φ; `psi_src` is the initial interaction space Ψ. Returns
  * `{"ok":true,"steps":[…]}` or `{"ok":false,"error":"…","pos":N}`.

@@ -19,7 +19,7 @@
 use wasm_bindgen::prelude::*;
 
 use crate::presets::{all_presets, all_step_data};
-use crate::stepper::{capture_steps, StepSnapshot};
+use crate::stepper::{capture_path, capture_steps, StepSnapshot};
 use stella_core::parse::parse_constellation;
 
 // Install a human-readable panic hook so browser console shows Rust panics.
@@ -172,6 +172,41 @@ pub fn run_source(phi_src: &str, psi_src: &str) -> String {
         }
     };
     let steps = capture_steps(&phi, psi, 300);
+    format!("{{\"ok\":true,\"steps\":{}}}", steps_json(&steps))
+}
+
+/// Like `run_source`, but drives an explicitly chosen resolution path.
+/// `path` is `"i,j;i,j;…"` (star,ray per step); steps not named follow the
+/// IEx default. Lets the explorer offer "pick which redex fires".
+#[wasm_bindgen]
+pub fn run_path(phi_src: &str, psi_src: &str, path: &str) -> String {
+    let phi = match parse_constellation(phi_src) {
+        Ok(p) => p,
+        Err(e) => {
+            return format!(
+                "{{\"ok\":false,\"where\":\"Φ\",\"error\":{},\"pos\":{}}}",
+                json_str(&e.msg), e.pos
+            )
+        }
+    };
+    let psi = match parse_constellation(psi_src) {
+        Ok(p) => p,
+        Err(e) => {
+            return format!(
+                "{{\"ok\":false,\"where\":\"Ψ\",\"error\":{},\"pos\":{}}}",
+                json_str(&e.msg), e.pos
+            )
+        }
+    };
+    let chosen: Vec<(usize, usize)> = path
+        .split(';')
+        .filter(|s| !s.is_empty())
+        .filter_map(|p| {
+            let mut it = p.split(',');
+            Some((it.next()?.trim().parse().ok()?, it.next()?.trim().parse().ok()?))
+        })
+        .collect();
+    let steps = capture_path(&phi, psi, &chosen, 300);
     format!("{{\"ok\":true,\"steps\":{}}}", steps_json(&steps))
 }
 

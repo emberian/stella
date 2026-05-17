@@ -111,7 +111,7 @@ def nav(active: str, prefix: str) -> str:
         + link("index.html", "The model", "home")
         + link("r/eng-ch8.html", "The exegesis", "exegesis")
         + link("explore.html", "Explore", "explore")
-        + link("cmi/index.html", "Implementation", "cmi")
+        + link("r/primer.html", "A first reading", "primer")
         + "</div></nav>"
     )
 
@@ -181,7 +181,7 @@ PAGE = """<!doctype html>
 <meta property="og:site_name" content="Stellar resolution" />
 <meta property="og:title" content="{title}" />
 <meta property="og:description" content="{desc}" />
-<meta name="twitter:card" content="summary" />
+<meta name="twitter:card" content="summary" />{robots}
 <link rel="icon" href="{prefix}assets/stella/logo/stella-mark.svg" />
 <link rel="stylesheet" href="{prefix}assets/stella/colors_and_type.css" />
 <link rel="stylesheet" href="{prefix}assets/stella/stella.css" />
@@ -243,8 +243,11 @@ def render_doc(d: dict, collection: list[dict], coll_name: str) -> str:
                       "mushroom", "cmi/index.html", "Implementation", "../")
         section = "Implementation project"
 
+    robots = ('\n<meta name="robots" content="noindex,nofollow" />'
+              if coll_name == "cmi" else "")
     return PAGE.format(
         prefix="../",
+        robots=robots,
         title=html.escape(d["title"]),
         desc=html.escape(d["lede"]),
         nav=the_nav,
@@ -438,6 +441,7 @@ def build_primer(presets: list[dict]) -> bool:
 
     out = PAGE.format(
         prefix="../",
+        robots="",
         title="Stellar resolution — a first reading",
         desc="Stellar resolution from first principles, with a worked example "
              "run all the way to normal form — prebaked, static, no scripting.",
@@ -528,6 +532,7 @@ property that makes stellar resolution interesting as a substrate.</p>
 def build_notation() -> None:
     out = PAGE.format(
         prefix="../",
+        robots="",
         title="Notation & glossary",
         desc="A key to the symbols of stellar resolution and transcendental "
              "syntax, and a short glossary.",
@@ -551,7 +556,7 @@ def build_notation() -> None:
 
 def write_sitemap(slugs: list[str]) -> None:
     base = "https://emberian.github.io/stella/"
-    urls = [base, base + "explore.html", base + "cmi/index.html"]
+    urls = [base, base + "explore.html"]
     urls += [f"{base}r/{s}.html" for s in slugs]
     body = "".join(f"<url><loc>{u}</loc></url>" for u in urls)
     (SITE / "sitemap.xml").write_text(
@@ -561,7 +566,8 @@ def write_sitemap(slugs: list[str]) -> None:
         encoding="utf-8",
     )
     (SITE / "robots.txt").write_text(
-        f"User-agent: *\nAllow: /\nSitemap: {base}sitemap.xml\n",
+        "User-agent: *\nAllow: /\nDisallow: /cmi/\n"
+        f"Sitemap: {base}sitemap.xml\n",
         encoding="utf-8",
     )
 
@@ -603,14 +609,19 @@ def main() -> None:
     if presets and build_primer(presets):
         n += 1
 
-    slugs = (
+    # Public (advertised) slugs vs. all built slugs. CMI is built and
+    # deployed (shareable by direct link) but kept out of the sitemap and
+    # unlinked from the public site — discoverable only if you have the URL.
+    public = (
         ["notation"]
         + (["primer"] if (OUT / "primer.html").exists() else [])
-        + [d["slug"] for _, c in (("s", STELLAR), ("c", CMI)) for d in c
-           if (OUT / f"{d['slug']}.html").exists()]
+        + [d["slug"] for d in STELLAR if (OUT / f"{d['slug']}.html").exists()]
     )
-    write_sitemap(slugs)
-    check_links(set(slugs))
+    all_slugs = public + [
+        d["slug"] for d in CMI if (OUT / f"{d['slug']}.html").exists()
+    ]
+    write_sitemap(public)
+    check_links(set(all_slugs))
     print(f"{n} reading pages prebaked → site/r/")
 
 

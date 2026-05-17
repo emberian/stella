@@ -26,7 +26,7 @@ use rustc_hash::FxHashMap;
 use stella_core::constellation::Constellation;
 use stella_core::constellation::Star;
 use stella_core::dep_graph::DepGraph;
-use stella_core::interactive::{iex, mat_phi};
+use stella_core::interactive::{iex, mat_phi, step_at};
 use stella_core::polarised::{matchable, ray_polarity, underlying_term, Polarity};
 use stella_core::subst::{fresh_var, Renaming};
 use stella_core::term::Var;
@@ -147,6 +147,96 @@ pub fn capture_steps(
     snapshots
 }
 
+fn psi_render(psi: &[Star]) -> Vec<String> {
+    psi.iter()
+        .map(|star| {
+            let rays: Vec<String> = star.iter().map(|r| format!("{r}")).collect();
+            format!("[{}]", rays.join(", "))
+        })
+        .collect()
+}
+
+fn psi_dot(psi: &[Star]) -> String {
+    if psi.is_empty() {
+        "graph dep_graph {\n  // empty interaction space\n}\n".to_string()
+    } else {
+        let pv: Constellation = psi.to_vec();
+        let dg = DepGraph::from_constellation(&pv);
+        dep_graph_dot(&dg, &pv)
+    }
+}
+
+/// Drive resolution along an **explicitly chosen path**. At step `k` the redex
+/// is `path[k]` if that `(star, ray)` is a redex there; otherwise the IEx
+/// default (first, left-to-right) is taken. This is what powers "pick which
+/// redex fires" in the explorer — the same engine, a chosen trajectory.
+///
+/// Confluence (for these examples) means a different path still reaches the
+/// same normal form; that is itself the lesson.
+pub fn capture_path(
+    phi: &Constellation,
+    psi_init: Vec<Star>,
+    path: &[(usize, usize)],
+    max_fuel: usize,
+) -> Vec<StepSnapshot> {
+    let mut snapshots: Vec<StepSnapshot> = Vec::new();
+    let mut psi = psi_init;
+    let mut counter = 0u32;
+
+    for k in 0..=max_fuel {
+        let mut fireable = enumerate_fireable(phi, &psi);
+        if fireable.is_empty() || k == max_fuel {
+            snapshots.push(StepSnapshot {
+                step: k,
+                psi_stars: psi_render(&psi),
+                active_ray: String::new(),
+                dot: psi_dot(&psi),
+                is_final: true,
+                fireable: Vec::new(),
+                mgu: Vec::new(),
+            });
+            break;
+        }
+
+        // Pick the chosen redex if the path names a valid one here.
+        let mut idx = 0usize;
+        if let Some(&(si, ri)) = path.get(k) {
+            if let Some(p) = fireable.iter().position(|f| f.star == si && f.ray == ri) {
+                idx = p;
+            }
+        }
+        for (n, f) in fireable.iter_mut().enumerate() {
+            f.is_next = n == idx;
+        }
+        let chosen = fireable[idx].clone();
+        let mgu = mgu_of(phi, &psi, &chosen);
+        let active_ray = format!(
+            "star[{}] ray[{}] {} — {}",
+            chosen.star,
+            chosen.ray,
+            chosen.ray_str,
+            if chosen.kind == "self" { "self-interaction".into() }
+            else { format!("matches: {}", chosen.targets.join(", ")) }
+        );
+
+        snapshots.push(StepSnapshot {
+            step: k,
+            psi_stars: psi_render(&psi),
+            active_ray,
+            dot: psi_dot(&psi),
+            is_final: false,
+            fireable,
+            mgu,
+        });
+
+        match step_at(phi, psi, chosen.star, chosen.ray, &mut counter) {
+            Some(next) => psi = next,
+            None => break,
+        }
+    }
+    snapshots
+}
+
 /// Rename every variable in a star to a fresh name (consistently across its
 /// rays), so it is variable-disjoint from Ψ — mirrors what fusion does before
 /// unifying, so the MGU we display is the one IEx actually computes.
@@ -164,11 +254,48 @@ fn freshen_star_consistent(star: &Star, prefix: &str, counter: &mut u32) -> Star
     star.iter().map(|&r| ren.apply(r)).collect()
 }
 
+/// Engine-internal fresh variable? (`Φ_3` from the MGU display freshening,
+/// `ext1_4` from fusion's α-renaming of Φ). These are scaffolding, not the
+/// reader's variables, so they are hidden / scrubbed in the readout.
+fn is_internal_var(name: &str) -> bool {
+    name.starts_with("Φ_") || name.starts_with("ext")
+}
+
+/// Replace engine-internal fresh names inside a rendered term with `·`, so the
+/// reader sees `s(·)` rather than `s(Φ_2)`.
+fn scrub_term(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut tok = String::new();
+    let flush = |tok: &mut String, out: &mut String| {
+        if !tok.is_empty() {
+            if is_internal_var(tok) {
+                out.push('·');
+            } else {
+                out.push_str(tok);
+            }
+            tok.clear();
+        }
+    };
+    for ch in s.chars() {
+        if ch.is_alphanumeric() || ch == '_' || ch == 'Φ' {
+            tok.push(ch);
+        } else {
+            flush(&mut tok, &mut out);
+            out.push(ch);
+        }
+    }
+    flush(&mut tok, &mut out);
+    out
+}
+
+/// Render an MGU for the reader: drop bindings *of* internal fresh variables
+/// (they are scaffolding), scrub internal names *in* the remaining values.
 fn render_mgu(sigma: &stella_core::subst::Substitution) -> Vec<(String, String)> {
     let mut out: Vec<(String, String)> = sigma
         .0
         .iter()
-        .map(|(v, &t)| (v.as_str().to_string(), format!("{t}")))
+        .filter(|(v, _)| !is_internal_var(v.as_str()))
+        .map(|(v, &t)| (v.as_str().to_string(), scrub_term(&format!("{t}"))))
         .collect();
     out.sort();
     out
@@ -368,6 +495,24 @@ mod tests {
             result_str.contains("s(s(0))") || result_str.contains("s(0)") || result_str.contains("0"),
             "final Ψ should contain some nat term; got: {result_str}"
         );
+    }
+
+    /// capture_path with the default (empty) path reaches the same answer as
+    /// the fuel-replay capture — explicit stepping agrees with IEx.
+    #[test]
+    fn capture_path_default_matches_capture_steps() {
+        let phi = add_prog();
+        let psi = vec![vec![
+            neg_ray("add", vec![nat(2), nat(2), var("R")]),
+            var("R"),
+        ]];
+        let a = capture_steps(&phi, psi.clone(), 200);
+        let b = capture_path(&phi, psi, &[], 200);
+        let fa = a.last().unwrap().psi_stars.join(" ");
+        let fb = b.last().unwrap().psi_stars.join(" ");
+        assert!(fa.contains("s(s(s(s(0))))"), "fuel-replay 2+2 → 4; got {fa}");
+        assert!(fb.contains("s(s(s(s(0))))"), "explicit 2+2 → 4; got {fb}");
+        assert!(b.last().unwrap().is_final);
     }
 
     /// Smoke: NFA accepts "00" — last step should have accept in Ψ.

@@ -184,7 +184,8 @@ export async function mountExplorer(root, opts = {}) {
     .join("");
 
   let steps = [], idx = 0, presetIdx = -1, view = "constellation",
-    playTimer = null, sourceMode = false, lastPhi = "", lastPsi = "";
+    playTimer = null, sourceMode = false, lastPhi = "", lastPsi = "",
+    choicePath = []; // chosen (star,ray) per step; [] = pure IEx order
 
   // ── view switching ─────────────────────────────────────────────────────────
   root.querySelectorAll(".stx-viewbtn").forEach((b) =>
@@ -210,6 +211,7 @@ export async function mountExplorer(root, opts = {}) {
     const fired = (steps[idx - 1] && steps[idx - 1].fireable || []).find((f) => f.is_next);
     const nextRedex = (snap.fireable || []).find((f) => f.is_next);
 
+    const isFinal = !!snap.is_final;
     const starsHtml = (snap.psi_stars.length
       ? snap.psi_stars
       : ["∅"]).map((starStr, si) => {
@@ -220,7 +222,9 @@ export async function mountExplorer(root, opts = {}) {
         const involved = nextRedex && nextRedex.star === si;
         const inner = rays.map((r, ri) => {
           const isHot = involved && nextRedex.ray === ri;
-          return `<span class="stx-ray stx-ray--${rayPolarity(r)}${isHot ? " is-next" : ""}"
+          // At normal form the surviving unpolarised rays *are* the answer.
+          const isResult = isFinal && rayPolarity(r) === "neu";
+          return `<span class="stx-ray stx-ray--${rayPolarity(r)}${isHot ? " is-next" : ""}${isResult ? " is-result" : ""}"
                     data-star="${si}" data-ray="${ri}">${esc(r)}</span>`;
         }).join('<span class="stx-comma">,</span>');
         return `<div class="stx-star${involved ? " is-active" : ""}"
@@ -229,30 +233,47 @@ export async function mountExplorer(root, opts = {}) {
 
     elCanvas.innerHTML = `<div class="stx-constellation${animateFrom != null ? " stx-anim" : ""}">${starsHtml}</div>`;
 
-    // MGU readout — the unifier IEx will compute for the next firing.
+    // MGU readout + a plain-English account of what fires next.
     if (snap.mgu && snap.mgu.length && nextRedex) {
       const binds = snap.mgu
         .map(([v, t]) => `<span class="stx-bind"><span class="v">${esc(v)}</span>
             <span class="arr">↦</span><span class="t">${esc(t)}</span></span>`)
         .join("");
+      const how = nextRedex.kind === "self"
+        ? `self-interacts (two rays of the same star unify)`
+        : `unifies with <code>${esc(nextRedex.targets[0] || "Φ")}</code> in the reference Φ`;
+      const tail = snap.mgu.length
+        ? ` — the two stars fuse, the matched pair is consumed, and this unifier is applied to what remains.`
+        : ` — the stars fuse and the matched pair is consumed.`;
       elMgu.innerHTML =
-        `<div class="stx-mgu__lab">Next: <code>${esc(nextRedex.ray_str)}</code> ` +
-        `${nextRedex.kind === "self" ? "self-interacts" : "resolves against " + esc(nextRedex.targets[0] || "Φ")} ` +
-        `· most general unifier</div><div class="stx-binds">${binds}</div>`;
-    } else if (snap.is_final) {
-      elMgu.innerHTML = `<div class="stx-mgu__lab stx-nf">Normal form — no interaction remains. This is the result.</div>`;
+        `<div class="stx-mgu__lab">The ray <code>${esc(nextRedex.ray_str)}</code> ${how}${tail}</div>` +
+        `<div class="stx-binds">${binds}</div>`;
+    } else if (isFinal) {
+      elMgu.innerHTML =
+        `<div class="stx-mgu__lab stx-nf">Normal form — no pair is matchable. ` +
+        `The highlighted unpolarised rays are the result.</div>`;
     } else {
       elMgu.innerHTML = "";
     }
 
-    // All redexes — concurrency made visible.
+    // All redexes — concurrency made visible; clickable to branch in the editor.
     const fr = snap.fireable || [];
+    const crumb = (sourceMode && choicePath.length)
+      ? `<div class="stx-crumb">Path: ` +
+        choicePath.map((c, i) =>
+          `<span class="stx-crumb__c">${i}:[${c[0]},${c[1]}]</span>`).join("→") +
+        ` <button class="stx-crumb__reset" data-role="resetpath">↺ IEx order</button></div>`
+      : "";
     if (fr.length) {
-      elRedex.innerHTML =
-        `<div class="stx-redex__lab">${fr.length} redex${fr.length > 1 ? "es" : ""} available · ` +
-        `IEx fires the first (left-to-right). Hover to locate.</div>` +
+      const can = sourceMode;
+      elRedex.innerHTML = crumb +
+        `<div class="stx-redex__lab">${fr.length} redex${fr.length > 1 ? "es" : ""} available — ` +
+        (can
+          ? `click one to resolve <em>it</em> next and follow that path.`
+          : `IEx fires the first (left-to-right). Hover to locate; open the Editor to choose.`) +
+        `</div>` +
         fr.map((f, k) =>
-          `<button class="stx-chip${f.is_next ? " is-next" : ""}" data-fk="${k}">
+          `<button class="stx-chip${f.is_next ? " is-next" : ""}${can ? " stx-chip--pick" : ""}" data-fk="${k}">
              <code>${esc(f.ray_str)}</code>
              <span class="stx-chip__t">${f.kind === "self" ? "self" : esc(f.targets.join(", "))}</span>
            </button>`).join("");
@@ -265,10 +286,25 @@ export async function mountExplorer(root, opts = {}) {
         };
         c.addEventListener("mouseenter", () => hl(true));
         c.addEventListener("mouseleave", () => hl(false));
+        if (can) c.addEventListener("click", () => chooseRedex(f));
       });
     } else {
-      elRedex.innerHTML = "";
+      elRedex.innerHTML = crumb;
     }
+    // The path breadcrumb (and its reset) can appear in either branch —
+    // including at the final step, where there are no redexes.
+    const rp = elRedex.querySelector('[data-role="resetpath"]');
+    if (rp) rp.addEventListener("click", () => {
+      stop(); choicePath = []; runPath(lastPhi, lastPsi, 0);
+    });
+  }
+
+  // Branch: resolve the clicked redex at the current step, then continue.
+  function chooseRedex(f) {
+    stop();
+    choicePath = choicePath.slice(0, idx);
+    choicePath[idx] = [f.star, f.ray];
+    runPath(lastPhi, lastPsi, idx + 1);
   }
 
   async function drawGraph() {
@@ -357,12 +393,19 @@ export async function mountExplorer(root, opts = {}) {
     updatePermalink();
   }
 
-  function runSource(phi, psi) {
+  // Run the source along the current choicePath ([] = pure IEx), then view
+  // step `gotoIdx`. The engine's capture_path takes the chosen redex where
+  // the path names one and the IEx default elsewhere.
+  function runPath(phi, psi, gotoIdx) {
     stop();
     const elErr = $("error");
     if (elErr) elErr.textContent = "";
+    const pathStr = choicePath
+      .filter(Boolean)
+      .map((c) => `${c[0]},${c[1]}`)
+      .join(";");
     let res;
-    try { res = JSON.parse(mod.run_source(phi, psi)); }
+    try { res = JSON.parse(mod.run_path(phi, psi, pathStr)); }
     catch (e) { if (elErr) elErr.textContent = "engine error: " + e.message; return; }
     if (!res.ok) {
       if (elErr) elErr.textContent = `${res.where} parse error (pos ${res.pos}): ${res.error}`;
@@ -371,9 +414,17 @@ export async function mountExplorer(root, opts = {}) {
     sourceMode = true;
     lastPhi = phi; lastPsi = psi;
     steps = res.steps;
-    elDesc.innerHTML = `<span class="lab">source</span>Φ = <code>${esc(phi)}</code> · Ψ = <code>${esc(psi)}</code>`;
-    go(0);
+    const branched = choicePath.filter(Boolean).length
+      ? ` · <span class="stx-branched">chosen path</span>` : "";
+    elDesc.innerHTML =
+      `<span class="lab">source</span>Φ = <code>${esc(phi)}</code> · Ψ = <code>${esc(psi)}</code>${branched}`;
+    go(Math.min(gotoIdx | 0, steps.length - 1));
     updatePermalink();
+  }
+
+  function runSource(phi, psi) {
+    choicePath = [];
+    runPath(phi, psi, 0);
   }
 
   if (!compact) {
