@@ -1002,6 +1002,8 @@ figure.stx-figure figcaption .num {
   font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em;
   text-transform: uppercase; color: var(--fg-3);
 }
+.sf-preview svg { max-width: 100%; height: auto; display: block; }
+.sf-prev-graph { margin-top: 4px; }
 .sf-host { display: flex; flex-direction: column; gap: 14px; }
 .sf-head__t { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .sf-head__title { font-family: var(--font-display); font-size: 19px; color: var(--ink); }
@@ -1085,6 +1087,15 @@ figure.stx-figure figcaption .num {
 .sf-cstr__v { font-family: var(--font-mono); font-size: 13px; width: 14px; text-align: center; color: var(--fg-3); }
 .sf-cstr__v.is-ok { color: var(--moss); }
 .sf-cstr__v.is-no { color: var(--mushroom); }
+.sf-tree { display: flex; flex-direction: column; }
+.sf-tnode { display: flex; flex-direction: column; gap: 6px; }
+.sf-tnode--nested {
+  padding-left: 12px; border-left: 2px solid color-mix(in oklab, var(--bark) 45%, transparent);
+}
+.sf-tnode__bar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.sf-tkids { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 4px 6px; }
+.sf-tkid { display: flex; gap: 4px; align-items: flex-start; }
+.sf-tkid > .sf-tnode { flex: 1; min-width: 0; }
 .sf-num4 { display: flex; gap: 8px; flex-wrap: wrap; }
 .sf-num4__c { display: flex; align-items: center; gap: 4px; }
 .sf-num4__l { font-family: var(--font-mono); font-size: 10px; color: var(--fg-3); }

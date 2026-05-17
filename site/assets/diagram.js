@@ -341,3 +341,67 @@ export function legend() {
   }
   return w;
 }
+
+// ── Automaton state-graph (Graphviz DOT) ──────────────────────────────────
+// Faithful to the engine spec shapes (build.rs). Returns a DOT string for
+// nfa / npda / ntm / atm / nfst — rendered by the vendored viz.js, recoloured
+// by styleSvg into the Stella palette. Initial states get an entry arrow;
+// final / accept states are double-circled; ATM marks E/U state classes.
+const dq = (s) => `"${String(s ?? "").replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+const eps = (s) => (s == null || s === "" ? "ε" : String(s));
+
+export function automatonDot(kind, v) {
+  v = v || {};
+  const head =
+    "digraph{rankdir=LR;bgcolor=transparent;" +
+    'node[shape=circle,fontname="JetBrains Mono",fontsize=11];' +
+    'edge[fontname="JetBrains Mono",fontsize=10];';
+  const lines = [];
+  const states = new Set(v.states || []);
+  const finals = new Set(v.finals || []);
+  const initials = v.initial || (v.q0 != null ? [v.q0] : []);
+  const accept = v.q_accept, reject = v.q_reject;
+  const cls = v.class || {};
+  const edges = [];
+
+  if (kind === "nfa") {
+    for (const [a, s, b] of v.transitions || []) edges.push([a, b, eps(s)]);
+  } else if (kind === "nfst") {
+    for (const [a, i, b, o] of v.transitions || []) edges.push([a, b, `${eps(i)} / ${eps(o)}`]);
+  } else if (kind === "npda") {
+    for (const [a, r, pop, b, push] of v.transitions || [])
+      edges.push([a, b, `${eps(r)}, ${eps(pop)} → ${eps(push)}`]);
+  } else if (kind === "ntm" || kind === "atm") {
+    for (const [a, r, b, w, d] of v.delta || []) edges.push([a, b, `${r} → ${w}, ${d}`]);
+    if (accept != null) finals.add(accept);
+  }
+  for (const [a, b] of edges.map((e) => [e[0], e[1]])) { states.add(a); states.add(b); }
+
+  // node declarations
+  for (const st of states) {
+    const attrs = [];
+    if (finals.has(st) || st === accept) attrs.push("shape=doublecircle");
+    if (kind === "atm" && cls[st]) attrs.push(cls[st] === "U" ? "shape=box" : "shape=diamond");
+    if (st === reject) attrs.push('style=dashed');
+    let lbl = st;
+    if (kind === "atm" && cls[st]) lbl = `${st}\\n[${cls[st]}]`;
+    lines.push(`${dq(st)}[label=${dq(lbl)}${attrs.length ? "," + attrs.join(",") : ""}];`);
+  }
+  // initial entry arrows
+  initials.forEach((q, i) => {
+    if (q == null || q === "") return;
+    lines.push(`__i${i}[shape=point,width=0.06];__i${i}->${dq(q)};`);
+  });
+  // edges (merge identical pairs' labels)
+  const seen = new Map();
+  for (const [a, b, l] of edges) {
+    const k = a + " " + b;
+    seen.set(k, seen.has(k) ? seen.get(k) + "\\n" + l : l);
+  }
+  for (const [k, l] of seen) {
+    const [a, b] = k.split(" ");
+    lines.push(`${dq(a)}->${dq(b)}[label=${dq(l)}];`);
+  }
+  if (!states.size) lines.push('empty[shape=plaintext,label="no states yet"];');
+  return head + lines.join("") + "}";
+}

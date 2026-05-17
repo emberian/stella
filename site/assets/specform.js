@@ -102,8 +102,8 @@ export const SCHEMA = {
       }),
       F("leaf_states", "slist"),
       F("terminal_pairs", "tuples", { cols: [{ l: "state" }, { l: "symbol" }] }),
-      F("tree", "json", {
-        help: 'Recursive tree. Leaf: {"leaf":"1"}. Node: {"node":["or",[ <tree>, … ]]}.',
+      F("tree", "tree", {
+        help: 'The tree to accept. Each point is a leaf (a terminal symbol) or a node (a symbol with child subtrees).',
       }),
     ],
   },
@@ -225,6 +225,7 @@ export class SpecForm {
         : f.t === "num" || f.t === "num4" ? (f.t === "num4" ? [1, 1, 1, 1] : 0)
         : f.t === "map" ? {}
         : f.t === "json" ? {}
+        : f.t === "tree" ? { leaf: "" }
         : f.t === "enum" ? (f.opts || ["mll"])[0]
         : "";
     }
@@ -269,7 +270,7 @@ export class SpecForm {
         const o = {};
         for (const [kk, vv] of (v || [])) if (kk !== "") o[kk] = vv;
         out[f.k] = o;
-      } else if (f.t === "json") out[f.k] = v;
+      } else if (f.t === "json" || f.t === "tree") out[f.k] = v;
       else out[f.k] = v ?? "";
     }
     return out;
@@ -390,6 +391,8 @@ export class SpecForm {
       ctl.appendChild(this._map(f));
     } else if (f.t === "num4") {
       ctl.appendChild(this._num4(f.k));
+    } else if (f.t === "tree") {
+      ctl.appendChild(this._tree(f.k));
     } else if (f.t === "json") {
       const ta = el("textarea", "stx-ta sf-json");
       ta.spellcheck = false;
@@ -650,6 +653,64 @@ export class SpecForm {
     };
     draw();
     return wrap;
+  }
+
+  // recursive TreeSpec editor: {leaf:"x"} | {node:[sym,[ <tree>… ]]}
+  _tree(k) {
+    const wrap = el("div", "sf-tree");
+    const draw = () => {
+      wrap.textContent = "";
+      wrap.appendChild(this._treeNode(this.model[k] || { leaf: "" },
+        (n) => { this.model[k] = n; draw(); this._emit(); }, 0));
+    };
+    draw();
+    return wrap;
+  }
+
+  _treeNode(obj, setObj, depth) {
+    const isLeaf = obj && "leaf" in obj && !("node" in obj);
+    const card = el("div", "sf-tnode");
+    if (depth) card.classList.add("sf-tnode--nested");
+    const bar = el("div", "sf-tnode__bar");
+    const sel = el("select", "sf-sel sf-sel--sm");
+    for (const o of ["leaf", "node"]) { const op = el("option", null, o); op.value = o; sel.appendChild(op); }
+    sel.value = isLeaf ? "leaf" : "node";
+    sel.addEventListener("change", () =>
+      setObj(sel.value === "leaf" ? { leaf: "" } : { node: ["", [{ leaf: "" }]] }));
+    bar.appendChild(sel);
+    if (isLeaf) {
+      const i = el("input", "sf-in sf-in--sm");
+      i.placeholder = "terminal"; i.value = obj.leaf ?? "";
+      i.addEventListener("input", () => { obj.leaf = i.value; this._emit(); });
+      bar.appendChild(i);
+      card.appendChild(bar);
+      return card;
+    }
+    if (!obj.node) obj.node = ["", []];
+    const sym = el("input", "sf-in sf-in--sm");
+    sym.placeholder = "symbol"; sym.value = obj.node[0] ?? "";
+    sym.addEventListener("input", () => { obj.node[0] = sym.value; this._emit(); });
+    bar.appendChild(sym);
+    const kids = el("div", "sf-tkids");
+    const rebuild = () => {
+      kids.textContent = "";
+      obj.node[1].forEach((child, ci) => {
+        const row = el("div", "sf-tkid");
+        row.appendChild(this._treeNode(child,
+          (n) => { obj.node[1][ci] = n; rebuild(); this._emit(); }, depth + 1));
+        const x = el("button", "sf-chip__x", "✕"); x.type = "button";
+        x.addEventListener("click", () => { obj.node[1].splice(ci, 1); rebuild(); this._emit(); });
+        row.appendChild(x);
+        kids.appendChild(row);
+      });
+    };
+    const add = el("button", "sf-add", "+ child"); add.type = "button";
+    add.addEventListener("click", () => { obj.node[1].push({ leaf: "" }); rebuild(); this._emit(); });
+    bar.appendChild(add);
+    card.appendChild(bar);
+    rebuild();
+    card.appendChild(kids);
+    return card;
   }
 
   _num4arr(arr) {
