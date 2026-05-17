@@ -42,6 +42,7 @@ pub mod tiles;
 pub mod tm;
 pub mod transducer;
 pub mod unify;
+pub mod unify_fast;
 pub mod viz;
 pub mod omega_weight;
 
