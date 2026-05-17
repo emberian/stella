@@ -943,7 +943,49 @@ fn is_normal_form_accel(accel: &IexAccel, phi: &Constellation, psi: &[Star]) -> 
 ///   skipped prefix is non-matchable). Any colour change ⇒ `start = 0`
 ///   (full-rescan fallback). The reference [`iex`] is the differential oracle.
 pub fn iex_fast(phi: &Constellation, psi_init: Vec<Star>, fuel: usize) -> IExResult {
-    iex_fast_inner(phi, psi_init, fuel, false)
+    iex_fast_inner(&IexAccel::build(phi), phi, psi_init, fuel, false)
+}
+
+/// Build the KS acceleration structure for a fixed Φ once, to be reused
+/// across many [`iex_fast_with_accel`] / [`iex_tabled_with_accel`] runs.
+///
+/// `IexAccel` is a **pure function of Φ**: its head-index (`RayIndex`) and
+/// colour-symbol set (`phi_csyms`) are derived solely from Φ's rays and carry
+/// no Ψ- or run-state. For a fixed Φ, reusing one `accel` across any number
+/// of runs / any Ψ is provably byte-identical to rebuilding it per call
+/// (`iex_fast` = `iex_fast_with_accel(&build_accel(phi), phi, …)`). The valence
+/// loop holds Φ fixed and perturbs Ψ (or applies a small Φ-delta + rebuild),
+/// so this hoists the per-call `IexAccel::build` out of millions of small
+/// executions. Passing an `accel` built from a *different* Φ than the `phi`
+/// later supplied is a caller bug (mismatched head-index ⇒ wrong candidate
+/// set); this is not — and cannot cheaply — be verified.
+pub fn build_accel(phi: &Constellation) -> IexAccel {
+    IexAccel::build(phi)
+}
+
+/// [`iex_fast`] (byte-identical jet) with the Φ-derived [`IexAccel`] supplied
+/// by the caller instead of rebuilt per call. See [`build_accel`] for the
+/// reuse contract: result is provably identical to `iex_fast(phi, …)` when
+/// `accel == build_accel(phi)`.
+pub fn iex_fast_with_accel(
+    accel: &IexAccel,
+    phi: &Constellation,
+    psi_init: Vec<Star>,
+    fuel: usize,
+) -> IExResult {
+    iex_fast_inner(accel, phi, psi_init, fuel, false)
+}
+
+/// [`iex_tabled`] (KA1 variant-deletion) with a caller-supplied [`IexAccel`].
+/// Composes the two valence-critical reuse paths: KA1 tabling **and**
+/// per-Φ accel hoisting, for the variant-dense valence search loop.
+pub fn iex_tabled_with_accel(
+    accel: &IexAccel,
+    phi: &Constellation,
+    psi_init: Vec<Star>,
+    fuel: usize,
+) -> IExResult {
+    iex_fast_inner(accel, phi, psi_init, fuel, true)
 }
 
 /// KA1 — `iex_fast` + **variant-deletion tabling** (spec §9). A produced star
@@ -959,7 +1001,7 @@ pub fn iex_fast(phi: &Constellation, psi_init: Vec<Star>, fuel: usize) -> IExRes
 /// (fixpoint termination for step-identity) is the reframed N-KS.
 /// `iex_fast` (the byte-identical jet) is left untouched.
 pub fn iex_tabled(phi: &Constellation, psi_init: Vec<Star>, fuel: usize) -> IExResult {
-    iex_fast_inner(phi, psi_init, fuel, true)
+    iex_fast_inner(&IexAccel::build(phi), phi, psi_init, fuel, true)
 }
 
 /// Conservative α-variant key of a star: `canonical` of its rays as an
@@ -971,12 +1013,12 @@ fn star_key(star: &Star) -> Term {
 }
 
 fn iex_fast_inner(
+    accel: &IexAccel,
     phi: &Constellation,
     psi_init: Vec<Star>,
     fuel: usize,
     tabling: bool,
 ) -> IExResult {
-    let accel = IexAccel::build(phi);
     let mut psi = psi_init;
     let mut counter = 0u32;
     let mut steps = 0;
@@ -1011,7 +1053,7 @@ fn iex_fast_inner(
                 if ray_polarity(r) == Polarity::Neutral {
                     continue;
                 }
-                if any_match_accel(&accel, phi, r, &psi_cs) || any_self(star, j) {
+                if any_match_accel(accel, phi, r, &psi_cs) || any_self(star, j) {
                     found_step = Some((i, j));
                     break 'outer;
                 }
@@ -1029,7 +1071,7 @@ fn iex_fast_inner(
             Some((i, j)) => {
                 let selected = psi.remove(i);
                 let produced =
-                    produce_stars_fast(&accel, phi, &selected, j, &mut counter, &psi_cs);
+                    produce_stars_fast(accel, phi, &selected, j, &mut counter, &psi_cs);
                 if tabling {
                     // KA1: drop α-variant redundant stars; keep + table the rest.
                     // (If a step yields only variants ⇒ no growth ⇒ fixpoint.)
@@ -1051,7 +1093,7 @@ fn iex_fast_inner(
         }
     }
 
-    let nf = is_normal_form_accel(&accel, phi, &psi);
+    let nf = is_normal_form_accel(accel, phi, &psi);
     ks_report(steps);
     IExResult { psi, is_normal_form: nf, steps }
 }
@@ -1488,6 +1530,83 @@ mod tests {
         assert!(
             same_answers(&br.psi, &bt.psi),
             "tabled binarith answer set differs from reference oracle"
+        );
+    }
+
+    /// **Accel-reuse faithfulness gate.** `iex_fast_with_accel` with a
+    /// build-once `accel` reused across *different* Ψ must be byte-identical
+    /// to per-call `iex_fast` (the contract: `IexAccel` is a pure function of
+    /// Φ, no Ψ/run state). And `iex_tabled_with_accel` must match `iex_tabled`.
+    #[test]
+    fn iex_fast_with_accel_eq_iex_fast() {
+        // (a) Horn add(3,2): one accel, two different Ψ.
+        let mut phi = add_prog();
+        phi.push(vec![neg_ray("add", vec![nat(3), nat(2), var("R")]), var("R")]);
+        let q1 = vec![phi.pop().unwrap()];
+        let accel = build_accel(&phi);
+        let plain1 = iex_fast(&phi, q1.clone(), 5000);
+        let reuse1 = iex_fast_with_accel(&accel, &phi, q1, 5000);
+        assert_eq!(plain1.psi, reuse1.psi, "Horn: psi differs (reuse 1)");
+        assert_eq!(plain1.steps, reuse1.steps, "Horn: steps differ (reuse 1)");
+        assert_eq!(plain1.is_normal_form, reuse1.is_normal_form);
+        // SAME accel, DIFFERENT Ψ — the valence regime.
+        let q2 = vec![vec![neg_ray("add", vec![nat(4), nat(1), var("R")]), var("R")]];
+        let plain2 = iex_fast(&phi, q2.clone(), 5000);
+        let reuse2 = iex_fast_with_accel(&accel, &phi, q2, 5000);
+        assert_eq!(plain2.psi, reuse2.psi, "Horn: psi differs (reuse 2)");
+        assert_eq!(plain2.steps, reuse2.steps, "Horn: steps differ (reuse 2)");
+
+        // (b) Binary arith add(5,6) — both reuse primitives.
+        let bphi = crate::binarith::binarith_module();
+        let baccel = build_accel(&bphi);
+        let bq = vec![vec![
+            neg_ray("add", vec![crate::binarith::nat(5), crate::binarith::nat(6), var("R")]),
+            var("R"),
+        ]];
+        let bp = iex_fast(&bphi, bq.clone(), 8000);
+        let bre = iex_fast_with_accel(&baccel, &bphi, bq.clone(), 8000);
+        assert_eq!(bp.psi, bre.psi, "binarith: psi differs");
+        assert_eq!(bp.steps, bre.steps, "binarith: steps differ");
+        let bt = iex_tabled(&bphi, bq.clone(), 8000);
+        let btre = iex_tabled_with_accel(&baccel, &bphi, bq, 8000);
+        assert_eq!(bt.psi, btre.psi, "tabled binarith: psi differs w/ accel");
+        assert_eq!(bt.steps, btre.steps, "tabled binarith: steps differ w/ accel");
+    }
+
+    /// Proof-of-work micro-bench (env-gated, ignored by default): per-call
+    /// `IexAccel::build` vs hoisted `build_accel` over N small executions on a
+    /// non-trivial fixed Φ (binarith module) — the valence regime. Not a gate;
+    /// run: `cargo test -p stella-core --release ks_accel_hoist_bench -- --ignored --nocapture`.
+    #[test]
+    #[ignore = "bench: measurement, not a faithfulness gate"]
+    fn ks_accel_hoist_bench() {
+        let phi = crate::binarith::binarith_module();
+        let mk = || {
+            vec![vec![
+                neg_ray("add", vec![crate::binarith::nat(5), crate::binarith::nat(6), var("R")]),
+                var("R"),
+            ]]
+        };
+        let n = 1000;
+        let t0 = std::time::Instant::now();
+        let mut s1 = 0;
+        for _ in 0..n {
+            s1 += iex_fast(&phi, mk(), 8000).steps;
+        }
+        let per_call = t0.elapsed();
+        let t1 = std::time::Instant::now();
+        let accel = build_accel(&phi);
+        let mut s2 = 0;
+        for _ in 0..n {
+            s2 += iex_fast_with_accel(&accel, &phi, mk(), 8000).steps;
+        }
+        let hoisted = t1.elapsed();
+        assert_eq!(s1, s2, "aggregate step counts must match (faithfulness)");
+        eprintln!(
+            "ks_accel_hoist_bench N={n} binarith-Φ: per-call={:.1}ms hoisted={:.1}ms speedup={:.2}x",
+            per_call.as_secs_f64() * 1e3,
+            hoisted.as_secs_f64() * 1e3,
+            per_call.as_secs_f64() / hoisted.as_secs_f64()
         );
     }
 }
