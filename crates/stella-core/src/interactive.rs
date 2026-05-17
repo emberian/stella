@@ -78,8 +78,11 @@ use crate::constellation::{Constellation, Star};
 use crate::dep_graph::{all_colours, ray_colours};
 use crate::polarised::{matchable, ray_polarity, underlying_term, Polarity};
 use crate::subst::{freshen, Substitution};
-use crate::term::{mk_var_interned, Var, Term};
+use crate::term::{get, mk_var_interned, Term, TermData, Var};
 use crate::unify::{unify, Equation};
+use crate::index::RayIndex;
+use rustc_hash::FxHashSet;
+use std::collections::HashSet;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -136,6 +139,16 @@ pub fn mat_phi(phi: &Constellation, r: Term) -> Vec<(usize, usize)> {
     mat_phi_c(phi, r, &std::collections::HashSet::new())
 }
 
+/// Colour-aware matchable rays for a *configuration* `Φ ⊢ Ψ` (§51.6): the
+/// colour set is `colours(Φ) ∪ colours(Ψ)`, exactly what `iex` uses. The
+/// plain [`mat_phi`] uses no extra colours and so misses every match in a
+/// coloured constellation (all the automata encodings) — UI step drivers
+/// must use this, or coloured machines never fire.
+pub fn mat_phi_colored(phi: &Constellation, psi: &[Star], r: Term) -> Vec<(usize, usize)> {
+    let psi_c = all_colours(&psi.to_vec());
+    mat_phi_c(phi, r, &psi_c)
+}
+
 fn mat_phi_c(phi: &Constellation, r: Term, extra_c: &std::collections::HashSet<String>) -> Vec<(usize, usize)> {
     let mut c_set = all_colours(phi);
     c_set.extend(extra_c.iter().cloned());
@@ -169,6 +182,118 @@ fn mat_self(star: &Star, j: usize) -> Vec<usize> {
         }
     }
     result
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// KS accelerator (spec docs/05 §8) — head-indexed `mat_Φ`, colours cached once.
+//
+// FAITHFULNESS: `mat_phi_c_accel` returns the **identical** `Vec<(i,j)>` as the
+// reference `mat_phi_c` (same set, same order). Justification:
+//  * `RayIndex::build(phi, all_colours(phi))` keeps *every* App ray of Φ — each
+//    Φ-ray's own colours ⊆ all_colours(phi) trivially, so the build-time
+//    colour filter never drops a Φ ray.
+//  * Every `mat_phi_c` match is necessarily in the single `partner_key` bucket
+//    (matchable ⇒ same SymName, opposite/neutral polarity); `id_rays` order
+//    makes each bucket (i,j)-ascending — `mat_phi_c`'s full scan only ever
+//    pushes from that same bucket in that same order.
+//  * The exact same per-ray filters (neutral skip, `cr ⊆ c_set`,
+//    `crj ⊆ c_set`, `matchable`) are re-applied here; `sort_unstable` is a
+//    defensive guarantee of identical order.
+// The reference engine (`iex`/`mat_phi_c`/`interaction_step`) is left UNTOUCHED
+// as the differential oracle (spec §8 N-KS): see `iex_fast` equivalence tests.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Colour of a ray as an interned `Sym` (the allocation-free equivalent of
+/// `ray_colours`: `ray_colours(r)` is `∅` for Var/Neutral and the singleton
+/// `{display_name(head)}` otherwise — `Sym = (name,pol)` is a bijection with
+/// that display-name, so `Some(sym)` ≡ that singleton, `None` ≡ `∅`).
+fn ray_csym(r: Term) -> Option<crate::term::Sym> {
+    match get(r) {
+        TermData::App(sym, _) if sym.pol != Polarity::Neutral => Some(sym),
+        _ => None,
+    }
+}
+
+/// Accelerator built once per run from the (fixed) reference constellation Φ.
+///
+/// `phi_csyms` is `all_colours(phi)` as an interned-`Sym` set (bijective with
+/// the `String` display-names) — built once, queried `O(1)`, zero allocation.
+pub struct IexAccel {
+    idx: RayIndex,
+    phi_csyms: FxHashSet<crate::term::Sym>,
+}
+
+impl IexAccel {
+    pub fn build(phi: &Constellation) -> Self {
+        let phi_colours = all_colours(phi);
+        // c = all_colours(phi) ⇒ every App ray of Φ is retained (its own
+        // colours ⊆ all_colours(phi) by construction).
+        let idx = RayIndex::build(phi, &phi_colours);
+        let mut phi_csyms = FxHashSet::default();
+        for star in phi {
+            for &ray in star {
+                if let Some(s) = ray_csym(ray) {
+                    phi_csyms.insert(s);
+                }
+            }
+        }
+        Self { idx, phi_csyms }
+    }
+}
+
+/// Indexed, allocation-free `mat_Φ^C(r)` — provably identical output to
+/// [`mat_phi_c`].
+///
+/// Faithfulness vs the reference predicate:
+///  * `cr ⊆ c_set`: `cr` is `∅` (→ trivially true) or the singleton
+///    `{ray_csym(r)}`; membership in `c_set = all_colours(phi) ∪ extra_c` is
+///    the `O(1)` check `s ∈ phi_csyms ∪ psi_csyms` (Sym↔display-name bijection).
+///  * `crj ⊆ c_set`: **always true** for any indexed Φ ray — its colours ⊆
+///    `all_colours(phi)` ⊆ `c_set` by construction — so the per-candidate
+///    check is provably redundant and dropped (removing a per-candidate
+///    `ray_colours` allocation). Same match set, same (i,j) order.
+fn mat_phi_c_accel(
+    accel: &IexAccel,
+    phi: &Constellation,
+    r: Term,
+    psi_csyms: &FxHashSet<crate::term::Sym>,
+) -> Vec<(usize, usize)> {
+    // cr ⊆ c_set
+    if let Some(s) = ray_csym(r) {
+        if !accel.phi_csyms.contains(&s) && !psi_csyms.contains(&s) {
+            return Vec::new();
+        }
+    }
+    let (name, pol) = match get(r) {
+        TermData::App(sym, _) => (sym.name, sym.pol),
+        _ => return Vec::new(),
+    };
+    let mut result: Vec<(usize, usize)> = Vec::new();
+    for &(i, j) in accel.idx.candidates(name, pol) {
+        let ray = phi[i][j];
+        if ray_polarity(ray) == Polarity::Neutral {
+            continue;
+        }
+        if matchable(r, ray) {
+            result.push((i, j));
+        }
+    }
+    result.sort_unstable();
+    result
+}
+
+/// Ψ colours as an interned-`Sym` set (allocation-free analogue of
+/// `all_colours(&psi)`), computed **once per step**.
+fn psi_csyms(psi: &[Star]) -> FxHashSet<crate::term::Sym> {
+    let mut s = FxHashSet::default();
+    for star in psi {
+        for &ray in star {
+            if let Some(c) = ray_csym(ray) {
+                s.insert(c);
+            }
+        }
+    }
+    s
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -405,6 +530,141 @@ pub fn iex(phi: &Constellation, psi_init: Vec<Star>, fuel: usize) -> IExResult {
     IExResult { psi, is_normal_form: nf, steps }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// KS phase profiler — env-gated (`STELLA_KS_PROF=1`), zero overhead when off
+// (one relaxed bool load per phase). Diagnostic only; never changes results.
+// ─────────────────────────────────────────────────────────────────────────────
+
+static KS_PROF: std::sync::LazyLock<bool> =
+    std::sync::LazyLock::new(|| std::env::var("STELLA_KS_PROF").as_deref() == Ok("1"));
+
+thread_local! {
+    static T_SCAN: std::cell::Cell<f64> = const { std::cell::Cell::new(0.0) };
+    static T_FRESH: std::cell::Cell<f64> = const { std::cell::Cell::new(0.0) };
+    static T_FUSE: std::cell::Cell<f64> = const { std::cell::Cell::new(0.0) };
+}
+
+#[inline(always)]
+fn ks_add(slot: &'static std::thread::LocalKey<std::cell::Cell<f64>>, dt: std::time::Duration) {
+    if *KS_PROF {
+        slot.with(|c| c.set(c.get() + dt.as_secs_f64()));
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// KS fast path — `iex_fast` (spec §8). Byte-for-byte mirror of `iex`/
+// `interaction_step`/`is_normal_form` with `mat_phi_c` → `mat_phi_c_accel`
+// (provably identical output). The reference path above is the differential
+// oracle; `iex_eq_iex_fast` (tests) is the N-KS gate.
+// ─────────────────────────────────────────────────────────────────────────────
+
+fn interaction_step_fast(
+    accel: &IexAccel,
+    phi: &Constellation,
+    psi: Vec<Star>,
+    star_idx: usize,
+    ray_idx: usize,
+    counter: &mut u32,
+    psi_cs: &FxHashSet<crate::term::Sym>,
+) -> Vec<Star> {
+    let selected_star = psi[star_idx].clone();
+    let mut psi_prime: Vec<Star> = psi
+        .into_iter()
+        .enumerate()
+        .filter(|(idx, _)| *idx != star_idx)
+        .map(|(_, s)| s)
+        .collect();
+
+    let r = selected_star[ray_idx];
+
+    let ext_matches = mat_phi_c_accel(accel, phi, r, psi_cs);
+    for (ik, jk) in ext_matches {
+        let tf = std::time::Instant::now();
+        let phi_star_renamed = {
+            let prefix = format!("ext{ik}_{counter}");
+            *counter += 1;
+            let (renamed, _) = alpha_rename_star(&phi[ik], &prefix, counter);
+            renamed
+        };
+        ks_add(&T_FRESH, tf.elapsed());
+        let tu = std::time::Instant::now();
+        let fused = fuse(&selected_star, ray_idx, &phi_star_renamed, jk);
+        ks_add(&T_FUSE, tu.elapsed());
+        if let Some(fused) = fused {
+            psi_prime.push(fused);
+        }
+    }
+
+    let self_matches = mat_self(&selected_star, ray_idx);
+    for jk in self_matches {
+        if let Some(si) = self_interact(&selected_star, ray_idx, jk) {
+            psi_prime.push(si);
+        }
+    }
+
+    psi_prime
+}
+
+fn is_normal_form_accel(accel: &IexAccel, phi: &Constellation, psi: &[Star]) -> bool {
+    let psi_cs = psi_csyms(psi);
+    for star in psi.iter() {
+        for (j, &r) in star.iter().enumerate() {
+            if ray_polarity(r) == Polarity::Neutral {
+                continue;
+            }
+            if !mat_phi_c_accel(accel, phi, r, &psi_cs).is_empty() {
+                return false;
+            }
+            if !mat_self(star, j).is_empty() {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+/// `IEx_C(Φ, Ψ)` — KS-accelerated. Identical semantics to [`iex`] (head-indexed
+/// `mat_Φ`, colours cached once); the reference [`iex`] is its differential
+/// oracle (spec §8 N-KS).
+pub fn iex_fast(phi: &Constellation, psi_init: Vec<Star>, fuel: usize) -> IExResult {
+    let accel = IexAccel::build(phi);
+    let mut psi = psi_init;
+    let mut counter = 0u32;
+    let mut steps = 0;
+
+    while steps < fuel {
+        let psi_cs = psi_csyms(&psi);
+
+        let mut found_step = None;
+        'outer: for (i, star) in psi.iter().enumerate() {
+            for (j, &r) in star.iter().enumerate() {
+                if ray_polarity(r) == Polarity::Neutral {
+                    continue;
+                }
+                let has_ext = !mat_phi_c_accel(&accel, phi, r, &psi_cs).is_empty();
+                let has_self = !mat_self(star, j).is_empty();
+                if has_ext || has_self {
+                    found_step = Some((i, j));
+                    break 'outer;
+                }
+            }
+        }
+
+        match found_step {
+            None => {
+                return IExResult { psi, is_normal_form: true, steps };
+            }
+            Some((i, j)) => {
+                psi = interaction_step_fast(&accel, phi, psi, i, j, &mut counter, &psi_cs);
+                steps += 1;
+            }
+        }
+    }
+
+    let nf = is_normal_form_accel(&accel, phi, &psi);
+    IExResult { psi, is_normal_form: nf, steps }
+}
+
 /// Apply **one** resolution step at an explicitly chosen ray `Ψ[i][j]`
 /// (§51.8) and return the successor interaction space.
 ///
@@ -461,6 +721,14 @@ pub use crate::concrete::{conceal, conceal_and_filter, noise_filter};
 /// (`↨`), and empty stars are dropped (`♭`). Used in §55.6 (Horn) and §56.5 (NFA).
 pub fn iex_concealed(phi: &Constellation, psi: Vec<Star>, fuel: usize) -> (Vec<Star>, bool) {
     let res = iex(phi, psi, fuel);
+    let visible = conceal_and_filter(&res.psi);
+    (visible, res.is_normal_form)
+}
+
+/// KS-accelerated `↨♭ IEx_C(Φ, Ψ)` — identical output to [`iex_concealed`]
+/// (it delegates to [`iex_fast`], which the N-KS gate proves ≡ [`iex`]).
+pub fn iex_fast_concealed(phi: &Constellation, psi: Vec<Star>, fuel: usize) -> (Vec<Star>, bool) {
+    let res = iex_fast(phi, psi, fuel);
     let visible = conceal_and_filter(&res.psi);
     (visible, res.is_normal_form)
 }
@@ -664,5 +932,67 @@ mod tests {
             matches.contains(&(1, 1)),
             "query ray should match step rule at (1,1); got {:?}", matches
         );
+    }
+
+    /// `mat_phi_c_accel` returns the *identical* match list as `mat_phi_c`.
+    #[test]
+    fn mat_accel_eq_mat_ref() {
+        let phi = add_prog();
+        let accel = IexAccel::build(&phi);
+        let empty_s: HashSet<String> = HashSet::new();
+        let empty_cs: FxHashSet<crate::term::Sym> = FxHashSet::default();
+        for q in [nat(0), nat(1), nat(2), nat(3)] {
+            let r = neg_ray("add", vec![q, nat(2), var("R")]);
+            assert_eq!(
+                mat_phi_c(&phi, r, &empty_s),
+                mat_phi_c_accel(&accel, &phi, r, &empty_cs),
+                "accel must equal reference mat_phi_c"
+            );
+        }
+    }
+
+    /// **N-KS gate** (spec §8): `iex_fast` is byte-identical to the reference
+    /// `iex` — same `psi`, `is_normal_form`, `steps` — across the real KS
+    /// workloads. The reference engine is retained as the differential oracle;
+    /// any divergence means the fast path is unfaithful and must be reverted.
+    #[test]
+    fn iex_eq_iex_fast() {
+        // (a) Horn arithmetic (recursive Φ reuse).
+        let mut phi = add_prog();
+        phi.push(vec![
+            neg_ray("add", vec![nat(3), nat(2), var("R")]),
+            var("R"),
+        ]);
+        let q = vec![phi.pop().unwrap()];
+        let a = iex(&phi, q.clone(), 5000);
+        let b = iex_fast(&phi, q, 5000);
+        assert_eq!(a.psi, b.psi, "Horn: psi differs");
+        assert_eq!(a.is_normal_form, b.is_normal_form);
+        assert_eq!(a.steps, b.steps, "Horn: step count differs");
+
+        // (b) Combinator core (K1) — SKK = I, the non-linear S star.
+        let prog = crate::combinator::app_n([
+            crate::combinator::a_("S"),
+            crate::combinator::a_("T"),
+            crate::combinator::a_("T"),
+            crate::combinator::a_("x"),
+        ]);
+        let cphi = crate::combinator::machine_stars();
+        let cpsi = vec![crate::combinator::initial_process(&prog)];
+        let ca = iex(&cphi, cpsi.clone(), 3000);
+        let cb = iex_fast(&cphi, cpsi, 3000);
+        assert_eq!(ca.psi, cb.psi, "combinator: psi differs");
+        assert_eq!(ca.steps, cb.steps, "combinator: step count differs");
+
+        // (c) Binary arithmetic module (KG1a) — add small.
+        let bphi = crate::binarith::binarith_module();
+        let bq = vec![vec![
+            neg_ray("add", vec![crate::binarith::nat(5), crate::binarith::nat(6), var("R")]),
+            var("R"),
+        ]];
+        let ba = iex(&bphi, bq.clone(), 8000);
+        let bb = iex_fast(&bphi, bq, 8000);
+        assert_eq!(ba.psi, bb.psi, "binarith: psi differs");
+        assert_eq!(ba.steps, bb.steps, "binarith: step count differs");
     }
 }

@@ -38,18 +38,25 @@ export function parse_check(phi_src: string, psi_src: string): string;
 export function preset_count(): number;
 
 /**
+ * The editable source `{ "phi": "...", "psi": "..." }` for preset `idx`,
+ * or `null`. This is what makes every showcase a first-class editable
+ * example rather than a read-only trace.
+ */
+export function preset_source(idx: number): string;
+
+/**
  * Like `run_source`, but drives an explicitly chosen resolution path.
  * `path` is `"i,j;i,j;…"` (star,ray per step); steps not named follow the
  * IEx default. Lets the explorer offer "pick which redex fires".
  */
-export function run_path(phi_src: string, psi_src: string, path: string): string;
+export function run_path(phi_src: string, psi_src: string, path: string, fuel: number): string;
 
 /**
  * Parse and run a user-supplied constellation. `phi_src` is the reference
  * constellation Φ; `psi_src` is the initial interaction space Ψ. Returns
  * `{"ok":true,"steps":[…]}` or `{"ok":false,"error":"…","pos":N}`.
  */
-export function run_source(phi_src: string, psi_src: string): string;
+export function run_source(phi_src: string, psi_src: string, fuel: number): string;
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
@@ -60,8 +67,9 @@ export interface InitOutput {
     readonly list_presets: () => [number, number];
     readonly parse_check: (a: number, b: number, c: number, d: number) => [number, number];
     readonly preset_count: () => number;
-    readonly run_path: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
-    readonly run_source: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly preset_source: (a: number) => [number, number];
+    readonly run_path: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
+    readonly run_source: (a: number, b: number, c: number, d: number, e: number) => [number, number];
     readonly _start: () => void;
     readonly __wbindgen_free: (a: number, b: number, c: number) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;

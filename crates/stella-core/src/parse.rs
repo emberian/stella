@@ -96,24 +96,27 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn is_ident_start(c: u8) -> bool {
-        c.is_ascii_alphanumeric() || c == b'_' || c == b'$' || c == b'.'
+    /// The structural delimiters. Everything else — including any non-ASCII
+    /// byte — is symbol material, so the parser is a faithful inverse of the
+    /// engine's `Display` (`·`, `ε`, `q₀`, `□`, `★`, … all lex as one symbol).
+    fn is_delim(c: u8) -> bool {
+        c.is_ascii_whitespace()
+            || matches!(c, b'[' | b']' | b'(' | b')' | b',' | b';' | b'#' | b'+')
     }
+    /// A symbol may start with anything that is not a delimiter and not a
+    /// leading polarity sign (`-` / `−` are eaten as polarity before this).
+    fn is_ident_start(c: u8) -> bool {
+        !Self::is_delim(c) && c != b'-'
+    }
+    /// Inside a symbol, only a delimiter ends it (so `add-1`, `s'`, `·`,
+    /// multi-byte UTF-8 all continue the token; multibyte bytes are ≥0x80,
+    /// never an ASCII delimiter, so slicing stays on char boundaries).
     fn is_ident_cont(c: u8) -> bool {
-        Self::is_ident_start(c) || matches!(c, b'\'' | b'-' )
+        !Self::is_delim(c)
     }
 
-    /// Read a bare identifier (no polarity). Also accepts a few non-ASCII
-    /// constants used in the literature (ε) as whole-token symbols.
+    /// Read a bare identifier / symbol name (no polarity).
     fn ident(&mut self) -> PResult<&'a str> {
-        // multi-byte literal symbols seen in the corpus
-        for lit in ["ε", "□", "★"] {
-            if self.src[self.i..].starts_with(lit) {
-                let start = self.i;
-                self.i += lit.len();
-                return Ok(&self.src[start..self.i]);
-            }
-        }
         let start = self.i;
         match self.peek() {
             Some(c) if Self::is_ident_start(c) => {}
@@ -251,31 +254,58 @@ impl<'a> Parser<'a> {
     }
 }
 
-/// Rename variables apart per star so two stars never accidentally share a
-/// variable — but keep the names *readable*: the first star keeps the names
-/// as written; later stars get a `_<i>` suffix. (Opaque fresh names would
-/// make the unifier readout unintelligible.)
-fn rename_star_apart(star: &Star, star_idx: usize, _counter: &mut u32) -> Star {
-    if star_idx == 0 {
-        return star.clone();
-    }
-    let mut map: FxHashMap<Var, Var> = FxHashMap::default();
-    for &r in star {
-        for v in r.vars() {
-            map.entry(v).or_insert_with(|| {
-                Var::intern(&format!("{}_{star_idx}", v.as_str()))
-            });
+/// Make stars variable-disjoint *only where they genuinely share a name*, and
+/// do it idempotently: a name used in more than one star keeps its spelling in
+/// the first star it appears in and becomes `name_s<i>` in each later star.
+///
+/// This is faithful — `parse(format(c))` is a fixed point (a `name_s<i>` only
+/// ever occurs in star `i`, so a second pass finds no sharing) — and readable,
+/// which matters because the IDE lets experts edit the engine's own Display
+/// output of any constellation.
+fn disambiguate(raw: Vec<Star>) -> Constellation {
+    use std::collections::BTreeMap;
+    // name → sorted set of star indices it occurs in
+    let mut occ: BTreeMap<String, Vec<usize>> = BTreeMap::new();
+    for (i, star) in raw.iter().enumerate() {
+        for &r in star {
+            for v in r.vars() {
+                let e = occ.entry(v.as_str().to_string()).or_default();
+                if e.last() != Some(&i) {
+                    e.push(i);
+                }
+            }
         }
     }
-    if map.is_empty() {
-        return star.clone();
-    }
-    let ren = Renaming::from_map(map);
-    star.iter().map(|&r| ren.apply(r)).collect()
+    raw.into_iter()
+        .enumerate()
+        .map(|(i, star)| {
+            let mut map: FxHashMap<Var, Var> = FxHashMap::default();
+            for &r in &star {
+                for v in r.vars() {
+                    let stars = &occ[v.as_str()];
+                    // rename only if shared across stars and this is not the
+                    // first star the name appears in
+                    if stars.len() > 1 && stars[0] != i {
+                        map.entry(v).or_insert_with(|| {
+                            Var::intern(&format!("{}_s{i}", v.as_str()))
+                        });
+                    }
+                }
+            }
+            if map.is_empty() {
+                return star;
+            }
+            let ren = Renaming::from_map(map);
+            star.iter().map(|&r| ren.apply(r)).collect()
+        })
+        .collect()
 }
 
-/// Parse a constellation from the surface syntax. Variables are renamed apart
-/// per star.
+/// Parse a constellation from the surface syntax, **exactly** — no variable
+/// renaming. This is a faithful inverse of the engine's `Display`
+/// (`parse(format(c))` is a fixed point), which is what lets the IDE turn any
+/// engine-built constellation into editable source. Correct for the reference
+/// Φ, because the engine α-renames Φ stars on every use (they are non-linear).
 pub fn parse_constellation(src: &str) -> Result<Constellation, ParseError> {
     let src = src.trim();
     if src.is_empty() {
@@ -289,12 +319,16 @@ pub fn parse_constellation(src: &str) -> Result<Constellation, ParseError> {
             msg: "unexpected trailing input".to_string(),
         });
     }
-    let mut counter = 0u32;
-    Ok(raw
-        .iter()
-        .enumerate()
-        .map(|(idx, star)| rename_star_apart(star, idx, &mut counter))
-        .collect())
+    Ok(raw)
+}
+
+/// Parse an **interaction space** Ψ: like [`parse_constellation`] but renames
+/// genuinely-shared variables apart across stars. Ψ is *linear* (its stars are
+/// not freshened during execution), so two stars that both write `R` must be
+/// kept distinct. Idempotent: a `R_s2` only ever occurs in star 2, so a second
+/// pass finds no sharing.
+pub fn parse_psi(src: &str) -> Result<Constellation, ParseError> {
+    Ok(disambiguate(parse_constellation(src)?))
 }
 
 /// Parse a single star (one bracketed group). Variables are renamed apart from
@@ -334,13 +368,27 @@ mod tests {
     }
 
     #[test]
-    fn vars_are_renamed_apart_per_star() {
+    fn parse_constellation_is_exact_no_rename() {
+        // Φ is non-linear (engine freshens it) — names must be preserved
+        // exactly so Display round-trips.
         let c = parse_constellation("[+f(X)] + [-f(X), X]").unwrap();
         let v0: Vec<Var> = c[0].iter().flat_map(|r| r.vars()).collect();
         let v1: Vec<Var> = c[1].iter().flat_map(|r| r.vars()).collect();
+        assert!(v1.contains(&v0[0]), "Φ parse keeps shared names as written");
+    }
+
+    #[test]
+    fn parse_psi_disambiguates_linearly_and_is_idempotent() {
+        let c = parse_psi("[+f(X)] + [-f(X), X]").unwrap();
+        let v0: Vec<Var> = c[0].iter().flat_map(|r| r.vars()).collect();
+        let v1: Vec<Var> = c[1].iter().flat_map(|r| r.vars()).collect();
         for a in &v0 {
-            assert!(!v1.contains(a), "stars must not share variables");
+            assert!(!v1.contains(a), "Ψ stars must not share variables");
         }
+        // idempotent
+        let s1 = fmt_c(&c);
+        let s2 = fmt_c(&parse_psi(&s1).unwrap());
+        assert_eq!(s1, s2, "parse_psi must be a fixed point");
     }
 
     #[test]
@@ -357,5 +405,51 @@ mod tests {
         assert!(parse_constellation("[+f(X)").is_err());
         assert!(parse_constellation("+f(X)]").is_err());
         assert!(parse_constellation("[f(]]").is_err());
+    }
+
+    /// Render a constellation back to surface syntax (the inverse the IDE
+    /// uses), then re-parse it: it must be faithful up to α.
+    fn fmt_c(c: &Constellation) -> String {
+        c.iter()
+            .map(|s| {
+                let rays: Vec<String> = s.iter().map(|r| format!("{r}")).collect();
+                format!("[{}]", rays.join(", "))
+            })
+            .collect::<Vec<_>>()
+            .join(" + ")
+    }
+
+    #[test]
+    fn round_trips_unicode_and_operators() {
+        // `·` binary cons (MLL/linear-logic notation), ε constant, q₀ state.
+        let src = "[+i(·(0, ·(1, ε))), -q₀(W)] + [-i(W), accept]";
+        let c = parse_constellation(src).expect("parses unicode symbols");
+        let again = parse_constellation(&fmt_c(&c)).expect("re-parses its own Display");
+        assert_eq!(fmt_c(&c), fmt_c(&again), "Display∘parse is idempotent");
+        // structural sanity
+        assert_eq!(c.len(), 2);
+        assert_eq!(c[0].len(), 2);
+    }
+
+    #[test]
+    fn format_then_parse_runs_the_same() {
+        let phi = parse_constellation(
+            "[+add(0, Y, Y)] + [-add(X, Y, Z), +add(s(X), Y, s(Z))]",
+        )
+        .unwrap();
+        let psi = parse_constellation("[-add(s(s(0)), s(s(0)), R), R]").unwrap();
+        let direct = iex(&phi, psi.clone(), 200);
+        // round-trip Φ and Ψ through Display→parse, must compute the same.
+        let phi2 = parse_constellation(&fmt_c(&phi)).unwrap();
+        let psi2 = parse_constellation(&fmt_c(&psi)).unwrap();
+        let viafmt = iex(&phi2, psi2, 200);
+        let s = |r: &crate::interactive::IExResult| {
+            r.psi.iter()
+                .map(|st| st.iter().map(|x| format!("{x}")).collect::<String>())
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
+        assert!(s(&direct).contains("s(s(s(s(0))))"));
+        assert!(s(&viafmt).contains("s(s(s(s(0))))"));
     }
 }

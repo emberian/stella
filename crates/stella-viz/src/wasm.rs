@@ -18,9 +18,42 @@
 
 use wasm_bindgen::prelude::*;
 
-use crate::presets::{all_presets, all_step_data};
+use crate::presets::{all_presets, all_step_data, preset_io};
 use crate::stepper::{capture_path, capture_steps, StepSnapshot};
-use stella_core::parse::parse_constellation;
+use stella_core::constellation::Constellation;
+use stella_core::parse::{parse_constellation, parse_psi};
+
+/// Clamp the caller's fuel into a sane range (0 → default).
+fn fuel_or(n: usize) -> usize {
+    if n == 0 { 300 } else { n.min(20_000) }
+}
+
+/// Render a constellation back to surface syntax — the inverse the IDE uses
+/// to make any engine-built showcase editable. `parse(format(c))` is faithful.
+fn format_constellation(c: &Constellation) -> String {
+    c.iter()
+        .map(|s| {
+            let rays: Vec<String> = s.iter().map(|r| format!("{r}")).collect();
+            format!("[{}]", rays.join(", "))
+        })
+        .collect::<Vec<_>>()
+        .join(" + ")
+}
+
+/// The editable source `{ "phi": "...", "psi": "..." }` for preset `idx`,
+/// or `null`. This is what makes every showcase a first-class editable
+/// example rather than a read-only trace.
+#[wasm_bindgen]
+pub fn preset_source(idx: usize) -> String {
+    match preset_io(idx) {
+        Some((phi, psi)) => format!(
+            "{{\"phi\":{},\"psi\":{}}}",
+            json_str(&format_constellation(&phi)),
+            json_str(&format_constellation(&psi))
+        ),
+        None => "null".to_string(),
+    }
+}
 
 // Install a human-readable panic hook so browser console shows Rust panics.
 #[wasm_bindgen(start)]
@@ -150,7 +183,7 @@ fn steps_json(steps: &[StepSnapshot]) -> String {
 /// constellation Φ; `psi_src` is the initial interaction space Ψ. Returns
 /// `{"ok":true,"steps":[…]}` or `{"ok":false,"error":"…","pos":N}`.
 #[wasm_bindgen]
-pub fn run_source(phi_src: &str, psi_src: &str) -> String {
+pub fn run_source(phi_src: &str, psi_src: &str, fuel: usize) -> String {
     let phi = match parse_constellation(phi_src) {
         Ok(p) => p,
         Err(e) => {
@@ -161,7 +194,7 @@ pub fn run_source(phi_src: &str, psi_src: &str) -> String {
             )
         }
     };
-    let psi = match parse_constellation(psi_src) {
+    let psi = match parse_psi(psi_src) {
         Ok(p) => p,
         Err(e) => {
             return format!(
@@ -171,7 +204,7 @@ pub fn run_source(phi_src: &str, psi_src: &str) -> String {
             )
         }
     };
-    let steps = capture_steps(&phi, psi, 300);
+    let steps = capture_steps(&phi, psi, fuel_or(fuel));
     format!("{{\"ok\":true,\"steps\":{}}}", steps_json(&steps))
 }
 
@@ -198,7 +231,7 @@ pub fn parse_check(phi_src: &str, psi_src: &str) -> String {
 /// `path` is `"i,j;i,j;…"` (star,ray per step); steps not named follow the
 /// IEx default. Lets the explorer offer "pick which redex fires".
 #[wasm_bindgen]
-pub fn run_path(phi_src: &str, psi_src: &str, path: &str) -> String {
+pub fn run_path(phi_src: &str, psi_src: &str, path: &str, fuel: usize) -> String {
     let phi = match parse_constellation(phi_src) {
         Ok(p) => p,
         Err(e) => {
@@ -208,7 +241,7 @@ pub fn run_path(phi_src: &str, psi_src: &str, path: &str) -> String {
             )
         }
     };
-    let psi = match parse_constellation(psi_src) {
+    let psi = match parse_psi(psi_src) {
         Ok(p) => p,
         Err(e) => {
             return format!(
@@ -225,7 +258,7 @@ pub fn run_path(phi_src: &str, psi_src: &str, path: &str) -> String {
             Some((it.next()?.trim().parse().ok()?, it.next()?.trim().parse().ok()?))
         })
         .collect();
-    let steps = capture_path(&phi, psi, &chosen, 300);
+    let steps = capture_path(&phi, psi, &chosen, fuel_or(fuel));
     format!("{{\"ok\":true,\"steps\":{}}}", steps_json(&steps))
 }
 

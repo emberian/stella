@@ -220,6 +220,12 @@ const TEMPLATE_IDE = `
       Stellar resolution — a playground</span>
     <span class="stx-bar__spacer"></span>
     <span class="st-pulse" data-role="pulse">starting engine</span>
+    <select class="stx-select" data-role="ws" title="Saved workspaces"></select>
+    <button class="stx-iconbtn" data-role="wssave" title="Save the current Φ/Ψ as a named workspace">save</button>
+    <button class="stx-iconbtn" data-role="wsdel" title="Delete the selected workspace" hidden>del</button>
+    <button class="stx-iconbtn" data-role="wsexport" title="Export all workspaces as JSON">export</button>
+    <button class="stx-iconbtn" data-role="wsimport" title="Import workspaces JSON">import</button>
+    <input type="file" data-role="wsfile" accept="application/json" hidden />
     <button class="stx-iconbtn" data-role="copytrace" title="Copy the whole step-by-step trace">⧉ trace</button>
     <a class="stx-permalink" data-role="permalink" href="#" title="Copy a sharable link">↪ share</a>
   </div>
@@ -261,6 +267,7 @@ const TEMPLATE_IDE = `
             <div class="stx-canvas" data-role="canvas"></div>
             <div class="stx-readout">
               <div class="stx-mgu" data-role="mgu"></div>
+              <div class="stx-obs" data-role="obs"></div>
               <div class="stx-redexes" data-role="redexes"></div>
             </div>
           </div>
@@ -276,6 +283,8 @@ const TEMPLATE_IDE = `
             <option value="1400">0.5×</option><option value="750" selected>1×</option>
             <option value="380">2×</option><option value="160">4×</option>
           </select>
+          <label class="stx-fuel" title="Max resolution steps before the engine stops (for non-terminating constellations)">
+            fuel <input type="number" data-role="fuel" min="1" max="20000" step="50" value="300" /></label>
         </div>
       </div>
     </section>
@@ -387,6 +396,18 @@ export async function mountExplorer(root, opts = {}) {
       }).join("");
 
     elCanvas.innerHTML = `<div class="stx-constellation${animateFrom != null ? " stx-anim" : ""}">${starsHtml}</div>`;
+
+    // ɟ(Ψ): the observable output — what Eng's criteria actually read.
+    const elObs = $("obs");
+    if (elObs) {
+      const obs = observableOf(snap.psi_stars);
+      const body = obs.length
+        ? obs.map((s) => `<span class="stx-obs__s">${esc(s)}</span>`).join("")
+        : `<span class="stx-obs__none">∅ — nothing observable yet</span>`;
+      elObs.innerHTML =
+        `<span class="stx-obs__lab" title="conceal + noise filter (Eng §49.44): stars whose rays are all unpolarised">ɟ(Ψ)${isFinal ? " — the result" : ""}</span>${body}`;
+      elObs.classList.toggle("is-final", isFinal);
+    }
 
     // MGU readout + a plain-English account of what fires next.
     if (snap.mgu && snap.mgu.length && nextRedex) {
@@ -586,7 +607,7 @@ export async function mountExplorer(root, opts = {}) {
       .map((c) => `${c[0]},${c[1]}`)
       .join(";");
     let res;
-    try { res = JSON.parse(mod.run_path(phi, psi, pathStr)); }
+    try { res = JSON.parse(mod.run_path(phi, psi, pathStr, fuelVal())); }
     catch (e) { setValidity(false, "engine error: " + e.message); return false; }
     if (!res.ok) {
       showParseError(res, phi, psi);
@@ -632,6 +653,31 @@ export async function mountExplorer(root, opts = {}) {
     runEditor();
   }
 
+  // A preset is now just an editable example: pull its Display source.
+  function loadShowcase(i) {
+    let src;
+    try { src = JSON.parse(mod.preset_source(i)); } catch { src = null; }
+    if (src) { choicePath = []; loadIntoEditor(src.phi, src.psi); return true; }
+    return false;
+  }
+
+  function fuelVal() {
+    const el = $("fuel");
+    const n = el ? parseInt(el.value, 10) : 0;
+    return Number.isFinite(n) && n > 0 ? n : 0; // 0 → engine default
+  }
+
+  // ɟ(Ψ): the observable output (Eng §49.44 conceal + noise filter) — keep
+  // only stars whose rays are all unpolarised, drop empties. Computed
+  // client-side from the rendered Ψ; this is the lens Eng's acceptance
+  // criteria use ("[accept] ∈ ɟIEx", the computed result, …).
+  function observableOf(psiStars) {
+    return psiStars.filter((st) => {
+      const rays = parseStar(st);
+      return rays.length > 0 && rays.every((r) => rayPolarity(r) === "neu");
+    });
+  }
+
   // Plain-text dump of the whole trace, for sharing / lecture notes.
   function traceText() {
     const lines = [
@@ -667,9 +713,9 @@ export async function mountExplorer(root, opts = {}) {
              <span class="stx-rail__note">${esc(it.note)}</span></button>`
         ).join("")
       ).join("") +
-      `<div class="stx-rail__g">Engine showcases (read-only)</div>` +
+      `<div class="stx-rail__g">Engine showcases — Eng's encodings, editable</div>` +
       presets.map((p, i) =>
-        `<button class="stx-rail__i stx-rail__i--ro" data-preset="${i}">
+        `<button class="stx-rail__i" data-preset="${i}">
            <span class="stx-rail__n">${esc(p.name)}</span>
            <span class="stx-rail__note">${esc(p.description)}</span></button>`
       ).join("");
@@ -677,7 +723,7 @@ export async function mountExplorer(root, opts = {}) {
       b.addEventListener("click", () => {
         lib.querySelectorAll(".stx-rail__i").forEach((x) =>
           x.classList.toggle("is-active", x === b));
-        if (b.dataset.preset != null) { loadPreset(+b.dataset.preset); return; }
+        if (b.dataset.preset != null) { loadShowcase(+b.dataset.preset); return; }
         const g = LIBRARY.find((x) => x.group === b.dataset.g);
         const it = g && g.items[+b.dataset.k];
         if (it) loadIntoEditor(it.phi, it.psi);
@@ -716,6 +762,77 @@ export async function mountExplorer(root, opts = {}) {
         }
       });
     });
+
+    // Re-resolve with the new fuel cap (useful for non-terminating Ψ).
+    const fuelEl = $("fuel");
+    if (fuelEl) fuelEl.addEventListener("change", () => {
+      if (sourceMode) runPath(lastPhi, lastPsi, idx);
+    });
+
+    // ── Workspaces — self-contained persistence (localStorage + JSON) ───────
+    const WS_KEY = "stella.workspaces.v1";
+    const wsLoad = () => {
+      try { return JSON.parse(localStorage.getItem(WS_KEY)) || {}; }
+      catch { return {}; }
+    };
+    const wsStore = (o) => localStorage.setItem(WS_KEY, JSON.stringify(o));
+    const elWs = $("ws"), elWsDel = $("wsdel");
+    function wsRefresh(sel) {
+      const all = wsLoad();
+      const names = Object.keys(all).sort();
+      elWs.innerHTML =
+        `<option value="">workspaces…</option>` +
+        names.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join("");
+      if (sel && all[sel]) elWs.value = sel;
+      if (elWsDel) elWsDel.hidden = !elWs.value;
+    }
+    elWs.addEventListener("change", () => {
+      const all = wsLoad(), w = all[elWs.value];
+      if (elWsDel) elWsDel.hidden = !elWs.value;
+      if (w) { choicePath = []; loadIntoEditor(w.phi, w.psi); }
+    });
+    $("wssave").addEventListener("click", () => {
+      const def = "ws-" + new Date().toISOString().slice(0, 16).replace("T", " ");
+      const name = (prompt("Save workspace as:", def) || "").trim();
+      if (!name) return;
+      const all = wsLoad();
+      all[name] = { phi: $("phi").value, psi: $("psi").value };
+      wsStore(all); wsRefresh(name);
+    });
+    if (elWsDel) elWsDel.addEventListener("click", () => {
+      const all = wsLoad();
+      if (elWs.value && all[elWs.value]) {
+        delete all[elWs.value]; wsStore(all); wsRefresh();
+      }
+    });
+    $("wsexport").addEventListener("click", () => {
+      const blob = new Blob([JSON.stringify(wsLoad(), null, 2)],
+        { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "stella-workspaces.json";
+      a.click(); URL.revokeObjectURL(a.href);
+    });
+    const wsFile = $("wsfile");
+    $("wsimport").addEventListener("click", () => wsFile && wsFile.click());
+    if (wsFile) wsFile.addEventListener("change", () => {
+      const f = wsFile.files && wsFile.files[0];
+      if (!f) return;
+      const rd = new FileReader();
+      rd.onload = () => {
+        try {
+          const inc = JSON.parse(rd.result);
+          const all = wsLoad();
+          for (const k of Object.keys(inc)) {
+            if (inc[k] && typeof inc[k].phi === "string") all[k] = inc[k];
+          }
+          wsStore(all); wsRefresh();
+        } catch { /* ignore bad file */ }
+      };
+      rd.readAsText(f);
+      wsFile.value = "";
+    });
+    wsRefresh();
   }
 
   // ── permalink / deep links ─────────────────────────────────────────────────
@@ -756,7 +873,10 @@ export async function mountExplorer(root, opts = {}) {
       i = presets.findIndex((p) =>
         p.name.toLowerCase().includes(qPreset.toLowerCase()));
     }
-    await loadPreset(i >= 0 && i < presets.length ? i : 0);
+    i = i >= 0 && i < presets.length ? i : 0;
+    // In the IDE a preset opens as editable source; inline stays a trace.
+    if (compact) await loadPreset(i);
+    else if (!loadShowcase(i)) await loadPreset(i);
   } else if (compact) {
     await loadPreset(
       Number.isInteger(opts.initialPreset) && opts.initialPreset < presets.length
