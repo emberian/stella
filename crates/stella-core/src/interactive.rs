@@ -405,6 +405,38 @@ pub fn iex(phi: &Constellation, psi_init: Vec<Star>, fuel: usize) -> IExResult {
     IExResult { psi, is_normal_form: nf, steps }
 }
 
+/// Apply **one** resolution step at an explicitly chosen ray `Ψ[i][j]`
+/// (§51.8) and return the successor interaction space.
+///
+/// This is the per-step primitive `iex` uses internally, exposed so a UI can
+/// drive non-deterministic execution — letting the reader pick *which* redex
+/// resolves, not only the left-to-right one. `counter` must persist across a
+/// run so freshly-renamed Φ variables never collide.
+///
+/// Returns `None` if `(i, j)` is out of range, neutral, or not a redex.
+pub fn step_at(
+    phi: &Constellation,
+    psi: Vec<Star>,
+    star_idx: usize,
+    ray_idx: usize,
+    counter: &mut u32,
+) -> Option<Vec<Star>> {
+    let star = psi.get(star_idx)?;
+    let r = *star.get(ray_idx)?;
+    if ray_polarity(r) == Polarity::Neutral {
+        return None;
+    }
+    let psi_colours = all_colours(&psi);
+    let has_ext = !mat_phi_c(phi, r, &psi_colours).is_empty();
+    let has_self = !mat_self(star, ray_idx).is_empty();
+    if !has_ext && !has_self {
+        return None;
+    }
+    Some(interaction_step(
+        phi, psi, star_idx, ray_idx, counter, &psi_colours,
+    ))
+}
+
 /// `IEx_C(Φ) := IEx_C(Φ, Φ)` (§51.10).
 ///
 /// Uses `Φ` itself as both reference constellation and initial interaction space.

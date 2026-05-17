@@ -23,7 +23,7 @@
 use rustc_hash::FxHashMap;
 
 use crate::constellation::{Constellation, Star};
-use crate::subst::{fresh_var, Renaming};
+use crate::subst::Renaming;
 use crate::term::{mk_app, mk_var_interned, Sym, Term, Var};
 
 /// A parse failure, with a byte offset into the source.
@@ -251,14 +251,20 @@ impl<'a> Parser<'a> {
     }
 }
 
-/// Rename every variable in a star to a fresh, star-local name. Two stars
-/// parsed from source therefore never accidentally share a variable.
-fn rename_star_apart(star: &Star, star_idx: usize, counter: &mut u32) -> Star {
+/// Rename variables apart per star so two stars never accidentally share a
+/// variable — but keep the names *readable*: the first star keeps the names
+/// as written; later stars get a `_<i>` suffix. (Opaque fresh names would
+/// make the unifier readout unintelligible.)
+fn rename_star_apart(star: &Star, star_idx: usize, _counter: &mut u32) -> Star {
+    if star_idx == 0 {
+        return star.clone();
+    }
     let mut map: FxHashMap<Var, Var> = FxHashMap::default();
     for &r in star {
         for v in r.vars() {
-            map.entry(v)
-                .or_insert_with(|| fresh_var(&format!("s{star_idx}_"), counter));
+            map.entry(v).or_insert_with(|| {
+                Var::intern(&format!("{}_{star_idx}", v.as_str()))
+            });
         }
     }
     if map.is_empty() {

@@ -32,6 +32,13 @@ export function list_presets(): string;
 export function preset_count(): number;
 
 /**
+ * Like `run_source`, but drives an explicitly chosen resolution path.
+ * `path` is `"i,j;i,j;…"` (star,ray per step); steps not named follow the
+ * IEx default. Lets the explorer offer "pick which redex fires".
+ */
+export function run_path(phi_src: string, psi_src: string, path: string): string;
+
+/**
  * Parse and run a user-supplied constellation. `phi_src` is the reference
  * constellation Φ; `psi_src` is the initial interaction space Ψ. Returns
  * `{"ok":true,"steps":[…]}` or `{"ok":false,"error":"…","pos":N}`.
@@ -46,6 +53,7 @@ export interface InitOutput {
     readonly get_preset_steps: (a: number) => [number, number];
     readonly list_presets: () => [number, number];
     readonly preset_count: () => number;
+    readonly run_path: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly run_source: (a: number, b: number, c: number, d: number) => [number, number];
     readonly _start: () => void;
     readonly __wbindgen_free: (a: number, b: number, c: number) => void;
