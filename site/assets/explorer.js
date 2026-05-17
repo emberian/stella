@@ -14,6 +14,8 @@ const VIZ_URL = new URL("./vendor/viz-standalone.js", import.meta.url).href;
 // The Stella visual kit — star-and-ray glyphs, fields, verdict chips,
 // closure + proof-structure plates. Renders exact engine output; no inference.
 import * as DGM from "./diagram.js";
+// Schema-driven structured spec editor (form-primary, raw-JSON round-trip).
+import { SpecForm } from "./specform.js";
 
 let wasmReady = null;
 let vizReady = null;
@@ -255,9 +257,13 @@ const TEMPLATE_IDE = `
         <span class="stx-bar__spacer"></span>
         <button class="stx-iconbtn" data-role="cclose">✕</button>
       </div>
-      <textarea class="stx-ta" data-role="cspec" spellcheck="false" wrap="off" rows="14"></textarea>
+      <div class="sf-split">
+        <div class="sf-host" data-role="cform"></div>
+        <div class="sf-preview" data-role="cprev"><span class="sf-preview__lab">live preview</span></div>
+      </div>
       <div class="stx-modal__row">
-        <button class="st-btn st-btn--sm" data-role="cbuild">Build → editor</button>
+        <button class="st-btn st-btn--sm" data-role="cbuild">Build → editor&nbsp;<span class="stx-kbd">⌘↵</span></button>
+        <button class="st-btn st-btn--secondary st-btn--sm" data-role="cexample">Load example</button>
         <span class="stx-error" data-role="cerr"></span>
         <span class="stx-bar__spacer"></span>
         <span class="stx-syntax">The encoder is Eng-faithful; the result is editable source.</span>
@@ -278,9 +284,13 @@ const TEMPLATE_IDE = `
         <span class="stx-bar__spacer"></span>
         <button class="stx-iconbtn" data-role="lclose">✕</button>
       </div>
-      <textarea class="stx-ta" data-role="lspec" spellcheck="false" wrap="off" rows="9"></textarea>
+      <div class="sf-split">
+        <div class="sf-host" data-role="lform"></div>
+        <div class="sf-preview" data-role="lprev"><span class="sf-preview__lab">live preview</span></div>
+      </div>
       <div class="stx-modal__row">
-        <button class="st-btn st-btn--sm" data-role="lrun">Run</button>
+        <button class="st-btn st-btn--sm" data-role="lrun">Run&nbsp;<span class="stx-kbd">⌘↵</span></button>
+        <button class="st-btn st-btn--secondary st-btn--sm" data-role="lexample">Load example</button>
         <button class="st-btn st-btn--secondary st-btn--sm" data-role="lload" hidden>Φ_comp → editor</button>
         <span class="stx-error" data-role="lerr"></span>
         <span class="stx-bar__spacer"></span>
@@ -1001,52 +1011,158 @@ export async function mountExplorer(root, opts = {}) {
       if (e.key === "Enter") { e.preventDefault(); computeEx(); }
     });
 
-    // Construction lab: spec → Eng-faithful constellation → editable source.
-    const cpanel = $("cpanel"), cclass = $("cclass"), cspec = $("cspec"),
-      cerr = $("cerr");
-    const setSpec = () => { cspec.value = CSPEC[cclass.value] || "{}"; cerr.textContent = ""; };
-    $("construct").addEventListener("click", () => {
-      if (!cspec.value.trim()) setSpec();
-      cpanel.hidden = false;
+    // ── Shared spec helpers ────────────────────────────────────────────────
+    const SPEC_KEY = (m, k) => `stella.spec.${m}.${k}`;
+    const parseCheck = (src) => {
+      if (!src || !src.trim()) return true;
+      try { return JSON.parse(mod.parse_check(src, "")).ok !== false; }
+      catch { return false; }
+    };
+    const prevReset = (host) => {
+      host.textContent = "";
+      host.appendChild(
+        Object.assign(document.createElement("span"),
+          { className: "sf-preview__lab", textContent: "live preview" }));
+      return host;
+    };
+    // Live diagram preview from the in-progress form value.
+    function renderSpecPreview(kind, v, host) {
+      prevReset(host);
+      try {
+        if (kind === "mll" || kind === "mll2i" || kind === "proofnet") {
+          host.appendChild(DGM.proofStructure(v.kind || kind, v.links || []));
+        } else if (kind === "ortho") {
+          host.appendChild(DGM.field(v.phi1 || "", { title: "Φ₁" }));
+          host.appendChild(DGM.field(v.phi2 || "", { title: "Φ₂" }));
+        } else if (kind === "compare") {
+          host.appendChild(DGM.field(v.phiA || "", { title: "ΦA" }));
+          host.appendChild(DGM.field(v.psiA || "", { title: "ΨA" }));
+          host.appendChild(DGM.field(v.phiB || "", { title: "ΦB" }));
+          host.appendChild(DGM.field(v.psiB || "", { title: "ΨB" }));
+        } else if (kind === "behaviour") {
+          host.appendChild(DGM.setField(v.members || [], { title: "A — members" }));
+          host.appendChild(DGM.setField(v.universe || [], { title: "universe" }));
+        } else if (kind === "nfta") {
+          host.appendChild(DGM.field((v.rules || []).map((r) =>
+            `[${r.state}, ${r.symbol}(${(r.successors || []).join(",")})]`).join(" + "),
+            { title: `${(v.rules || []).length} rules` }));
+        } else if (kind === "circuit") {
+          host.appendChild(DGM.field((v.gates || []).map((g) =>
+            `[${g.label}(${(g.inputs || []).join(",")})${g.is_output ? ", out" : ""}]`).join(" + "),
+            { title: `${(v.gates || []).length} gates` }));
+        } else {
+          // automata / tiles — a compact structural snapshot
+          const box = document.createElement("div");
+          box.className = "dgm-tiles";
+          const tile = (label, val) => {
+            const d = document.createElement("div"); d.className = "dgm-tile";
+            d.appendChild(Object.assign(document.createElement("div"),
+              { className: "dgm-tile__v", textContent: String(val) }));
+            d.appendChild(Object.assign(document.createElement("div"),
+              { className: "dgm-tile__k", textContent: label }));
+            box.appendChild(d);
+          };
+          if (v.states) tile("states", v.states.length);
+          if (v.transitions) tile("δ rows", v.transitions.length);
+          if (v.delta) tile("δ rows", v.delta.length);
+          if (v.tile_types) tile("tiles", v.tile_types.length);
+          if (v.word) tile("|word|", v.word.length);
+          if (v.input) tile("|input|", v.input.length);
+          host.appendChild(box);
+          if (v.states && v.states.length) {
+            const f = document.createElement("div"); f.className = "sf-preview__lab";
+            f.textContent = "states: " + v.states.join(" · ");
+            host.appendChild(f);
+          }
+        }
+      } catch (_) { /* preview is best-effort; never block editing */ }
+    }
+
+    // Construction lab — schema-driven form → Eng-faithful constellation.
+    const cpanel = $("cpanel"), cclass = $("cclass"), cerr = $("cerr");
+    const cForm = new SpecForm($("cform"), {
+      parseCheck,
+      onChange: (v) => {
+        try { localStorage.setItem(SPEC_KEY("c", cclass.value), JSON.stringify(v)); } catch (_) {}
+        renderSpecPreview(cclass.value, v, $("cprev"));
+      },
     });
-    $("cclose").addEventListener("click", () => { cpanel.hidden = true; });
-    cpanel.addEventListener("click", (e) => { if (e.target === cpanel) cpanel.hidden = true; });
-    cclass.addEventListener("change", setSpec);
-    setSpec();
-    $("cbuild").addEventListener("click", () => {
+    const cSetSchema = (useExample) => {
+      cerr.textContent = "";
+      let init = null;
+      if (!useExample) {
+        try { init = JSON.parse(localStorage.getItem(SPEC_KEY("c", cclass.value))); } catch (_) {}
+      }
+      if (!init) { try { init = JSON.parse(CSPEC[cclass.value] || "{}"); } catch (_) {} }
+      cForm.setSchema(cclass.value, init);
+    };
+    const cBuild = () => {
       cerr.textContent = "";
       let res;
-      try { res = JSON.parse(mod.build_machine(cclass.value, cspec.value)); }
+      try { res = JSON.parse(mod.build_machine(cclass.value, cForm.json())); }
       catch (e) { cerr.textContent = "engine error: " + e.message; return; }
       if (!res.ok) { cerr.textContent = res.error || "build failed"; return; }
       cpanel.hidden = true;
       choicePath = [];
       loadIntoEditor(res.phi, res.psi || "");
+    };
+    $("construct").addEventListener("click", () => {
+      if (!cForm.schemaKey) cSetSchema(false);
+      cpanel.hidden = false;
+      cpanel.querySelector(".sf-in,.sf-sel,.sf-add")?.focus();
     });
+    $("cclose").addEventListener("click", () => { cpanel.hidden = true; });
+    cpanel.addEventListener("click", (e) => { if (e.target === cpanel) cpanel.hidden = true; });
+    cpanel.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") cpanel.hidden = true;
+      else if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); cBuild(); }
+    });
+    cclass.addEventListener("change", () => cSetSchema(false));
+    $("cexample").addEventListener("click", () => cSetSchema(true));
+    $("cbuild").addEventListener("click", cBuild);
+    cSetSchema(false);
 
     // ── Logic workbench ────────────────────────────────────────────────────
-    const lpanel = $("lpanel"), lclass = $("lclass"), lspec = $("lspec"),
+    const lpanel = $("lpanel"), lclass = $("lclass"),
       lerr = $("lerr"), lout = $("lout"), lload = $("lload");
     let lastPhiComp = "";
-    const setLSpec = () => { lspec.value = LSPEC[lclass.value] || "{}"; lerr.textContent = ""; lout.innerHTML = ""; lload.hidden = true; };
+    const lForm = new SpecForm($("lform"), {
+      parseCheck,
+      onChange: (v) => {
+        try { localStorage.setItem(SPEC_KEY("l", lclass.value), JSON.stringify(v)); } catch (_) {}
+        renderSpecPreview(lclass.value, v, $("lprev"));
+      },
+    });
+    const lSetSchema = (useExample) => {
+      lerr.textContent = ""; lout.textContent = ""; lload.hidden = true;
+      let init = null;
+      if (!useExample) {
+        try { init = JSON.parse(localStorage.getItem(SPEC_KEY("l", lclass.value))); } catch (_) {}
+      }
+      if (!init) { try { init = JSON.parse(LSPEC[lclass.value] || "{}"); } catch (_) {} }
+      lForm.setSchema(lclass.value, init);
+    };
     $("logic").addEventListener("click", () => {
-      if (!lspec.value.trim()) setLSpec();
+      if (!lForm.schemaKey) lSetSchema(false);
       lpanel.hidden = false;
+      lpanel.querySelector(".sf-in,.sf-sel,.sf-add")?.focus();
     });
     $("lclose").addEventListener("click", () => { lpanel.hidden = true; });
     lpanel.addEventListener("click", (e) => { if (e.target === lpanel) lpanel.hidden = true; });
-    lclass.addEventListener("change", setLSpec);
-    setLSpec();
-    const yesno = (b) => b ? '<span class="stx-ex__ok">yes</span>' : '<span class="stx-ex__no">no</span>';
+    lpanel.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") lpanel.hidden = true;
+      else if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); $("lrun").click(); }
+    });
+    lclass.addEventListener("change", () => lSetSchema(false));
+    $("lexample").addEventListener("click", () => lSetSchema(true));
+    lSetSchema(false);
     lload.addEventListener("click", () => {
       if (!lastPhiComp) return;
       lpanel.hidden = true; choicePath = []; loadIntoEditor(lastPhiComp, "");
     });
     $("lrun").addEventListener("click", () => {
       lerr.textContent = ""; lout.innerHTML = ""; lload.hidden = true;
-      let spec;
-      try { spec = JSON.parse(lspec.value); }
-      catch (e) { lerr.textContent = "spec JSON: " + e.message; return; }
+      const spec = lForm.value();
       let res;
       try {
         if (lclass.value === "ortho") {
@@ -1058,7 +1174,7 @@ export async function mountExplorer(root, opts = {}) {
           res = JSON.parse(mod.lc_compare(spec.phiA || "", spec.psiA || "",
             spec.phiB || "", spec.psiB || "", fuelVal()));
         } else {
-          res = JSON.parse(mod.lc_behaviour(lspec.value));
+          res = JSON.parse(mod.lc_behaviour(lForm.json()));
         }
       } catch (e) { lerr.textContent = "engine error: " + e.message; return; }
       if (!res.ok) { lerr.textContent = res.error || "failed"; return; }
