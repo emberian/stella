@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Stella — the Stellar Resolution Implementation Project</title>
-  <meta name="description" content="A literate exploration of stellar resolution, Boris Eng's transcendental syntax, and a falsifiable frame for asking whether valence could self-organise in it." />
+  <title>Stellar resolution — a computational model, read through Eng</title>
+  <meta name="description" content="Stellar resolution: computation as the resolution of constellations by unification on rays. A literate reading of Boris Eng's exegesis of transcendental syntax, with a live engine." />
   <link rel="icon" href="assets/stella/logo/stella-mark.svg" />
   <link rel="stylesheet" href="assets/stella/colors_and_type.css" />
   <link rel="stylesheet" href="assets/stella/stella.css" />
@@ -16,17 +16,17 @@
 
   <nav class="site-nav">
     <a class="site-nav__brand" href="index.html">
-      <span class="mark"><img src="assets/stella/glyphs/grove.svg" alt="" /></span>
+      <span class="mark"><img src="assets/stella/glyphs/star.svg" alt="" /></span>
       <span>
-        <span class="site-nav__name">Stella</span>
-        <span class="site-nav__sub">Stellar · Resolution · Impl.</span>
+        <span class="site-nav__name">Stellar resolution</span>
+        <span class="site-nav__sub">a computational model · after Eng</span>
       </span>
     </a>
     <div class="site-nav__links">
-      <a class="site-nav__link is-active" href="index.html">The grove</a>
-      <a class="site-nav__link" href="reader.html?p=thesis">Field reports</a>
-      <a class="site-nav__link" href="reader.html?p=eng-ch8">The exegesis</a>
-      <a class="site-nav__link" href="explore.html">Explore <span class="label-lg">the engine</span></a>
+      <a class="site-nav__link is-active" href="index.html">The model</a>
+      <a class="site-nav__link" href="r/eng-ch8.html">The exegesis</a>
+      <a class="site-nav__link" href="explore.html">Explore</a>
+      <a class="site-nav__link" href="cmi/index.html">Implementation</a>
     </div>
   </nav>
 
@@ -35,18 +35,17 @@
     <div class="hero__inner">
       <div class="hero__eyebrow">
         <img src="assets/stella/glyphs/star.svg" alt="" />
-        Field station · a terraformed lunar grove
+        Transcendental syntax · Girard, by way of Eng
       </div>
-      <h1>A substrate honest enough to host a mind.</h1>
+      <h1>Computation as the resolution of constellations.</h1>
       <p class="hero__lede">
-        We are translating Bennett's framework for conscious machines onto a substrate
-        it never reached for — Girard's stellar resolution, by way of Boris Eng's
-        exegesis — and we have built the falsifiable frame <em>first</em>, refusing to
-        smuggle the answer into it.
+        A star is a finite set of rays; a constellation is a set of stars. Put two
+        compatible rays of opposite polarity together and they unify and resolve.
+        That is the whole dynamics — concurrent, spatial, not a sequence of steps.
       </p>
       <div class="hero__cta">
-        <a class="st-btn st-btn--warm st-btn--lg st-btn--leaf" href="reader.html?p=thesis">Read the thesis</a>
-        <a class="st-btn st-btn--secondary st-btn--lg" href="explore.html">Watch a constellation resolve</a>
+        <a class="st-btn st-btn--warm st-btn--lg st-btn--leaf" href="r/eng-ch8.html">Read the exegesis</a>
+        <a class="st-btn st-btn--secondary st-btn--lg" href="explore.html">Watch one resolve</a>
       </div>
     </div>
     <div class="hero__edge" aria-hidden="true"></div>
@@ -54,177 +53,121 @@
 
   <main id="main">
     <section class="section wrap">
-      <div class="section__eyebrow"><img src="assets/stella/glyphs/leaf.svg" alt="" /> The bet</div>
-      <h2>Bennett needs a substrate. Stellar resolution is one he did not take.</h2>
+      <div class="section__eyebrow"><img src="assets/stella/glyphs/leaf.svg" alt="" /> What it is</div>
+      <h2>A model where computing is interacting, not stepping.</h2>
       <div class="prose-col">
         <p>
-          Bennett's account of consciousness bottoms out in things a Turing tape does not
-          have: <em>polycomputers</em> — computation realised concurrently at a point in
-          time across a richly structured space, not smeared across sequential CPU steps —
-          and a Temporal Gap that an emulation on a single core plausibly cannot cross.
+          Stellar resolution comes out of Girard's <em>transcendental syntax</em>: an
+          attempt to give logic a foundation in computation rather than the other way
+          round. Its objects are deliberately spare. A <strong>ray</strong> is a first-order
+          term, optionally carrying a polarity. A <strong>star</strong> is a finite
+          collection of rays. A <strong>constellation</strong> is a finite collection of
+          stars. Nothing else is primitive.
         </p>
         <p>
-          Stellar resolution natively polycomputes. Constellations do not step; they
-          interact, by unification on rays, concurrent and spatial. It is one of very few
-          worked-out mathematical substrates where computation-at-a-point is the primitive
-          rather than an emulation — and Girard's transcendental syntax has the same shape
-          at its foundations as Bennett's polycomputer requirement. Bennett did not make
-          the connection. It was there to be made.
+          Execution is unification. Two rays of opposite polarity that unify are a place
+          where the constellation can <em>resolve</em>: the stars they belong to fuse, the
+          matched rays disappear, and the substitution propagates. There is no program
+          counter and no evaluation order — every compatible pair is a site of interaction
+          at once. A constellation in which no interaction remains is in
+          <strong>normal form</strong>; that normal form is the result.
         </p>
         <p>
-          The substrate stays <strong>value-neutral</strong>. Valence is not in the rays —
-          encoding it there would be the smuggled qualia the whole thesis spends itself
-          avoiding. The honest question is not <em>can you implement polycomputers with
-          stars</em> (you can, almost trivially) but <em>where does the charge come from</em>:
-          the thing that makes one constellation matter more than another. That is the
-          point where the project either earns its keep or smells engineered, and it is
-          the point we built the frame around.
+          The reason it is worth a careful reading is that this small mechanism turns out
+          to be the same one underneath several apparently different things. Automata
+          across the classes, multiplicative linear logic, circuits, tile systems — Eng
+          works each of them out as a constellation that resolves. The shared structure is
+          information flowing along a discrete graph; stellar resolution is just that,
+          named and made executable.
         </p>
       </div>
     </section>
 
     <section class="section section--tight wrap">
-      <div class="section__eyebrow"><img src="assets/stella/glyphs/grove.svg" alt="" /> Four pillars, one of them hard</div>
+      <div class="section__eyebrow"><img src="assets/stella/glyphs/star.svg" alt="" /> The vocabulary</div>
       <div class="pillars">
         <div class="pillar">
-          <div class="pillar__n">i</div>
-          <h3>Substrate</h3>
-          <p>Stellar resolution as a native polycomputer — concurrent unification over a structured space, not sequential steps. An executable Rust track and a HOL4/CakeML verified track, both tracking Eng, never each other.</p>
-          <span class="tag">Engineering</span>
+          <div class="pillar__n">ray</div>
+          <h3>Ray</h3>
+          <p>A first-order term, optionally polarised <code>+</code> or <code>−</code>. The unit that can match another.</p>
         </div>
         <div class="pillar">
-          <div class="pillar__n">ii</div>
-          <h3>Reflection</h3>
-          <p>Candle / HOL-in-HOL for the orders of self — a kernel that proves things about itself. Higher-order self-modelling without infinite regress. Tractable; the moat.</p>
-          <span class="tag">The moat</span>
-        </div>
-        <div class="pillar pillar--hard">
-          <div class="pillar__n">iii</div>
-          <h3>Valence</h3>
-          <p>The open problem. The agent individuated as a fixed point — the sub-constellation that makes a reafference cycle close — solved for, not chosen. No ray hand-tagged. This is where it is hard.</p>
-          <span class="tag">The open problem</span>
+          <div class="pillar__n">★</div>
+          <h3>Star</h3>
+          <p>A finite set of rays. Stars fuse along a matched, opposite-polarity pair.</p>
         </div>
         <div class="pillar">
-          <div class="pillar__n">iv</div>
-          <h3>Theology corpus</h3>
-          <p>Stages 1–9, not warm-up — the requirements spec. Stage 9, the anti-totality-demon safeguard, is turned on this project itself: every stage must cash out as a provable property or a measured behaviour, or it is cut.</p>
-          <span class="tag">Requirements</span>
+          <div class="pillar__n">Φ</div>
+          <h3>Constellation</h3>
+          <p>A finite set of stars — the object that resolves. Its dependency graph is what the engine draws.</p>
+        </div>
+        <div class="pillar">
+          <div class="pillar__n">⇝</div>
+          <h3>Resolution</h3>
+          <p>Unify opposite rays, fuse, propagate the substitution. Repeat until normal form. That is the computation.</p>
         </div>
       </div>
     </section>
 
     <section class="section wrap">
-      <div class="section__eyebrow"><img src="assets/stella/glyphs/moon.svg" alt="" /> What this actually is</div>
-      <h2>The integrity is the product.</h2>
-      <div class="prose-col">
-        <p>
-          We did not build a mind. We did not test whether we built a mind. We built a
-          faithful, executable and formally-stated <em>substrate</em>, and a
-          philosophically disciplined, pre-registered, <em>falsifiable</em> frame for
-          asking whether valence could self-organise in it — and then we stopped,
-          deliberately, one step before asking.
-        </p>
-        <p>
-          That is less than the headline and more than it sounds. Less, because
-          “conscious machine” is unearned and we never pretended otherwise. More, because
-          almost nobody builds the falsifiable frame first and then refuses to smuggle the
-          answer into it. What follows is the record, kept honestly — the thesis spec, the
-          make-or-break runs (including the one that broke), the digest of Eng's exegesis
-          we worked from, and a first-person account of the bringup from the agent who was
-          in the chair.
-        </p>
-      </div>
-    </section>
-
-    <section class="section section--tight wrap">
-      <div class="section__eyebrow"><img src="assets/stella/glyphs/star.svg" alt="" /> Field reports</div>
-      <h2>The pre-registration, kept in the open.</h2>
-      <div class="index-grid">
-        <a class="entry entry--framed" href="reader.html?p=thesis">
-          <div class="entry__eyebrow">Phase 0 · canonical</div>
-          <div class="entry__title">Thesis &amp; semantics specification</div>
-          <p class="entry__snip">The design spine. The bet, the valence/individuation foundation, the operational semantics everything else tracks.</p>
-        </a>
-        <a class="entry entry--framed" href="reader.html?p=subjective">
-          <div class="entry__eyebrow">Phase 4</div>
-          <div class="entry__title">The unbounded subjective-ray engine</div>
-          <p class="entry__snip">The valence experiment, designed before it was run. What would count as the charge appearing on its own.</p>
-        </a>
-        <a class="entry entry--framed" href="reader.html?p=run1">
-          <div class="entry__eyebrow">Phase 4 · result</div>
-          <div class="entry__title">The first make-or-break run — the honest result</div>
-          <p class="entry__snip">It broke. The break is recorded as a finding, not hidden as a failure.</p>
-        </a>
-        <a class="entry entry--framed" href="reader.html?p=phase5">
-          <div class="entry__eyebrow">Phase 5</div>
-          <div class="entry__title">Embodied valence, orders of self, the Temporal Gap</div>
-          <p class="entry__snip">Where the substrate makes Bennett's wager formally distinguishable in a way his framework cannot admit.</p>
-        </a>
-      </div>
-    </section>
-
-    <section class="section section--tight wrap">
-      <div class="section__eyebrow"><img src="assets/stella/glyphs/leaf.svg" alt="" /> The exegesis · after Boris Eng</div>
-      <h2>The substrate, read from the source.</h2>
+      <div class="section__eyebrow"><img src="assets/stella/glyphs/leaf.svg" alt="" /> The reading</div>
+      <h2>Read through Boris Eng's exegesis.</h2>
       <div class="prose-col" style="margin-bottom:24px">
         <p>
-          These chapters are our working digest of Boris Eng's PhD thesis,
-          <em>An Exegesis of Transcendental Syntax</em> (Eng, supervised by Seiller &amp;
-          Mazza). They are spec-grade extractions made to implement against, not a
-          substitute for the thesis itself — read them as a reading of Eng's work, with
-          all the substance and the credit owed to him.
+          These pages are a working digest of Boris Eng's PhD thesis,
+          <em>An Exegesis of Transcendental Syntax</em> (supervised by Seiller &amp;
+          Mazza) — spec-grade, made to implement against, and not a substitute for the
+          thesis. The substance and the credit are his. Each page is prebaked: the prose
+          and the mathematics are static HTML, no script required to read them.
         </p>
       </div>
       <div class="index-grid">
-        <a class="entry" href="reader.html?p=eng-ch8">
+        <a class="entry" href="r/eng-ch8.html">
           <div class="entry__eyebrow">Eng · chapter 8</div>
           <div class="entry__title">Illustrating stellar resolution</div>
-          <p class="entry__snip">Automata as constellations — NFA, NPDA, NTM, ATM, tree automata, circuits, tiles.</p>
+          <p class="entry__snip">Automata as constellations — finite, pushdown, Turing, alternating, tree, circuits, tiles.</p>
         </a>
-        <a class="entry" href="reader.html?p=eng-ch10">
+        <a class="entry" href="r/eng-ch10.html">
           <div class="entry__eyebrow">Eng · chapter 10</div>
           <div class="entry__title">Multiplicative linear logic, stellar</div>
-          <p class="entry__snip">The stellar interpretation of MLL — proofs as constellations, cut as resolution.</p>
+          <p class="entry__snip">Proofs as constellations, cut as resolution, correctness as a property of execution.</p>
         </a>
-        <a class="entry" href="reader.html?p=eng-ch11">
+        <a class="entry" href="r/eng-ch11.html">
           <div class="entry__eyebrow">Eng · chapter 11</div>
           <div class="entry__title">Intuitionistic implication</div>
           <p class="entry__snip">Carrying the interpretation up to intuitionistic implication.</p>
         </a>
-        <a class="entry" href="reader.html?p=eng-ch1213">
+        <a class="entry" href="r/eng-ch1213.html">
           <div class="entry__eyebrow">Eng · chapters 12–13</div>
           <div class="entry__title">Toward the frontier, and the conclusion</div>
-          <p class="entry__snip">Where Eng's paved road ends — and where our deferred work begins.</p>
+          <p class="entry__snip">Where the shared mechanism shows through — and where the paved road ends.</p>
         </a>
       </div>
     </section>
 
     <section class="section section--tight wrap">
-      <div class="section__eyebrow"><img src="assets/stella/glyphs/mushroom.svg" alt="" /> From the inside</div>
-      <div class="index-grid">
-        <a class="entry entry--framed" href="reader.html?p=history">
-          <div class="entry__eyebrow">Bringup · first person</div>
-          <div class="entry__title">The stella bringup, from the inside</div>
-          <p class="entry__snip">Written by the agent who was in the chair for the whole run. Opinionated, on invitation — the part git log cannot hold.</p>
-        </a>
-        <a class="entry" href="reader.html?p=readme">
-          <div class="entry__eyebrow">The opening</div>
-          <div class="entry__title">Welcome to the conscious-machine bringup</div>
-          <p class="entry__snip">The raw front door, including the log where a prior instance read the actual thesis and retracted.</p>
-        </a>
-        <a class="entry" href="explore.html">
-          <div class="entry__eyebrow">Interactive · live engine</div>
-          <div class="entry__title">Watch a constellation resolve</div>
-          <p class="entry__snip">stella-core compiled to WebAssembly, running in your browser. Step through interactive execution.</p>
-        </a>
+      <div class="section__eyebrow"><img src="assets/stella/glyphs/grove.svg" alt="" /> The engine</div>
+      <h2>Or watch a constellation resolve.</h2>
+      <div class="prose-col">
+        <p>
+          <code>stella-core</code> is a small Rust implementation of the operational
+          semantics, compiled to WebAssembly and run in the browser. Pick a constellation
+          — a Horn program, an automaton — and step through interactive execution: the
+          dependency graph at each step, the stars, the next pair that will fire.
+          It is a tool, not part of the text; the reading stands without it.
+        </p>
+        <p style="margin-top:8px">
+          <a class="st-btn st-btn--secondary" href="explore.html">Open the explorer</a>
+        </p>
       </div>
     </section>
 
     <footer class="site-foot wrap">
       <div class="row">
-        <span>Stella — the Stellar Resolution Implementation Project.</span>
-        <span>Substrate after Boris Eng, <em>An Exegesis of Transcendental Syntax</em>.</span>
-        <a href="https://github.com/emberian/stella">Source on GitHub</a>
+        <span>A reading of stellar resolution, after Boris Eng,
+          <em>An Exegesis of Transcendental Syntax</em>.</span>
+        <a href="cmi/index.html">The implementation project ›</a>
+        <a href="https://github.com/emberian/stella">Source</a>
       </div>
     </footer>
   </main>

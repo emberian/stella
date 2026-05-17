@@ -291,9 +291,20 @@ a:hover { color: var(--accent-hover); }
 }
 .fj-prose .footnote-backref { color: var(--bark); text-decoration: none; }
 
-/* KaTeX sizing in prose */
-.fj-prose .katex { font-size: 1.04em; }
-.fj-prose .katex-display { margin: 22px 0; overflow-x: auto; overflow-y: hidden; padding: 4px 0; }
+/* MathML — prebaked at build time, rendered natively (no script, no webfont).
+   Math is part of the static document; a web-archive snapshot keeps it. */
+.fj-prose math { font-size: 1.05em; }
+.fj-prose .math.inline { white-space: nowrap; }
+.fj-prose .math.block,
+.fj-prose math[display="block"] {
+  display: block; margin: 22px 0; overflow-x: auto; overflow-y: hidden;
+  padding: 6px 0; max-width: 100%; text-align: center;
+}
+.fj-prose .math.block math { display: inline-block; }
+.fj-prose .tex-fallback code {
+  display: inline-block; white-space: pre-wrap; word-break: break-word;
+}
+.fj-prose div.tex-fallback { margin: 22px 0; }
 
 /* Reader loading / error */
 .reader-status {

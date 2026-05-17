@@ -39,6 +39,9 @@ jobs:
         with:
           tool: wasm-pack
 
+      - name: Install uv (for the static prebake)
+        uses: astral-sh/setup-uv@v5
+
       - name: Cache cargo
         uses: actions/cache@v4
         with:
@@ -49,7 +52,7 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
 
-      - name: Assemble the site (WASM + content)
+      - name: Prebake the site (static HTML + MathML, then WASM)
         run: make site
 
       - name: Upload Pages artifact
