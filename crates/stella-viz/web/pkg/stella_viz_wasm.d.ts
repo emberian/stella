@@ -4,6 +4,14 @@
 export function _start(): void;
 
 /**
+ * Construction lab: turn a structured machine/proof spec into editable
+ * surface source. `kind` ∈ {nfa,npda,ntm,atm,nfta,nfst,circuit,tiles,
+ * mll,mll2i}; `json` is the spec. Returns
+ * `{"ok":true,"phi":"…","psi":"…"}` or `{"ok":false,"error":"…"}`.
+ */
+export function build_machine(kind: string, json: string): string;
+
+/**
  * Return the dep-graph DOT + execution summary for preset `idx` as JSON:
  * `{"name": "…", "dep_graph_dot": "…", "execution_summary": "…"}`
  *
@@ -62,6 +70,7 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
+    readonly build_machine: (a: number, b: number, c: number, d: number) => [number, number];
     readonly get_preset_dot: (a: number) => [number, number];
     readonly get_preset_steps: (a: number) => [number, number];
     readonly list_presets: () => [number, number];

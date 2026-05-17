@@ -794,6 +794,32 @@ figure.stx-figure figcaption .num {
   .stx-pane--constellation.is-active { grid-template-columns: 1fr; }
 }
 
+/* ── Construction lab modal ───────────────────────────────── */
+.stx-modal {
+  position: fixed; inset: 0; z-index: 60;
+  background: color-mix(in oklab, var(--canopy) 60%, transparent);
+  display: grid; place-items: center; padding: 24px;
+}
+.stx-modal[hidden] { display: none; }
+.stx-modal__box {
+  width: min(720px, 96vw); max-height: 88vh; overflow: auto;
+  background: var(--cream); border: 2px solid var(--bark);
+  border-radius: var(--r-4); box-shadow: var(--shadow-3);
+  padding: 16px 18px; display: flex; flex-direction: column; gap: 12px;
+}
+.stx-modal__head {
+  display: flex; align-items: center; gap: 12px;
+  font-family: var(--font-display); font-size: 18px; color: var(--ink);
+}
+.stx-modal__row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.stx-modal .stx-ta {
+  position: static; color: var(--ink); caret-color: var(--ink);
+  background: var(--parchment); border: 1px solid var(--border-strong);
+  border-radius: var(--r-2); padding: 12px 14px; min-height: 240px;
+  font-family: var(--font-mono); font-size: 13px; line-height: 1.55;
+  white-space: pre; overflow: auto; box-shadow: var(--inner-1);
+}
+
 /* ── Prev / next pager ────────────────────────────────────── */
 .fj-pager {
   display: flex; justify-content: space-between; gap: 16px;
