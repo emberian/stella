@@ -458,10 +458,21 @@ falsifier the validator must catch.
    - ✅ Stage 1b (f5e845c): unify_fast wired into the fast tier;
      measured galaxy Φ=405 ~2.0× total, unify 53%→9%; faithfulness
      proven (psi_compatible + falsifier); zero regressions.
-   - **(NOW TOP) the NEXT lever is `find` (≈30% now, the new dominant
-     phase):** discrimination-tree / fingerprint indexing beyond
-     `fp_unifiable` (docs/09 §E, docs/10 §2.1) — same two-tier
-     psi_compatible-gated discipline. Then Stage 2/3 below.
+   - ✅ Lever C memoised graph reduction (b6c65d5): deep_decode +
+     engine force_value memo, is_ground-gated (docs/11 §G soundness),
+     value-identical, zero regressions. **HONEST MEASURED NEGATIVE:**
+     does NOT crack `data[0]` (still non-terminating in 150s) ⇒ the
+     galaxy image payload is *not* redundancy-bound; it is a genuinely
+     long non-redundant reduction. C is a sound necessary foundation
+     but CANNOT alone reach the frame. Measurement confirms docs/11
+     C→B→D: **the frame / >10× now requires Lever B (Φ-specialisation,
+     compile fixed Φ=405 → per-head transition table, per-step
+     collapse) and/or Lever D (KA2 recurrence accel, O(n)→O(1) on the
+     recurrent core — KG8 whistle substrate Built)**. Both
+     design-complete (docs/11), psi_compatible-gated, NOT yet built.
+   - `find` (≈30%, constant-factor): discrimination-tree indexing —
+     real but capped at ~1.05× by Fact-1 in docs/11; secondary to B/D.
+     Two-tier psi_compatible-gated when done.
    - Stage 2 delete dead byte-identity scaffolding (`*counter+=1` parity
      hack at the freshen site); `iex_tabled_result_eq_iex` already
      result-equiv (passes) — retarget onto `psi_compatible` for
