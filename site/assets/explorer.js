@@ -118,17 +118,25 @@ const TEMPLATE = (compact) => `
     ${compact ? "" : `
     <div class="stx-pane" data-pane="editor">
       <div class="stx-editor">
-        <label>Reference constellation Φ
-          <textarea data-role="phi" spellcheck="false" rows="4"></textarea></label>
-        <label>Interaction space Ψ
-          <textarea data-role="psi" spellcheck="false" rows="2"></textarea></label>
+        <label>Reference constellation Φ — the rules
+          <textarea data-role="phi" spellcheck="false" autocapitalize="off"
+            autocomplete="off" rows="5"
+            placeholder="[+add(0, Y, Y)] + [-add(X, Y, Z), +add(s(X), Y, s(Z))]"></textarea></label>
+        <label>Interaction space Ψ — the query
+          <textarea data-role="psi" spellcheck="false" autocapitalize="off"
+            autocomplete="off" rows="2"
+            placeholder="[-add(s(s(0)), s(s(0)), R), R]"></textarea></label>
         <div class="stx-editor__row">
-          <button class="st-btn st-btn--sm" data-role="run">Resolve ▸</button>
+          <button class="st-btn st-btn--sm" data-role="run">Resolve&nbsp;▸<span class="stx-kbd">⌘⏎</span></button>
           <select class="stx-select stx-select--light" data-role="examples" aria-label="Load an example"></select>
-          <span class="stx-error" data-role="error"></span>
+          <span class="stx-bar__spacer"></span>
+          <span class="stx-validity" data-role="validity"></span>
         </div>
-        <p class="stx-syntax">Syntax: <code>[+f(X), -g(X,a)] + [-f(Y), Y]</code> — uppercase = variable,
-          <code>+</code>/<code>-</code> = polarity, <code>+</code> or newline separates stars.</p>
+        <pre class="stx-frame" data-role="frame" hidden></pre>
+        <p class="stx-syntax">Uppercase&nbsp;=&nbsp;variable&nbsp;·
+          <code>+</code>/<code>-</code>&nbsp;=&nbsp;polarity&nbsp;·
+          <code>+</code>&nbsp;or newline separates stars&nbsp;·
+          <a href="r/notation.html" target="_blank" rel="noopener">notation&nbsp;↗</a></p>
       </div>
     </div>`}
   </div>
@@ -143,6 +151,7 @@ const TEMPLATE = (compact) => `
       <option value="1400">0.5×</option><option value="750" selected>1×</option>
       <option value="380">2×</option><option value="160">4×</option>
     </select>
+    ${compact ? "" : '<button class="st-btn st-btn--secondary st-btn--sm" data-role="fork" title="Send this state to the editor and continue from it" hidden>⑂ Fork here</button>'}
     <span class="step-readout" data-role="readout"></span>
   </div>
   <div class="stx-desc" data-role="desc"></div>
@@ -161,6 +170,15 @@ const EXAMPLES = [
   { name: "List membership",
     phi: "[+mem(X, cons(X, T))] + [-mem(X, T), +mem(X, cons(Y, T))]",
     psi: "[-mem(b, cons(a, cons(b, nil))), R]" },
+  { name: "List append",
+    phi: "[+app(nil, Y, Y)] + [-app(X, Y, Z), +app(cons(H, X), Y, cons(H, Z))]",
+    psi: "[-app(cons(a, cons(b, nil)), cons(c, nil), R), R]" },
+  { name: "Even / odd (mutual recursion)",
+    phi: "[+even(0)] + [-odd(X), +even(s(X))] + [-even(X), +odd(s(X))]",
+    psi: "[-even(s(s(s(s(0))))), R] + [-odd(s(s(s(0)))), S]" },
+  { name: "Concurrency — two queries, two redexes",
+    phi: "[+add(0, Y, Y)] + [-add(X, Y, Z), +add(s(X), Y, s(Z))]",
+    psi: "[-add(s(0), s(0), R), R] + [-add(s(s(0)), 0, S), S]" },
 ];
 
 export async function mountExplorer(root, opts = {}) {
@@ -336,6 +354,8 @@ export async function mountExplorer(root, opts = {}) {
     elScrub.value = String(idx);
     $("prev").disabled = idx <= 0;
     $("next").disabled = idx >= steps.length - 1;
+    const fk = $("fork");
+    if (fk) fk.hidden = !sourceMode;
     const name = sourceMode ? "source" : (presets[presetIdx]?.name ?? "");
     elReadout.innerHTML =
       `${esc(name)} — step ${idx} / ${steps.length - 1}` +
@@ -364,6 +384,7 @@ export async function mountExplorer(root, opts = {}) {
   elPlay.addEventListener("click", () => (playTimer ? stop() : play()));
   elSpeed.addEventListener("change", () => { if (playTimer) { stop(); play(); } });
   $("reset").addEventListener("click", () => { stop(); go(0); });
+  { const fk = $("fork"); if (fk) fk.addEventListener("click", forkFromHere); }
   $("prev").addEventListener("click", () => { stop(); go(idx - 1); });
   $("next").addEventListener("click", () => { stop(); go(idx + 1, idx); });
   elScrub.addEventListener("input", () => { stop(); go(+elScrub.value); });
@@ -396,21 +417,47 @@ export async function mountExplorer(root, opts = {}) {
   // Run the source along the current choicePath ([] = pure IEx), then view
   // step `gotoIdx`. The engine's capture_path takes the chosen redex where
   // the path names one and the IEx default elsewhere.
+  // ── editor feedback (live validity + a caret code-frame) ───────────────────
+  function setValidity(ok, msg) {
+    const v = $("validity");
+    if (!v) return;
+    v.className = "stx-validity " + (ok ? "is-ok" : "is-err");
+    v.textContent = msg;
+  }
+  function showFrame(src, pos) {
+    const fr = $("frame");
+    if (!fr) return;
+    const s = (src || "").trimStart();
+    const p = Math.max(0, Math.min(pos | 0, s.length));
+    let line = 0, col = 0;
+    for (let i = 0; i < p; i++) {
+      if (s[i] === "\n") { line++; col = 0; } else col++;
+    }
+    const text = s.split("\n")[line] ?? "";
+    fr.hidden = false;
+    fr.textContent = text + "\n" + " ".repeat(col) + "^";
+  }
+  function clearFrame() { const fr = $("frame"); if (fr) { fr.hidden = true; fr.textContent = ""; } }
+  function showParseError(res, phi, psi) {
+    setValidity(false, `✗ ${res.where} · ${res.error}`);
+    showFrame(res.where === "Ψ" ? psi : phi, res.pos);
+  }
+
   function runPath(phi, psi, gotoIdx) {
     stop();
-    const elErr = $("error");
-    if (elErr) elErr.textContent = "";
     const pathStr = choicePath
       .filter(Boolean)
       .map((c) => `${c[0]},${c[1]}`)
       .join(";");
     let res;
     try { res = JSON.parse(mod.run_path(phi, psi, pathStr)); }
-    catch (e) { if (elErr) elErr.textContent = "engine error: " + e.message; return; }
+    catch (e) { setValidity(false, "engine error: " + e.message); return false; }
     if (!res.ok) {
-      if (elErr) elErr.textContent = `${res.where} parse error (pos ${res.pos}): ${res.error}`;
-      return;
+      showParseError(res, phi, psi);
+      return false;
     }
+    setValidity(true, "✓ resolved");
+    clearFrame();
     sourceMode = true;
     lastPhi = phi; lastPsi = psi;
     steps = res.steps;
@@ -420,11 +467,30 @@ export async function mountExplorer(root, opts = {}) {
       `<span class="lab">source</span>Φ = <code>${esc(phi)}</code> · Ψ = <code>${esc(psi)}</code>${branched}`;
     go(Math.min(gotoIdx | 0, steps.length - 1));
     updatePermalink();
+    return true;
   }
 
   function runSource(phi, psi) {
     choicePath = [];
-    runPath(phi, psi, 0);
+    return runPath(phi, psi, 0);
+  }
+
+  function runEditor() {
+    const ok = runSource($("phi").value.trim(), $("psi").value.trim());
+    // Show the result on success; stay in the editor (with the caret) on error.
+    if (ok) setView("constellation");
+  }
+
+  // Snip the interaction space at the current step back into the editor and
+  // continue from there — explore "what if I'd started here?".
+  function forkFromHere() {
+    if (!sourceMode || !steps[idx]) return;
+    const psi = steps[idx].psi_stars.join(" + ");
+    $("psi").value = psi;
+    $("phi").value = lastPhi;
+    choicePath = [];
+    if (runSource(lastPhi, psi)) setView("constellation");
+    else setView("editor");
   }
 
   if (!compact) {
@@ -433,10 +499,33 @@ export async function mountExplorer(root, opts = {}) {
       EXAMPLES.map((e, i) => `<option value="${i}">${esc(e.name)}</option>`).join("");
     elEx.addEventListener("change", () => {
       const e = EXAMPLES[+elEx.value];
-      if (e) { $("phi").value = e.phi; $("psi").value = e.psi; }
+      if (e) { $("phi").value = e.phi; $("psi").value = e.psi; runEditor(); }
     });
-    $("run").addEventListener("click", () =>
-      runSource($("phi").value.trim(), $("psi").value.trim()));
+    $("run").addEventListener("click", runEditor);
+
+    // Live, debounced parse feedback — you see ✓/✗ before running.
+    let vt = null;
+    const validate = () => {
+      const phi = $("phi").value.trim();
+      const psi = $("psi").value.trim();
+      if (!phi && !psi) { setValidity(false, ""); clearFrame(); return; }
+      let res;
+      try { res = JSON.parse(mod.parse_check(phi, psi)); }
+      catch { return; }
+      if (res.ok) { setValidity(true, "✓ well-formed"); clearFrame(); }
+      else showParseError(res, phi, psi);
+    };
+    const debounced = () => { clearTimeout(vt); vt = setTimeout(validate, 250); };
+    ["phi", "psi"].forEach((r) => {
+      const t = $(r);
+      t.addEventListener("input", debounced);
+      // ⌘⏎ / Ctrl+⏎ resolves from either field.
+      t.addEventListener("keydown", (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+          e.preventDefault(); runEditor();
+        }
+      });
+    });
   }
 
   // ── permalink / deep links ─────────────────────────────────────────────────

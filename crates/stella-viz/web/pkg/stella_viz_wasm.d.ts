@@ -27,6 +27,12 @@ export function get_preset_steps(idx: number): string;
 export function list_presets(): string;
 
 /**
+ * Parse-only check (no execution) for live editor feedback. Returns
+ * `{"ok":true}` or `{"ok":false,"where":"Φ|Ψ","error":"…","pos":N}`.
+ */
+export function parse_check(phi_src: string, psi_src: string): string;
+
+/**
  * Return the number of available presets.
  */
 export function preset_count(): number;
@@ -52,6 +58,7 @@ export interface InitOutput {
     readonly get_preset_dot: (a: number) => [number, number];
     readonly get_preset_steps: (a: number) => [number, number];
     readonly list_presets: () => [number, number];
+    readonly parse_check: (a: number, b: number, c: number, d: number) => [number, number];
     readonly preset_count: () => number;
     readonly run_path: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly run_source: (a: number, b: number, c: number, d: number) => [number, number];

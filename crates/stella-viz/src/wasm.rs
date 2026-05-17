@@ -175,6 +175,25 @@ pub fn run_source(phi_src: &str, psi_src: &str) -> String {
     format!("{{\"ok\":true,\"steps\":{}}}", steps_json(&steps))
 }
 
+/// Parse-only check (no execution) for live editor feedback. Returns
+/// `{"ok":true}` or `{"ok":false,"where":"Φ|Ψ","error":"…","pos":N}`.
+#[wasm_bindgen]
+pub fn parse_check(phi_src: &str, psi_src: &str) -> String {
+    if let Err(e) = parse_constellation(phi_src) {
+        return format!(
+            "{{\"ok\":false,\"where\":\"Φ\",\"error\":{},\"pos\":{}}}",
+            json_str(&e.msg), e.pos
+        );
+    }
+    if let Err(e) = parse_constellation(psi_src) {
+        return format!(
+            "{{\"ok\":false,\"where\":\"Ψ\",\"error\":{},\"pos\":{}}}",
+            json_str(&e.msg), e.pos
+        );
+    }
+    "{\"ok\":true}".to_string()
+}
+
 /// Like `run_source`, but drives an explicitly chosen resolution path.
 /// `path` is `"i,j;i,j;…"` (star,ray per step); steps not named follow the
 /// IEx default. Lets the explorer offer "pick which redex fires".
