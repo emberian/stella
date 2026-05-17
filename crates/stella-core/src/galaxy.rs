@@ -403,14 +403,66 @@ pub fn delta_star(d: &Def) -> Star {
     ]
 }
 
-/// Build the full galaxy reference constellation `Φ`:
-/// every definition's δ-star **plus** the combinator machine stars
-/// (`combinator::machine_stars()` — Push §57.19 + S/B/C/I/T/F), reused so the
-/// galaxy's combinator applications reduce under the very same rules.
+/// The faithful ICFP-2020 alien **primitive** rules, KAM/Push form (args on
+/// the `·`-stack after `Push` unwinds applications — exactly the
+/// `combinator::machine_stars()` shape, but keyed on galaxy's *actual
+/// lowercase atom names* with the authoritative alien "Message from Space"
+/// semantics). KG3b slice 1 = the **pure-lazy** fragment (no strictness):
+/// `Push` + `i t f s c b cons car cdr nil`.
 ///
-/// KG2 stops here: this `Φ` is *loaded*, never executed (running it is KG3).
+/// Deliberately OMITTED (constructor-strict / strict-numeric — the §58/§60
+/// synchronisation punt at galaxy scale; the measured next slice): `isnil`,
+/// `add mul div neg eq lt`. Adding them unfaithfully would smuggle a fake
+/// green — they land only once done faithfully.
+pub fn prim_stars() -> Constellation {
+    let (m, n, x, y, z, p, pi) =
+        (v("M"), v("N"), v("X"), v("Y"), v("Z"), v("P"), v("Pi"));
+    let a = ap_node;
+    vec![
+        // Push (§57.19): a(M,N)⋆π → M⋆(N·π)
+        vec![np(st(a(m, n), pi)), pp(st(m, dot(n, pi)))],
+        // i x → x
+        vec![np(st(cst("i"), dot(x, pi))), pp(st(x, pi))],
+        // t x y → x   (K / true)
+        vec![np(st(cst("t"), dot(x, dot(y, pi)))), pp(st(x, pi))],
+        // f x y → y   (false)
+        vec![np(st(cst("f"), dot(x, dot(y, pi)))), pp(st(y, pi))],
+        // s x y z → (x z) (y z)
+        vec![
+            np(st(cst("s"), dot(x, dot(y, dot(z, pi))))),
+            pp(st(a(a(x, z), a(y, z)), pi)),
+        ],
+        // c x y z → (x z) y
+        vec![
+            np(st(cst("c"), dot(x, dot(y, dot(z, pi))))),
+            pp(st(a(a(x, z), y), pi)),
+        ],
+        // b x y z → x (y z)
+        vec![
+            np(st(cst("b"), dot(x, dot(y, dot(z, pi))))),
+            pp(st(a(x, a(y, z)), pi)),
+        ],
+        // cons x y z → (z x) y   (Church pair / vec)
+        vec![
+            np(st(cst("cons"), dot(x, dot(y, dot(z, pi))))),
+            pp(st(a(a(z, x), y), pi)),
+        ],
+        // car p → p t
+        vec![np(st(cst("car"), dot(p, pi))), pp(st(a(p, cst("t")), pi))],
+        // cdr p → p f
+        vec![np(st(cst("cdr"), dot(p, pi))), pp(st(a(p, cst("f")), pi))],
+        // nil x → t   (empty list applied to anything is true)
+        vec![np(st(cst("nil"), dot(x, pi))), pp(st(cst("t"), pi))],
+    ]
+}
+
+/// Build the galaxy reference constellation `Φ`: the faithful alien
+/// [`prim_stars`] (Push + pure-lazy primitives) **plus** every definition's
+/// δ-star. (KG2 piggybacked `combinator::machine_stars()`, whose *uppercase*
+/// `S/T/…` never matched galaxy's *lowercase* `s/t/…` atoms — KG3a's
+/// "blocked@5" was really "no faithful alien rules". Fixed here.)
 pub fn constellation(g: &Galaxy) -> Constellation {
-    let mut phi: Constellation = crate::combinator::machine_stars();
+    let mut phi: Constellation = prim_stars();
     phi.reserve(g.defs.len());
     for d in &g.defs {
         phi.push(delta_star(d));
@@ -606,13 +658,16 @@ mod tests {
 
         // (c) build Φ, sanity-check star count, spot-check a small δ-star.
         let phi = constellation(&g);
-        let machine = crate::combinator::machine_stars().len();
+        let prims = prim_stars().len();
         assert_eq!(
             phi.len(),
-            machine + g.defs.len(),
-            "Φ = machine_stars() ∪ one δ-star per def"
+            prims + g.defs.len(),
+            "Φ = prim_stars() ∪ one δ-star per def"
         );
-        assert_eq!(machine, 7, "combinator::machine_stars() is the 7-star K★");
+        assert_eq!(
+            prims, 11,
+            "prim_stars() = Push + i/t/f/s/c/b/cons/car/cdr/nil (KG3b slice 1)"
+        );
 
         // Spot-check the smallest-body def's δ-star shape (head = its :N
         // constant, contractum = body•, shared Pi).
@@ -651,12 +706,12 @@ mod tests {
 
         eprintln!(
             "galaxy.txt: {} defs, entry :{}, {} dangling refs, Φ = {} stars \
-             ({} machine + {} δ)",
+             ({} prim + {} δ)",
             g.defs.len(),
             g.entry,
             dangling.len(),
             phi.len(),
-            machine,
+            prims,
             g.defs.len(),
         );
     }
