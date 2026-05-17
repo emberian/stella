@@ -12,6 +12,13 @@ export function _start(): void;
 export function build_machine(kind: string, json: string): string;
 
 /**
+ * Ex semantics (bounded): ɟ of CEx at copy budget `k`, the exact IEx ɟ,
+ * and whether they coincide (confluence at k, demonstrated). Returns
+ * `{"ok":true,"result":[…],"iex_obs":[…],"k":N,"confluent":bool,"note":"…"}`.
+ */
+export function ex_run(phi_src: string, psi_src: string, k: number, fuel: number): string;
+
+/**
  * Return the dep-graph DOT + execution summary for preset `idx` as JSON:
  * `{"name": "…", "dep_graph_dot": "…", "execution_summary": "…"}`
  *
@@ -71,6 +78,7 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly build_machine: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly ex_run: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly get_preset_dot: (a: number) => [number, number];
     readonly get_preset_steps: (a: number) => [number, number];
     readonly list_presets: () => [number, number];

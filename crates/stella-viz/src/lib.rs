@@ -5,6 +5,7 @@
 //! cdylib target, gated with `--features wasm`).
 
 pub mod build;
+pub mod exsem;
 pub mod presets;
 pub mod stepper;
 

@@ -794,6 +794,43 @@ figure.stx-figure figcaption .num {
   .stx-pane--constellation.is-active { grid-template-columns: 1fr; }
 }
 
+/* ── Ex semantics view ────────────────────────────────────── */
+.stx-ex { padding: 16px 18px; display: flex; flex-direction: column; gap: 14px; }
+.stx-ex__bar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding-bottom: 12px; border-bottom: 1px solid var(--border);
+}
+.stx-ex__lab {
+  font-family: var(--font-body); font-size: 12px; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--moss); font-weight: 600;
+}
+.stx-ex__hint {
+  font-family: var(--font-body); font-size: 12px; color: var(--fg-3);
+  flex: 1; min-width: 180px;
+}
+.stx-ex__body { display: flex; flex-direction: column; gap: 14px; }
+.stx-ex__row { display: flex; }
+.stx-ex__ok, .stx-ex__no {
+  font-family: var(--font-mono); font-size: 12.5px; font-weight: 600;
+  padding: 6px 12px; border-radius: 999px;
+}
+.stx-ex__ok {
+  color: color-mix(in oklab, var(--moss) 82%, var(--ink));
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in oklab, var(--moss) 35%, transparent);
+}
+.stx-ex__no {
+  color: color-mix(in oklab, var(--mushroom) 82%, var(--ink));
+  background: var(--danger-soft);
+  border: 1px solid color-mix(in oklab, var(--mushroom) 35%, transparent);
+}
+.stx-ex__grp { display: flex; flex-direction: column; gap: 6px; }
+.stx-ex__set { display: flex; flex-wrap: wrap; gap: 8px; }
+.stx-ex__note {
+  font-family: var(--font-body); font-size: 13px; color: var(--fg-2);
+  line-height: 1.55; margin: 0; font-style: italic;
+}
+
 /* ── Construction lab modal ───────────────────────────────── */
 .stx-modal {
   position: fixed; inset: 0; z-index: 60;

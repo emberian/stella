@@ -289,6 +289,7 @@ const TEMPLATE_IDE = `
         <div class="stx-views" role="tablist">
           <button class="stx-viewbtn is-active" data-view="constellation" role="tab">Constellation</button>
           <button class="stx-viewbtn" data-view="depgraph" role="tab">Dependency graph</button>
+          <button class="stx-viewbtn" data-view="exsem" role="tab" title="The strategy-independent result (Ex), vs the exact IEx path">Ex semantics</button>
           <span class="stx-bar__spacer"></span>
           <span class="step-readout" data-role="readout"></span>
         </div>
@@ -302,6 +303,19 @@ const TEMPLATE_IDE = `
             </div>
           </div>
           <div class="stx-pane" data-pane="depgraph"><div class="stx-graph" data-role="graph"></div></div>
+          <div class="stx-pane" data-pane="exsem">
+            <div class="stx-ex">
+              <div class="stx-ex__bar">
+                <span class="stx-ex__lab">Concrete execution at copy budget</span>
+                <label class="stx-fuel">k <input type="number" data-role="exk" min="1" max="12" step="1" value="2" /></label>
+                <button class="st-btn st-btn--sm" data-role="excompute">Compute Ex</button>
+                <span class="stx-ex__hint">Φ is non-linear; CEx needs ≥k fresh copies. Raise k until it meets the exact IEx ɟ. Note: CEx saturation is exponential for recursive Φ — keep k small.</span>
+              </div>
+              <div class="stx-ex__body" data-role="exbody">
+                <p class="reader-status">Press <em>Compute Ex</em> — this runs the engine's concrete execution (synchronous; bounded by k).</p>
+              </div>
+            </div>
+          </div>
         </div>
         <div class="stx-controls">
           <button class="st-btn st-btn--secondary st-btn--sm" data-role="reset" title="Step 0 (Home)">↺</button>
@@ -801,6 +815,35 @@ export async function mountExplorer(root, opts = {}) {
     runEditor();
   }
 
+  // Ex semantics — on demand (synchronous engine call; never auto).
+  function computeEx() {
+    const body = $("exbody");
+    if (!body) return;
+    const phi = (lastPhi || $("phi").value).trim();
+    const psi = (lastPsi || $("psi").value).trim();
+    const k = Math.max(1, Math.min(12, parseInt($("exk").value, 10) || 2));
+    body.innerHTML = `<p class="reader-status">Running concrete execution at k=${k}…</p>`;
+    let res;
+    try { res = JSON.parse(mod.ex_run(phi, psi, k, fuelVal())); }
+    catch (e) { body.innerHTML = `<p class="reader-status error">engine error: ${esc(e.message)}</p>`; return; }
+    if (!res.ok) { body.innerHTML = `<p class="reader-status error">${esc(res.error)}</p>`; return; }
+    const set = (arr) => arr.length
+      ? arr.map((s) => `<span class="stx-obs__s">${esc(s)}</span>`).join("")
+      : `<span class="stx-obs__none">∅</span>`;
+    const badge = res.order_independent
+      ? `<span class="stx-ex__ok">✓ strategy-independent — same ɟ under the default and an alternate firing order (exact engine)</span>`
+      : `<span class="stx-ex__no">≠ different ɟ under another order — non-confluent here, or fuel exhausted</span>`;
+    body.innerHTML =
+      `<div class="stx-ex__row">${badge}</div>` +
+      `<div class="stx-ex__grp"><span class="stx-obs__lab">the result — ɟ(IEx), exact (Stage 0)</span>` +
+      `<div class="stx-ex__set">${set(res.result)}</div></div>` +
+      `<div class="stx-ex__grp"><span class="stx-obs__lab">ɟ under an alternate firing order (exact)</span>` +
+      `<div class="stx-ex__set">${set(res.alt)}</div></div>` +
+      `<div class="stx-ex__grp"><span class="stx-obs__lab">raw CEx cross-check · copy budget k=${res.cex_k} (renamed copies; research aid)</span>` +
+      `<div class="stx-ex__set">${set(res.cex)}</div></div>` +
+      `<p class="stx-ex__note">${esc(res.note)}</p>`;
+  }
+
   // A preset is now just an editable example: pull its Display source.
   function loadShowcase(i) {
     let src;
@@ -871,6 +914,14 @@ export async function mountExplorer(root, opts = {}) {
     });
 
     $("run").addEventListener("click", runEditor);
+
+    // Ex semantics — on-demand only.
+    const exBtn = $("excompute");
+    if (exBtn) exBtn.addEventListener("click", computeEx);
+    const exk = $("exk");
+    if (exk) exk.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); computeEx(); }
+    });
 
     // Construction lab: spec → Eng-faithful constellation → editable source.
     const cpanel = $("cpanel"), cclass = $("cclass"), cspec = $("cspec"),
