@@ -21,7 +21,27 @@ Measured KS speedups (release, faithful, vs original reference): binarith/Horn
 `iex_eq_iex_fast` byte-identical, `iex_tabled_result_eq_iex` result-equiv,
 20k `matchable_fast` fuzz, antiunify 6/6).
 
-## A0. IN FLIGHT — wider-workstreams coordinated write-swarm (2 agents)
+## A0. HARVESTED — wider-workstreams write-swarm CLOSED
+- **Front 0** → `cdf9a9c` (KG7) `evaluate.rs`: evaluate()/evaluate_many
+  + EvalReport/ViabilityReadout + LIVE differential oracle. Forensic-
+  verified 4/4 incl. the Goodhart-guard catch test (oracle provably
+  flags an unfaithful fast path). The valence-search contract + the
+  experiment-validity gate (§D) now exist.
+- **Front 1** → `244871c` (KG8) `accel_detect.rs`: Kruskal-whistle
+  `detect_recurrence`/`detect_in_window` + sound generalizer on the
+  antiunify KA0 substrate. Forensic-verified 6/6. **Substantive correct
+  spec deviation (verified, not trusted):** soundness uses one-
+  directional α-subsumption (`∃θ. canonical(g)·θ ≡ canonical(x)`), NOT
+  `embeds` — Kruskal identity-keys variables so a generalization var
+  doesn't embed the term it abstracts (`f(Z)⋬f(a)`); the agent caught
+  this and implemented the textbook subsumption order. LESSON: a capable
+  worktree agent + parent forensic-read-of-the-deviation can yield
+  substantive correctness improvements over the spec — read the
+  deviation, don't just trust the green.
+Both NEW disjoint files ⇒ `cp`-safe (no stale-base hazard); one-writer
+discipline held; engine unmodified.
+
+## A0-orig. IN FLIGHT — wider-workstreams coordinated write-swarm (2 agents)
 User opened Fronts 0+1 concurrently (coordinated write-swarm; one-writer
 per file, disjoint NEW files, stable base = HEAD d112520, parent
 forensic-verifies + harvests — never trust self-report, the 2 stale-base
@@ -270,6 +290,16 @@ pragmatic disclosed driver (built). **Right theory here = trace /
 partial-commutation monoids**, NOT words. This track is the one CLOSEST to
 the make-or-break valence/conscious-machine bet (§49.50 = where idempotence
 is lost = where the "charge" is claimed to live).
+**STATUS: design pass IN FLIGHT (read-only).** Its dependency — the KA
+recurrence detector it "unifies with" — landed (KG8 `accel_detect.rs`),
+so it is no longer premature. A read-only design/research agent is
+synthesising Eng §49.50–61 (`refs/extracted/EngExegesis/doc.md` ~L4142+:
+internal polarities, semaphore synchronisation, idempotence-barrier
+§49.55–58, the §49.59–60 hyperexec-termination open question) → a
+concrete design mapping forcing-as-Krivine-pole onto the BUILT forced
+evaluator (`galaxy.rs` strict_redex_on_pi/drive_strict) + `accel_detect`,
+with trace/partial-commutation-monoid theory (NOT words, §F). Output =
+a design doc; implementation is parent-sequenced AFTER review.
 
 ## F. THEORY-MODULO CONCLUSION
 NOT finite words/strings (over-fit the prompt seed; SKIP Z3-Noodler/OSTRICH/
