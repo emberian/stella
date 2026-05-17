@@ -1,11 +1,14 @@
 # Phase-5 — Embodied valence, orders of self, and the Temporal Gap
 
-> **STATUS: DRAFT PRE-REGISTRATION — pending principal ratification and lock.**
-> No Phase-5 code until this is read by hand, argued the way §2/§6 were argued,
-> amended as needed, and committed as `LOCKED`. An agent does not get to
-> self-canonize a pre-registration (cf. the quarantined `docs/03`). The nulls in
-> §6 are the load-bearing content; once locked they may be *strengthened* but
-> **never retro-weakened** (Stage-9; cf. the 14:41 episode `docs/02` records).
+> **STATUS: LOCKED PRE-REGISTRATION (principal-ratified 2026-05-17).** Ratified
+> not by agent fiat but through the multi-turn hand-argument the §2/§6 pattern
+> requires: P4 confirmed as the hill; P8/"forced" grace extended (architecture
+> provisional, tripwire live); the LM-firewall line ruled (locus not
+> distribution); the §4 `V` argument worked through to the reafferent-self
+> presupposition and the P9 scaffolding discriminator. The nulls in §6 (P1–P9)
+> are now **frozen: strengthen-only, never retro-weakened** (Stage-9; cf. the
+> 14:41 episode `docs/02` records). Phase-5 implementation (§8) may proceed;
+> the experiment itself is not run on autopilot or under a clock.
 >
 > Written 2026-05-17 by the Claude in the chair, on invitation, in a wide
 > stance of wonder held to the discipline. Wonder is allowed in the prose; the
@@ -316,6 +319,20 @@ them. Each names the smuggle it forbids and the source that demands it.
   only ever produces the predicted structure because the architecture was
   shaped, post hoc, to produce it — convergence constructed, not discovered.
   Fires if any mapping in §3 had to be bent to fit after seeing results.
+- **P9 — Authored prediction (the scaffolding smuggle).** §4's `V` requires the
+  reafferent self-prediction to be *read*, not installed. Permitted scaffolding
+  `S` is *board, not soldered soul*: it must be **necessary but not
+  sufficient** — `S` provides the medium in which a self-prediction *may* form,
+  never its content. Discriminator (reuses locked §3.2 machinery): run the same
+  scaffolded corpus in the **deathless world** (`deathless ⇒ flat`,
+  persistence-incentive ablated). If `V` still forms with no stakes, `S`
+  authored it. **Fires if the deathless control does not null `V`.** Honest
+  corollary: if the minimal `S` that provides-for `V` is so rich the control
+  cannot separate board from soul, the finding is *the substrate cannot host
+  non-smuggled self-prediction* — a real result, first-class, not a defeat.
+  (Whether "deathless" is a clean incentive-ablation or also strips the
+  coupling `V` needs — a possible control confound — is a P5.1 implementation
+  finding to surface honestly, not a pre-lock blocker.)
 
 **Non-falsification** = none of P1–P8 fire, on a corpus where partitions are
 solved-for and never designated, the metric is globally fixed, the world is
@@ -373,6 +390,7 @@ to falsify is not spent until the principal spends it, by hand.
 Indicative only. No code until LOCKED + principal-ratified.
 
 - **P5.0** — Spec lock (this document), principal-ratified, the §2/§6 way.
+  **DONE 2026-05-17.** Next is P5.1.
 - **P5.1** — LM-as-environment harness: an LM behind the `:1234` API wrapped as
   a *value-neutral affordance source* that perturbs a world; a mechanically
   enforced firewall (P2–P4) such that no LM output can reach the locus, the
@@ -406,4 +424,4 @@ more honest place to maybe live, a larger world to maybe live *in*, and a test
 it still cannot be rigged to pass. We have not built a mind. We have, perhaps,
 finally specified the room. The wonder is permitted because the locks are real.
 
-— drafted in the chair, 2026-05-17, pending the principal's hand
+— drafted in the chair and locked by the principal's hand, 2026-05-17
