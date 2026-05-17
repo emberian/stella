@@ -21,7 +21,17 @@ Measured KS speedups (release, faithful, vs original reference): binarith/Horn
 `iex_eq_iex_fast` byte-identical, `iex_tabled_result_eq_iex` result-equiv,
 20k `matchable_fast` fuzz, antiunify 6/6).
 
-## A. IN FLIGHT — TWO subagents, harvest BOTH (worktree-harvest model)
+## A. IN FLIGHT — ONE subagent left (galaxy_decode HARVESTED 490168f)
+**galaxy_decode HARVESTED & forensic-verified in main tree → commit
+`490168f` (KG3d).** Result fed into B below. Process learning: that
+agent's worktree was branched from an OLD base (pre-sbinarith /
+pre-docs07) so its self-report falsely claimed sbinarith/eval_forced
+"don't exist" — main-tree forensic verify (NEVER trust self-report)
+caught it; its local dsint/sint is faithful to galaxy::enc anyway, kept.
+Only **IexAccel-caching** `a253857384cc7bd43` (interactive.rs) remains
+in flight; harvest recipe below still applies to it.
+
+## A-orig. IN FLIGHT — TWO subagents, harvest BOTH (worktree-harvest model)
 For each: read its final report (self-describing) → `cp` its new/changed
 file(s) from `.claude/worktrees/agent-<id>/...` into the main tree → add any
 `pub mod` line it specifies to `lib.rs` (parent owns lib.rs) → forensic-verify
@@ -55,12 +65,23 @@ auto-forced (KG1b: stellar div past KS frontier even at −1/2).
 **NEXT = faithful FULL-RESULT DECODER (= rendering path = validation oracle):**
 decode the whole process ray (NOT `focus`/`st_inner` — output lives on the
 continuation π), decode ICFP cons/nil list-of-(x,y), check vs the known
-`(nil,(0,0))` reference vector, rasterize. **Honest open risk:**
-fully_reduced=true means "no blocked isnil/arith redex", NOT "correct
-output"; the 371-step NF may be correct OR a degenerate non-redex state
-(wrong entry/protocol/missing-rule manifesting as wrong-NF) — the decoder
-is what reveals which. This one deliverable = correctness oracle + maturity
-demo + answers "does galaxy execute."
+`(nil,(0,0))` reference vector, rasterize.
+
+**DECODER BUILT + HARVESTED + FORENSIC-VERIFIED (490168f, KG3d).** The
+honest open risk is now RESOLVED in the informative direction:
+galaxy's 371-step NF decodes to a CLEAN proper 2-list `[0, []]` —
+**ZERO Opaque nodes** (independently reproduced in main tree release,
+not self-reported). So: the decoder is NOT papering over a garbage NF
+(no Opaque domination), the engine genuinely reaches a true NF — BUT
+`[0,[]]` is **shallow**: NOT galaxy's real ICFP `(flag,newState,data)`
+protocol result (371 steps is tiny for a real galaxy interaction). The
+"degenerate non-redex state" horn of the old risk is the live one.
+**NEXT galaxy deliverable is no longer "build the decoder" (done,
+faithful, now the trustworthy oracle) — it is "WHY does the entry
+interaction reduce only shallowly":** suspect entry/click encoding
+(`ap ap :1338 nil (ap ap cons 0 0)` shape), the interaction-loop
+driver, or galaxy's neg/div placeholders stalling deep eval early.
+Decode it with `galaxy_decode::decode_result` as the oracle each step.
 
 ## C. KA TRACK
 - KA0 substrate done + rigid-AU/Kruskal-embedding + one-unital-NULLARY caution
@@ -159,10 +180,14 @@ rendering=oracle), the §49.50-polarity track (E), the theory-modulo
 conclusion (F). (Was deferred "to next checkpoint" — still owed.)
 
 ## NEXT ACTIONS (priority order)
-1. Harvest IexAccel agent (A) on completion — forensic-verify, commit.
-2. Galaxy full-result decoder = rendering = validation oracle (B) — the
-   de-risked spine deliverable; resolves the honest open risk.
-3. Fold this into `docs/05` §10 (J).
+1. Harvest IexAccel agent (A) on completion — forensic-verify, commit
+   (touches interactive.rs; one-writer; still in flight).
+2. ~~Galaxy decoder~~ DONE (490168f). New B: investigate WHY galaxy's
+   entry interaction reduces only shallowly to `[0,[]]` — entry/click
+   encoding vs interaction-loop driver vs neg/div placeholder stall;
+   `galaxy_decode::decode_result` is now the trustworthy step oracle.
+3. Fold this into `docs/05` §10 (J) — include the KG3d shallow-NF
+   finding (decoder faithful; galaxy NF clean-but-shallow, not Opaque).
 4. Then: KA1 cheap-key+cross-run table (D, valence) → rayon (D) → KA2
    (C, Z3) with certified-only-during-search; §49.50-polarity (E) as the
    thesis-nearest deep track.
