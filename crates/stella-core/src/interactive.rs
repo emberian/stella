@@ -101,29 +101,89 @@ fn freshen_star(star: &Star, counter: &mut u32) -> Star {
         .collect()
 }
 
-/// Rename all variables in a star with a given prefix, returning the renamed star
-/// and substitution. Used for α-renaming before fusion (§49.30 ∇_α).
-fn alpha_rename_star(star: &Star, prefix: &str, counter: &mut u32) -> (Star, Substitution) {
-    use rustc_hash::FxHashSet;
-    let all_vars: Vec<Var> = star
-        .iter()
-        .flat_map(|&r| r.vars())
-        .collect::<FxHashSet<_>>()
-        .into_iter()
-        .collect();
+/// Collect a term's distinct variables into `seen` (a small linear-probe
+/// `Vec`), assigning each first-seen var a fresh `Var::Idx` slot from
+/// `counter`.  Φ stars carry only a handful of distinct vars, so a `Vec`
+/// scan beats an `FxHashMap` *and* the doubled term-walk of `Substitution`.
+fn collect_remap(t: Term, seen: &mut Vec<(Var, Var)>, counter: &mut u32) {
+    match get(t) {
+        TermData::Var(v) => {
+            if !seen.iter().any(|&(o, _)| o == v) {
+                let fresh = Var::Idx(*counter);
+                *counter += 1;
+                seen.push((v, fresh));
+            }
+        }
+        TermData::App(_, args) => {
+            for &a in args.iter() {
+                collect_remap(a, seen, counter);
+            }
+        }
+    }
+}
 
-    let pairs: Vec<(Var, Term)> = all_vars
-        .into_iter()
-        .map(|v| {
-            let fresh_name = format!("{prefix}_{}{counter}", v.as_str());
-            *counter += 1;
-            let fresh_var = Var::intern(&fresh_name);
-            (v, mk_var_interned(fresh_var))
-        })
-        .collect();
-    let subst = Substitution::from_var_pairs(pairs);
-    let renamed = star.iter().map(|&r| subst.apply(r)).collect();
+/// Apply a small `Vec` var-remap to a term in one pass, rebuilding only the
+/// spine that actually changed (hash-consing dedups the rest).
+fn apply_remap(t: Term, map: &[(Var, Var)]) -> Term {
+    match get(t) {
+        TermData::Var(v) => match map.iter().find(|&&(o, _)| o == v) {
+            Some(&(_, fresh)) => mk_var_interned(fresh),
+            None => t,
+        },
+        TermData::App(sym, args) => {
+            let mut changed = false;
+            let new_args: Vec<Term> = args
+                .iter()
+                .map(|&a| {
+                    let na = apply_remap(a, map);
+                    changed |= na != a;
+                    na
+                })
+                .collect();
+            if changed {
+                crate::term::mk_app_interned(sym, new_args)
+            } else {
+                t
+            }
+        }
+    }
+}
+
+/// Rename all variables in a star with a given prefix, returning the renamed
+/// star and substitution. Used for α-renaming before fusion (§49.30 ∇_α).
+///
+/// The freshening is **pure integer work**: each distinct source var of the Φ
+/// star is mapped to a fresh canonical-index [`Var::Idx`] consuming one
+/// `counter` slot — no `format!`, no `Var::intern` (no global `ThreadedRodeo`
+/// lock), and no `Substitution` `FxHashMap` / doubled term-walk.  `Idx` is
+/// disjoint from every `Named` var (Ψ is built from named/parsed vars) and
+/// from `Idx`s of earlier generations, so the monotone `counter` reproduces
+/// exactly the variable-disjointness the old `"{prefix}_{v}{counter}"` string
+/// scheme guaranteed.  The returned `Substitution` (built cheaply from the
+/// same small `Vec`) is consumed only by the cold `step_detail`/`render_theta`
+/// path; the hot fusion path uses `alpha_rename_star_fast`.
+fn alpha_rename_star(star: &Star, _prefix: &str, counter: &mut u32) -> (Star, Substitution) {
+    let mut map: Vec<(Var, Var)> = Vec::new();
+    for &r in star.iter() {
+        collect_remap(r, &mut map, counter);
+    }
+    let renamed: Star = star.iter().map(|&r| apply_remap(r, &map)).collect();
+    let subst = Substitution::from_var_pairs(
+        map.iter().map(|&(o, f)| (o, mk_var_interned(f))),
+    );
     (renamed, subst)
+}
+
+/// Hot-path freshening: identical `Var::Idx` assignment as
+/// [`alpha_rename_star`] but **without** building/returning the
+/// `Substitution` (the fast fusion path discards it).  Same `counter`
+/// progression ⇒ byte-identical residual stars (N-KS gate).
+fn alpha_rename_star_fast(star: &Star, counter: &mut u32) -> Star {
+    let mut map: Vec<(Var, Var)> = Vec::new();
+    for &r in star.iter() {
+        collect_remap(r, &mut map, counter);
+    }
+    star.iter().map(|&r| apply_remap(r, &map)).collect()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -825,10 +885,12 @@ fn produce_stars_fast(
     for (ik, jk) in mat_phi_c_accel(accel, phi, r, psi_cs) {
         let tf = std::time::Instant::now();
         let phi_star_renamed = {
-            let prefix = format!("ext{ik}_{counter}");
+            // Reference parity: the old scheme consumed one `counter` slot for
+            // the (now-unused) per-fusion prefix before the per-var slots.
+            // Keep it so the fast path's `Var::Idx` numbering is byte-identical
+            // to the reference engine's (N-KS gate `iex_eq_iex_fast`).
             *counter += 1;
-            let (renamed, _) = alpha_rename_star(&phi[ik], &prefix, counter);
-            renamed
+            alpha_rename_star_fast(&phi[ik], counter)
         };
         ks_add(&T_FRESH, tf.elapsed());
         let tu = std::time::Instant::now();
