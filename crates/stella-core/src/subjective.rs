@@ -1107,19 +1107,39 @@ pub fn blackhole_capture(step: &Step, closure: &std::collections::HashSet<StarId
 /// loop has lost its last base case ⇒ *productive → unproductive* (the Mode-2
 /// death signature; L2b tracks the transition + non-recovery across rounds).
 /// `None` = the closure has no §62.7-style consuming loop here (Mode-2 N/A).
+///
+/// **Scope.** The closure's reafferent cycle is its dep-graph *connected
+/// component* (spec §2.2) — the consuming loop is typically a Φ-instantiated
+/// star whose fresh `StarId` is not a partition root, so literal `StarId`
+/// membership under-approximates the cycle. This uses the **same component
+/// scoping `blackhole_capture` (Mode-1) already uses** (`reachable_stars` from
+/// the closure's witnessed stars); the prior Mode-1/Mode-2 asymmetry was a bug.
 pub fn productivity_measure(
     step: &Step,
     closure: &std::collections::HashSet<StarId>,
 ) -> Option<usize> {
+    // The closure's connected component: psi stars dep-graph-reachable from the
+    // witnessed closure stars (same principled scope as Mode-1).
+    let closure_idx: Vec<usize> = step
+        .psi_ids
+        .iter()
+        .enumerate()
+        .filter(|(_, id)| closure.contains(id))
+        .map(|(i, _)| i)
+        .collect();
+    if closure_idx.is_empty() {
+        return None;
+    }
+    let component = reachable_stars(&step.dep_graph, &closure_idx);
     // Closure loop *negative* rays: −c(σ) where the same star has +c(τ),
     // σ a strict superterm of τ (the consuming/recursive shape, §62.7),
     // and c is NOT a black-hole symbol.
     let mut loop_neg: Vec<Ray> = Vec::new();
-    for (i, id) in step.psi_ids.iter().enumerate() {
-        if !closure.contains(id) {
-            continue;
-        }
-        let s = &step.psi[i];
+    for &i in &component {
+        let s = match step.psi.get(i) {
+            Some(s) => s,
+            None => continue,
+        };
         if blackhole_form(s).is_some() {
             continue;
         }
@@ -2251,13 +2271,42 @@ mod tests {
             vec![neg_ray("a", vec![zero_w]), pos_ray("a", vec![var("W")])],
             vec![pos_ray("a", vec![base])],
         ];
+        // A third star on a DISJOINT colour `foo` — no rays matchable to the
+        // `a`-stars, so it is its own dep-graph component (no consuming loop).
+        let psi0: Vec<Star> = vec![
+            vec![neg_ray("a", vec![zero_w]), pos_ray("a", vec![var("W")])],
+            vec![pos_ray("a", vec![base])],
+            vec![pos_ray("foo", vec![c("c")])],
+        ];
         let step = subjective_stream(&phi, psi0).next().expect("step");
-        let closure: HashSet<StarId> = [StarId(0)].into_iter().collect();
-        let m = productivity_measure(&step, &closure);
-        assert_eq!(m, Some(1), "one ground base case ⇒ measure 1 (productive)");
 
-        // A closure with no consuming loop ⇒ Mode-2 N/A.
-        let none_closure: HashSet<StarId> = [StarId(1)].into_iter().collect();
-        assert_eq!(productivity_measure(&step, &none_closure), None);
+        // Closure over the loop star: its component contains the consuming
+        // loop + one ground base case ⇒ productive, measure 1.
+        let closure: HashSet<StarId> = [StarId(0)].into_iter().collect();
+        assert_eq!(
+            productivity_measure(&step, &closure),
+            Some(1),
+            "loop component has one ground base case ⇒ measure 1 (productive)"
+        );
+
+        // Closure over the base-case star: its component INCLUDES the loop
+        // (they are matchable / dep-graph-connected) — so under the principled
+        // component scoping this is correctly Some(1), NOT None. (This is the
+        // corrected semantics; literal-StarId membership was the bug.)
+        let base_closure: HashSet<StarId> = [StarId(1)].into_iter().collect();
+        assert_eq!(
+            productivity_measure(&step, &base_closure),
+            Some(1),
+            "base-case star is connected to the loop ⇒ same component ⇒ Some(1)"
+        );
+
+        // Closure over the disjoint `foo` star: its component is itself alone,
+        // with NO consuming loop ⇒ Mode-2 genuinely N/A ⇒ None.
+        let foo_closure: HashSet<StarId> = [StarId(2)].into_iter().collect();
+        assert_eq!(
+            productivity_measure(&step, &foo_closure),
+            None,
+            "disjoint non-loop component ⇒ no §62.7 loop ⇒ None"
+        );
     }
 }

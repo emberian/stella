@@ -82,38 +82,57 @@ pub trait Affordance {
 /// a colour other than the single reserved `env`/`e` (no goal/self/valence
 /// colour can be smuggled), and never designate a partition. Deterministic in
 /// the text.
+/// Which value-free environment encoding. Every mode preserves the locked
+/// firewall invariant (no value/self/goal/evidence colour; content-blind;
+/// agent-agnostic; crate-boundary). Modes differ only in *coupling structure*.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Mode {
+    /// v1 — neutral `env(e,…)` stars. Value-free *and provably causally inert*
+    /// (stella-world P5.2 triple-null, f661505). Kept as the inertness record.
+    NeutralScale,
+    /// v2 — value-free sensorimotor affordance `[ −act(Y), +sense(mᵏ(Y)) ]`.
+    /// Affords reafference (Gibson/Bennett action-possibility) but every star
+    /// is an *independent identical* reflex ⇒ the floor result: "1 trivial
+    /// pattern ×12", all `Undetermined` (21ef3de).
+    Sensorimotor,
+    /// v3 — value-free **composable chain**: `L` coupled affordances
+    /// `[ −act(stʲ(Y)), +sense(stʲ⁺¹ ᵐᵒᵈ ᴸ(Y)) ]`, `j∈0..L`. Closing a
+    /// reafferent loop now *requires traversing all L stages* ⇒ the minimal
+    /// closure is forced non-trivial (`r′≥L`, `|P|≥L`), not a length-1 reflex.
+    /// `L` is the content-blind digest; the chain is agent-agnostic (it knows
+    /// no agent) — P9 board, not soldered soul. Vocab fixed `{act,sense,st}`.
+    ComposableChain,
+}
+
 pub struct FixedEnvCodec {
     max_stars: usize,
     max_arity: usize,
-    /// v1 (`false`): neutral `env(e,…)` stars — value-free *and provably
-    /// causally inert* (stella-world P5.2 triple-null, commit f661505).
-    /// v2 (`true`): value-free **sensorimotor affordance** pairs
-    /// `[ −act(Y), +sense(mᵏ(Y)) ]` — the env *consumes any act and returns a
-    /// sensed consequence* whose only LM-controlled aspect is the content-blind
-    /// *depth* `k`. This is "affordance" in P5.1's own word (Gibson/Bennett: an
-    /// action possibility), value-free and **agent-agnostic** (identical τ for
-    /// every agent ⇒ P9 *board, not soldered soul*: it affords reafference, it
-    /// does not author any particular closure — the closure is still solved-for
-    /// by the N1-guarded detector downstream).
-    sensorimotor: bool,
+    mode: Mode,
 }
 
 impl FixedEnvCodec {
-    /// v1 — neutral-scale (kept: it is the recorded inertness finding).
+    /// v1 — neutral-scale (kept: the recorded inertness finding).
     pub fn canonical() -> Self {
-        Self { max_stars: 16, max_arity: 4, sensorimotor: false }
+        Self { max_stars: 16, max_arity: 4, mode: Mode::NeutralScale }
     }
 
-    /// v2 — value-free sensorimotor-affordance. The data-mandated correction:
-    /// "neutral inert atoms" never met P5.1's word *affordance*. The locked
-    /// firewall *invariant* is preserved (no value / goal / self / evidence
-    /// colour; content-blind; agent-agnostic; crate-boundary). The over-strict
-    /// "carry no polarity at all" proxy — which provably caused inertness — is
-    /// corrected to the *actual* invariant: carry only the fixed reserved
-    /// sensorimotor pair `{act, sense}`, never a value/self channel. Hostile-
-    /// tested below; this is a proxy correction, NOT a firewall weakening.
+    /// v2 — value-free sensorimotor affordance (the floor result). Locked
+    /// firewall *invariant* preserved; the over-strict "no polarity" proxy
+    /// that provably caused inertness corrected to the actual invariant
+    /// (fixed reserved `{act,sense}` only). Proxy correction, NOT a weakening.
     pub fn canonical_sensorimotor() -> Self {
-        Self { max_stars: 16, max_arity: 4, sensorimotor: true }
+        Self { max_stars: 16, max_arity: 4, mode: Mode::Sensorimotor }
+    }
+
+    /// v3 — value-free composable-chain affordance: forces non-trivial
+    /// reafferent closures (post-floor frontier; principal-blessed board).
+    pub fn canonical_composable() -> Self {
+        Self { max_stars: 16, max_arity: 6, mode: Mode::ComposableChain }
+    }
+
+    /// The mode (firewall tests read this; private field, same crate).
+    pub fn mode(&self) -> Mode {
+        self.mode
     }
 
     /// Digest opaque text → neutral Ψ environment stars.
@@ -129,34 +148,59 @@ impl FixedEnvCodec {
             return EnvPerturbation(vec![]);
         }
         let checksum = bytes.iter().fold(0usize, |a, &b| a.wrapping_add(b as usize));
-        let n = 1 + (checksum % self.max_stars);
-        let mut stars: Vec<Star> = Vec::with_capacity(n);
-        for i in 0..n {
-            let k = 1 + (bytes[i % bytes.len()] as usize % self.max_arity);
-            if self.sensorimotor {
-                // v2: value-free sensorimotor affordance. `−act(Y)` consumes
-                // ANY agent action; `+sense(mᵏ(Y))` returns a sensed
-                // consequence. Only the *depth* k (content-blind digest) is
-                // LM-controlled. Colours are EXACTLY the fixed reserved pair
-                // {act, sense} + the fixed neutral functor `m`. No value, no
-                // self, no goal, no partition; identical for every agent.
-                // τ over a VARIABLE Y: consume ANY action, return a
-                // consequence functionally dependent on it (the value-free
-                // analogue of loop_phi's `−act(Y),+sense(f(Y))`, with depth k
-                // = content-blind digest instead of a hand-picked functor).
-                let mut tau = mk_var("Y");
-                for _ in 0..k {
-                    tau = mk_app_str("m", vec![tau]);
-                }
-                let neg_act = mk_app_str("-act", vec![mk_var("Y")]);
-                let pos_sense = mk_app_str("+sense", vec![tau]);
-                stars.push(vec![neg_act, pos_sense]);
-            } else {
-                // v1: neutral, value-free, provably inert (kept for record).
-                let args: Vec<_> = (0..k).map(|_| mk_app_str("e", vec![])).collect();
-                stars.push(vec![mk_app_str("env", args)]);
+        // `st^d(Y)` — d nested fixed reserved unary functors `st` around Y.
+        let stk = |d: usize| {
+            let mut t = mk_var("Y");
+            for _ in 0..d {
+                t = mk_app_str("st", vec![t]);
             }
-        }
+            t
+        };
+        let stars: Vec<Star> = match self.mode {
+            Mode::NeutralScale => {
+                let n = 1 + (checksum % self.max_stars);
+                (0..n)
+                    .map(|i| {
+                        let k = 1 + (bytes[i % bytes.len()] as usize % self.max_arity);
+                        let args: Vec<_> =
+                            (0..k).map(|_| mk_app_str("e", vec![])).collect();
+                        vec![mk_app_str("env", args)]
+                    })
+                    .collect()
+            }
+            Mode::Sensorimotor => {
+                let n = 1 + (checksum % self.max_stars);
+                (0..n)
+                    .map(|i| {
+                        let k = 1 + (bytes[i % bytes.len()] as usize % self.max_arity);
+                        let mut tau = mk_var("Y");
+                        for _ in 0..k {
+                            tau = mk_app_str("m", vec![tau]);
+                        }
+                        vec![
+                            mk_app_str("-act", vec![mk_var("Y")]),
+                            mk_app_str("+sense", vec![tau]),
+                        ]
+                    })
+                    .collect()
+            }
+            Mode::ComposableChain => {
+                // L coupled affordances forming ONE cycle of stages. Closing a
+                // reafferent loop must traverse all L ⇒ minimal closure is
+                // non-trivial (r′≥L, |P|≥L). L = content-blind digest;
+                // agent-agnostic (the chain names no agent). Value-free:
+                // vocab is exactly the fixed reserved {act, sense, st}.
+                let l = 2 + (checksum % self.max_arity); // L ∈ 2..=7
+                (0..l)
+                    .map(|j| {
+                        vec![
+                            mk_app_str("-act", vec![stk(j)]),
+                            mk_app_str("+sense", vec![stk((j + 1) % l)]),
+                        ]
+                    })
+                    .collect()
+            }
+        };
         EnvPerturbation(stars)
     }
 }
@@ -261,11 +305,18 @@ mod firewall_tests {
             "partition", "evidence", "suffer",
         ];
 
-        for codec in [FixedEnvCodec::canonical(), FixedEnvCodec::canonical_sensorimotor()] {
+        for codec in [
+            FixedEnvCodec::canonical(),
+            FixedEnvCodec::canonical_sensorimotor(),
+            FixedEnvCodec::canonical_composable(),
+        ] {
             let hostile = perturb(&Smuggler, &codec, "s");
             assert!(!hostile.is_empty());
-            let allowed: &[&str] =
-                if codec.sensorimotor { &["act", "sense", "m"] } else { &["env", "e"] };
+            let allowed: &[&str] = match codec.mode() {
+                Mode::NeutralScale => &["env", "e"],
+                Mode::Sensorimotor => &["act", "sense", "m"],
+                Mode::ComposableChain => &["act", "sense", "st"],
+            };
             for star in hostile.stars() {
                 for &ray in star {
                     let (c, pol) = colour_pol(ray);
@@ -278,16 +329,16 @@ mod firewall_tests {
                         !forbidden.iter().any(|f| c.contains(f)),
                         "FIREWALL BREACH: forbidden value/self colour {c:?}"
                     );
-                    if !codec.sensorimotor {
-                        assert_eq!(pol, Polarity::Neutral, "v1 must stay neutral");
-                    } else {
-                        // v2: polarity ONLY on the fixed sensorimotor pair.
-                        match c.as_str() {
-                            "act" => assert_eq!(pol, Polarity::Neg),
-                            "sense" => assert_eq!(pol, Polarity::Pos),
-                            "m" => assert_eq!(pol, Polarity::Neutral),
-                            _ => unreachable!(),
+                    match (codec.mode(), c.as_str()) {
+                        (Mode::NeutralScale, _) => {
+                            assert_eq!(pol, Polarity::Neutral, "v1 must stay neutral")
                         }
+                        // v2/v3: polarity ONLY on the fixed sensorimotor pair;
+                        // the structural functor stays neutral.
+                        (_, "act") => assert_eq!(pol, Polarity::Neg),
+                        (_, "sense") => assert_eq!(pol, Polarity::Pos),
+                        (_, "m") | (_, "st") => assert_eq!(pol, Polarity::Neutral),
+                        _ => unreachable!(),
                     }
                 }
             }

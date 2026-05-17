@@ -378,6 +378,16 @@ self-deception would be cheapest. The honest exposures:
   and P7 scope above. The line is the locus, not the world's distribution.
 - **Still open, the §2/§6-grade argument:** §4's structural `V` (expected
   continued re-closure). Not settled; the next session's real work.
+- **P2/P9 razor RULED (principal, 2026-05-17, post-P5.2b floor result):**
+  generic sensorimotor *capacity* in Φ (`[−sense(X),+act(X)]`) is **P9-legal
+  board, not a P2 smuggled self** — it is the loop_phi precedent the L2a
+  positive test already validated as a *genuine solved-for* closure; it is
+  mechanism, names no agent, sets no goal; the closure remains solved-for and
+  N1-guarded. Floor result and its descendants are **canonization-eligible**
+  after the standing inspect-don't-trust discipline (the count-deflation that
+  produced "1 trivial pattern ×12, not 12"). P9 itself (deathless control,
+  necessary-not-sufficient) remains the live tripwire on any *non-trivial*
+  positive.
 
 The pause discipline holds: instrument may be built, the experiment is not run
 on autopilot or under a clock, the nulls are locked before code, and the right
