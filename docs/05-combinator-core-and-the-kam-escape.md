@@ -181,3 +181,102 @@ main-thread per the dispatch protocol (no subagent proof-closing).
   honest scope statement (regulation/strategy = Ch9/§60.8 territory), not concealment.
 
 Falsification of any N is a result, recorded, not retro-weakened.
+
+---
+
+## 8. Galaxy fitness milestone & the fast-stellar lever (extension, 2026-05-17)
+
+Strengthen-only addition; §§1–7 unchanged. Principal ruling (user, 2026-05-17):
+
+**Architecture ruling — NO side reducer.** "A fast reducer on the side isn't
+interesting; we already have galaxy reducers." `~/dev/embershot` and the ICFP
+`galaxy.txt` exist to be the **demanding lever against which we hoist plain
+stellar resolution itself** to interactive speed — that *is* the fitness
+evidence. So: speed work targets the **stellar IEx engine**, not a foreign
+executor. A specialized fast path for the deterministic single-thread
+combinator/δ/arith redex shape is permitted **iff** it is a *verified jet* in
+the Nock-jet / Ethereum-precompile sense: observationally identical to the
+general `interaction_step`, swappable, with the **general engine retained as
+the differential oracle** for every jetted step (the project's blessed
+"Eng-literal as oracle, optimized engine proptest-fuzzed against it" pattern,
+applied *inside* the engine — fast path vs reference path, not stellar vs
+not-stellar). Galaxy running fast *as stellar resolution* is the deliverable;
+if it cannot be made interactive, the measured speed/faithfulness frontier is
+itself the honest first-class result.
+
+**Validation target — vectors first, then UI.** Headless evaluator + the
+`interact` protocol + known-good test vectors (rigorous, falsifiable) is the
+fitness milestone; the clickable "Galaxy of Galaxies" UI is the demo built on
+top afterward.
+
+**Galaxy is in-fragment.** `galaxy.txt` = 393 defs `:N = <prefix-ap expr>`,
+entry `galaxy = :1338`; vocabulary = exactly K1's `{S,B,C,I,T,F}` +
+`cons/car/cdr/nil/isnil` + `add/mul/div/neg/eq/lt` + `:N` + signed bigints.
+`:N` are **top-level constants, not binders** — galaxy never leaves the
+binder-free objective fragment; the KAM punt stays sidestepped at galaxy scale.
+
+### Phases
+
+- **KG1 — binary signed bigint arithmetic.** Replace K2a's unary `sⁿ(z)`
+  (N-K4: `O(value)`, galaxy has `123229502148636`, `-3`) with a faithful Horn
+  module over a **binary** numeral representation (ripple-carry add, shift-add
+  mul, recursive compare, sign-magnitude for `neg`/signed `add`/`div`).
+  `O(#bits)`. IEx-driven, oracle = ground arithmetic; large-value + timing
+  tests are the concrete N-K4 kill. *(KG1a unsigned add/mul/eq/lt/cmp; KG1b
+  signed + neg + div.)*
+- **KT — combinator testing hardening.** `proptest` differential: random
+  combinator terms reduced by K1 vs an in-test SKI reference oracle;
+  confluence / normal-form invariants; broadened law battery. Underpins trust
+  in any KS fast path.
+- **KG2 — named-def environment.** `:N` as δ-rule stars
+  `[−P(:N⋆π), +P(body_N⋆π)]` (objective, binder-free, shared not inlined);
+  parser for `galaxy.txt`; whole galaxy loads as one constellation.
+- **KS — fast stellar (the lever).** Profile the IEx hot loop on the galaxy
+  workload; head-indexed Φ matching (discrimination/fingerprint index — engine
+  roadmap), no Ψ rescans, efficient subst/freshen; optional **verified jet**
+  for the combinator/δ/arith step (general engine = differential oracle).
+  `criterion` measured. This is where galaxy-at-interactive-rates is won or
+  honestly falsified.
+- **KG3 — galaxy harness + vectors.** `interact` protocol; initial state +
+  scripted clicks; validate against a known-good reference and the stellar
+  engine itself (via KS). UI = later demo.
+
+### Pre-registered nulls (extension)
+
+- **N-KG1:** binary arithmetic only matches ground truth under hand-canonical
+  inputs / a bespoke strategy ⇒ not a faithful module.
+- **N-KS (reframed 2026-05-17 — the correct jet invariant):** a verified jet
+  is **result-equivalent**, not gas/step-identical (Nock jets aren't
+  bit-identical in gas). Since the objective fragment is confluent (Eng §49.55,
+  unique normal form), N-KS = for every input the fast path and the reference
+  `iex` **both terminate or both diverge**, and when they terminate the
+  ɟ-observable normal form (`conceal_and_filter` of final Ψ) is equal. The
+  reference `iex` is retained as the differential oracle; byte-identical
+  step-tests are kept additionally wherever the strategy is left unchanged. If
+  result-equivalence fails the jet is reverted, not kept (Goodhart-forbidden).
+
+### KS holistic architecture (the deterministic objective fragment)
+
+Profiler-proven cost structure (release, `STELLA_KS_PROF`): per-step `find`
+55–75 % (O(steps²) Ψ-rescan-from-zero + `Vec<Star>` rebuilt every step), `fuse`
+18–40 % (`theta.apply` rebuilds every ray through the global `Mutex<TermStore>`),
+`freshen` ~5 % (`format!`+lasso-intern per var/step), colour ~1 %. The found
+first-symbol index + interned-colour + existence-split give a *faithful but
+modest* x1.3–4.4 (Tier-0). The order-of-magnitude win is the holistic redesign
+of the **fast path only** (reference engine untouched = oracle):
+
+1. **Worklist selection** — agenda of active redex rays; no full Ψ rescan.
+2. **Focused machine state** — the combinator/Horn IEx *is* an abstract
+   machine (KAM-shaped for δ; SLD stack for Horn); run it as one, not a
+   `Vec<Star>` rebuilt per step.
+3. **Triangular/union-find substitution** — bind in an environment, deref
+   lazily; no per-fuse term rebuild / no global store lock storm.
+4. **Generation-tagged freshening** — fresh Φ copy = bumped integer
+   generation; no strings, no interner.
+
+Each lever lands independently, measured via `examples/ks_ab.rs` +
+`STELLA_KS_PROF`, gated by reframed N-KS (result-equivalence vs the `iex`
+oracle) + full suite. Measurement infra is permanent (project no-fake-done).
+- **N-GAL:** even fast stellar cannot run galaxy at interactive rates ⇒ the
+  measured frontier is the honest result; "fitness for purpose: not yet, here
+  is exactly where and why" — not concealed, not a bespoke fast-reducer escape.

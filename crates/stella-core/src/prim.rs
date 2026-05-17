@@ -337,7 +337,7 @@ fn run_fused(op: &str, spine_term: Term, fuel: usize) -> Option<u64> {
     let phi = fused_constellation(op);
     let eps = t_app("eps", vec![]);
     let psi = vec![vec![pp(t_app("st", vec![spine_term, eps]))]];
-    let res = crate::interactive::iex(&phi, psi, fuel);
+    let res = crate::interactive::iex_fast(&phi, psi, fuel);
     for star in &res.psi {
         if let [only] = star.as_slice() {
             if let term::TermData::App(p, pa) = term::get(*only) {

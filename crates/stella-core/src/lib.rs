@@ -2,6 +2,7 @@ pub mod alpha;
 pub mod arith;
 pub mod atm;
 pub mod automata;
+pub mod binarith;
 pub mod ch9;
 pub mod circuits;
 pub mod combinator;
