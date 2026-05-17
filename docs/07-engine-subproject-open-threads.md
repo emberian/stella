@@ -128,12 +128,17 @@ rasterisable first frame.
   galaxy-scale magnitudes silently `None` via `i128::try_from`). Doc
   rewritten from the "complete and faithful" overclaim to a plain
   "Faithfulness boundary"; per-site `// HOST:`/`// CEILING:` markers.
-  **TOP RECORDED FAITHFULNESS DEBT:** make the signed layer genuinely
-  stellar (no i128 round-trip, unbounded magnitude). So "galaxy
-  executes, flag=0" is true for the combinator/control skeleton (all 13
-  prim rules verified faithful by review Agent B) but its ARITHMETIC is
-  host-computed within the disclosed §60 concession — not yet a faithful
-  stellar execution of galaxy's numerics.
+  **FRAMING (user-corrected — do not re-litigate):** the native signed
+  kernel behind the differential oracle is a legitimate *intrinsic*
+  (jet), the exact GraalVM/verified-speculative-runtime model of §H —
+  NOT a "violation"/"smuggling"/moral debt (the adversarial review
+  over-rotated). Keep the honest-marking (disclose the i128 ceiling so
+  nobody mistakes it for unbounded). All 13 prim rules verified faithful
+  (review Agent B); galaxy's combinator/control skeleton executes
+  faithfully; its arithmetic is a disclosed oracle-gated native
+  intrinsic. Genuinely-stellar fully-general signed arithmetic is a
+  *planned generalization* (the KS stream — still worth doing), NOT a
+  correctness blocker.
 - Review Agent B also found: NO `modulate`/`demodulate`/`multipledraw`/
   `interact` loop exists ⇒ `[0,…,…]` is the raw single-application
   `(flag,newState,data)`, not a rendered frame; real rendering needs
@@ -171,8 +176,9 @@ either deeper structure or a decode_forced bound/shape issue — same
 investigate-don't-guess discipline, now with the trustworthy
 readback/decoder as the oracle and the protocol layer ready to consume a
 real frame the moment the data forces. (Perf of deep payload forcing =
-the KS-throughput thread D.) TOP FAITHFULNESS DEBT still: genuinely-
-stellar signed arithmetic (kill sbinarith i128 round-trip/ceiling).
+the KS-throughput thread D.) Planned generalization (NOT a blocker):
+genuinely-stellar fully-general signed arithmetic = the KS stream;
+the native intrinsic is legitimate and disclosed (see §B KG4b framing).
 
 (Pre-KG3e text, retained for the measured arc:)
 Measured arc: blocked@5 → KG3b lazy prims → 371-step "NF" → KG3e found
@@ -310,8 +316,8 @@ conclusion (F). (Was deferred "to next checkpoint" — still owed.)
    **(NOW TOP)** Deep-force the image-data payload (investigate why the
    `data` list elements don't reduce to cons/nil/num in `deep_decode` —
    bound vs deeper structure; the readback/decoder is the oracle).
-   Then top faithfulness debt: genuinely-stellar signed arithmetic
-   (kill the sbinarith i128 round-trip/ceiling).
+   Planned generalization (not a blocker): genuinely-stellar
+   fully-general signed arithmetic = part of the KS stream.
 3. Fold this into `docs/05` §10 (J) — include the KG3d shallow-NF
    finding (decoder faithful; galaxy NF clean-but-shallow, not Opaque).
 4. Then: KA1 cheap-key+cross-run table (D, valence) → rayon (D) → KA2
