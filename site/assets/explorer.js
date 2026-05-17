@@ -3,8 +3,7 @@
 // stella-core, compiled to wasm32, runs interactive execution (IEx) entirely
 // in the browser. This module renders a constellation as it resolves — stars
 // and rays, the redex that fires, the most general unifier — and also offers a
-// dependency-graph view and a free-form editor. It is a tool; the reading on
-// the model is static and stands without it.
+// dependency-graph view and a free-form editor.
 
 // This module lives at /assets/explorer.js; the WASM bundle is /pkg/ and the
 // vendored viz.js is /assets/vendor/.
@@ -267,7 +266,7 @@ const TEMPLATE_IDE = `
         <button class="st-btn st-btn--secondary st-btn--sm" data-role="cexample">Load example</button>
         <span class="stx-error" data-role="cerr"></span>
         <span class="stx-bar__spacer"></span>
-        <span class="stx-syntax">The encoder is Eng-faithful; the result is editable source.</span>
+        <span class="stx-syntax">Builds an editable Φ ⊢ Ψ from the spec.</span>
       </div>
     </div>
   </div>
@@ -615,10 +614,9 @@ export async function mountExplorer(root, opts = {}) {
       elObs.classList.toggle("is-final", isFinal);
     }
 
-    // The EXACT §51.9 decomposition: one step fires a *sum* of summands,
-    // each with the real θ the engine applied (authoritative, not
-    // reconstructed). Fall back to the single-mgu phrasing only if the
-    // exact summands are absent (the primer's fuel-replay capture).
+    // §51.9 decomposition: one step fires a sum of summands, each with the
+    // θ the engine applied (not reconstructed). Fall back to the single-mgu
+    // phrasing only if the summands are absent (the fuel-replay capture).
     const sums = snap.summands || [];
     if (sums.length && nextRedex) {
       const plural = sums.length > 1;
@@ -898,10 +896,10 @@ export async function mountExplorer(root, opts = {}) {
       res.order_independent ? "strategy-independent ɟ" : "order-sensitive ɟ",
       res.order_independent ? "ok" : "no",
       res.order_independent
-        ? "same ɟ under the default and an alternate firing order — exact engine"
+        ? "same ɟ under the default and an alternate firing order"
         : "different ɟ under another order — non-confluent here, or fuel exhausted"));
-    body.appendChild(DGM.setField(res.result, { title: "the result — ɟ(IEx), exact (Stage 0)" }));
-    body.appendChild(DGM.setField(res.alt, { title: "ɟ under an alternate firing order (exact)" }));
+    body.appendChild(DGM.setField(res.result, { title: "the result — ɟ(IEx)" }));
+    body.appendChild(DGM.setField(res.alt, { title: "ɟ under an alternate firing order" }));
     body.appendChild(DGM.setField(res.cex, {
       title: `raw CEx cross-check · copy budget k=${res.cex_k} (renamed copies; research aid)`,
     }));
@@ -1094,7 +1092,7 @@ export async function mountExplorer(root, opts = {}) {
       } catch (_) { /* preview is best-effort; never block editing */ }
     }
 
-    // Construction lab — schema-driven form → Eng-faithful constellation.
+    // Construction lab — schema-driven form → constellation source.
     const cpanel = $("cpanel"), cclass = $("cclass"), cerr = $("cerr");
     const cForm = new SpecForm($("cform"), {
       parseCheck,
@@ -1256,7 +1254,6 @@ export async function mountExplorer(root, opts = {}) {
           { k: "ω(B)", v: res.omega_b, tone: "warm" },
           { k: "Δω", v: res.omega_b - res.omega_a, tone: "cool" },
         ]));
-        lout.appendChild(lnote("Exact engine (Stage 0) both sides."));
       } else {
         lout.appendChild(lgrp(`bi-orthogonal closure  (⊥${res.orth})`,
           DGM.closure(res.a, res.a_perp, res.a_biperp, res.is_behaviour)));

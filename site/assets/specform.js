@@ -190,7 +190,7 @@ export const SCHEMA = {
   },
   compare: {
     title: "Compare — same result? ω delta", ref: "Eng §51, §79",
-    blurb: "Runs ΦA ⊢ ΨA and ΦB ⊢ ΨB under the exact engine; reports same-observable and Δω.",
+    blurb: "Runs ΦA ⊢ ΨA and ΦB ⊢ ΨB; reports whether they reach the same observable, and Δω.",
     fields: [
       F("phiA", "cstr"), F("psiA", "cstr"),
       F("phiB", "cstr"), F("psiB", "cstr"),
