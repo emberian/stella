@@ -943,12 +943,53 @@ fn is_normal_form_accel(accel: &IexAccel, phi: &Constellation, psi: &[Star]) -> 
 ///   skipped prefix is non-matchable). Any colour change ⇒ `start = 0`
 ///   (full-rescan fallback). The reference [`iex`] is the differential oracle.
 pub fn iex_fast(phi: &Constellation, psi_init: Vec<Star>, fuel: usize) -> IExResult {
+    iex_fast_inner(phi, psi_init, fuel, false)
+}
+
+/// KA1 — `iex_fast` + **variant-deletion tabling** (spec §9). A produced star
+/// that is an α-variant of one already seen (initial or earlier-produced) is
+/// redundant — on the confluent objective/Horn fragment its consequences are
+/// α-variants of already-reachable ones — so it is dropped. This turns
+/// fuel-truncation into a genuine **fixpoint**: when a step yields only
+/// variants, nothing new accumulates and execution reaches a true normal
+/// form instead of looping. The SLG/tabling "exact reuse by variant
+/// checking" layer the survey mandates *first*; sound for the membership-
+/// based result extraction the codebase uses, differential-gated
+/// (result-equivalence vs reference `iex`), not byte-identical — that trade
+/// (fixpoint termination for step-identity) is the reframed N-KS.
+/// `iex_fast` (the byte-identical jet) is left untouched.
+pub fn iex_tabled(phi: &Constellation, psi_init: Vec<Star>, fuel: usize) -> IExResult {
+    iex_fast_inner(phi, psi_init, fuel, true)
+}
+
+/// Conservative α-variant key of a star: `canonical` of its rays as an
+/// ordered tuple. Order-sensitive ⇒ may miss a ray-permuted variant
+/// (under-dedup, merely less speedup) but **never** conflates two genuinely
+/// different stars (sound: never drops a non-variant).
+fn star_key(star: &Star) -> Term {
+    crate::antiunify::canonical(crate::term::mk_app_str("\u{22c6}star", star.clone()))
+}
+
+fn iex_fast_inner(
+    phi: &Constellation,
+    psi_init: Vec<Star>,
+    fuel: usize,
+    tabling: bool,
+) -> IExResult {
     let accel = IexAccel::build(phi);
     let mut psi = psi_init;
     let mut counter = 0u32;
     let mut steps = 0;
     let mut prev_cs: Option<FxHashSet<crate::term::Sym>> = None;
     let mut resume_from = 0usize;
+    // KA1 table: α-variant keys of every star ever present (seed with the
+    // initial Ψ so a re-derived copy of a starting subgoal is reused).
+    let mut seen: FxHashSet<Term> = FxHashSet::default();
+    if tabling {
+        for s in &psi {
+            seen.insert(star_key(s));
+        }
+    }
 
     while steps < fuel {
         let tp = std::time::Instant::now();
@@ -989,7 +1030,18 @@ pub fn iex_fast(phi: &Constellation, psi_init: Vec<Star>, fuel: usize) -> IExRes
                 let selected = psi.remove(i);
                 let produced =
                     produce_stars_fast(&accel, phi, &selected, j, &mut counter, &psi_cs);
-                psi.extend(produced);
+                if tabling {
+                    // KA1: drop α-variant redundant stars; keep + table the rest.
+                    // (If a step yields only variants ⇒ no growth ⇒ fixpoint.)
+                    for s in produced {
+                        let k = star_key(&s);
+                        if seen.insert(k) {
+                            psi.push(s);
+                        }
+                    }
+                } else {
+                    psi.extend(produced);
+                }
                 // Prefix [0, i) was scanned non-matchable this step and is
                 // physically untouched by remove/extend ⇒ safe resume point.
                 resume_from = i;
@@ -1086,6 +1138,15 @@ pub fn iex_concealed(phi: &Constellation, psi: Vec<Star>, fuel: usize) -> (Vec<S
 /// (it delegates to [`iex_fast`], which the N-KS gate proves ≡ [`iex`]).
 pub fn iex_fast_concealed(phi: &Constellation, psi: Vec<Star>, fuel: usize) -> (Vec<Star>, bool) {
     let res = iex_fast(phi, psi, fuel);
+    let visible = conceal_and_filter(&res.psi);
+    (visible, res.is_normal_form)
+}
+
+/// KA1 concealed run: [`iex_tabled`] + `↨♭`. Result-equivalent to
+/// [`iex_fast_concealed`] on the confluent fragment (differential-gated),
+/// but reaches a true fixpoint where the untabled path fuels out.
+pub fn iex_tabled_concealed(phi: &Constellation, psi: Vec<Star>, fuel: usize) -> (Vec<Star>, bool) {
+    let res = iex_tabled(phi, psi, fuel);
     let visible = conceal_and_filter(&res.psi);
     (visible, res.is_normal_form)
 }
@@ -1383,5 +1444,50 @@ mod tests {
         let bb = iex_fast(&bphi, bq, 8000);
         assert_eq!(ba.psi, bb.psi, "binarith: psi differs");
         assert_eq!(ba.steps, bb.steps, "binarith: step count differs");
+    }
+
+    /// **KA1 differential gate (result-equivalence, the reframed N-KS).**
+    /// `iex_tabled` is NOT byte-identical to reference `iex` (it drops variant
+    /// stars, so `psi`/`steps` differ — by design). It MUST be observationally
+    /// equivalent: same ɟ-concealed answer set (up to α) and both reach a true
+    /// normal form. The reference `iex` stays the differential oracle; any
+    /// answer-set divergence ⇒ tabling unfaithful ⇒ revert (no ceremony, the
+    /// oracle *is* the rigor).
+    #[test]
+    fn iex_tabled_result_eq_iex() {
+        let same_answers = |a: &[Star], b: &[Star]| -> bool {
+            let av = conceal_and_filter(&a.to_vec());
+            let bv = conceal_and_filter(&b.to_vec());
+            let subset = |xs: &[Star], ys: &[Star]| {
+                xs.iter()
+                    .all(|x| ys.iter().any(|y| crate::execution::stars_alpha_equiv(x, y)))
+            };
+            subset(&av, &bv) && subset(&bv, &av)
+        };
+
+        // (a) Horn add(3,2) → [5̄].
+        let phi = add_prog();
+        let q = vec![query_star(3, 2)];
+        let r = iex(&phi, q.clone(), 5000);
+        let t = iex_tabled(&phi, q, 5000);
+        assert!(t.is_normal_form, "tabled Horn must reach a true fixpoint");
+        assert!(
+            same_answers(&r.psi, &t.psi),
+            "tabled Horn answer set differs from reference oracle"
+        );
+
+        // (b) Binary arith add(5,6) → [11̄].
+        let bphi = crate::binarith::binarith_module();
+        let bq = vec![vec![
+            neg_ray("add", vec![crate::binarith::nat(5), crate::binarith::nat(6), var("R")]),
+            var("R"),
+        ]];
+        let br = iex(&bphi, bq.clone(), 8000);
+        let bt = iex_tabled(&bphi, bq, 8000);
+        assert!(bt.is_normal_form, "tabled binarith must reach a true fixpoint");
+        assert!(
+            same_answers(&br.psi, &bt.psi),
+            "tabled binarith answer set differs from reference oracle"
+        );
     }
 }
