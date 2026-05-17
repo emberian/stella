@@ -347,6 +347,39 @@ e.g. weighted by `accel_detect`'s rigid-skeleton growth rate, §3.2) is
 *the* valence charge is the empirical question §5 exists to test, and
 the honest open problem of §6.
 
+### 4.6 GoI closure — `χ` is a measure of `σu` non-nilpotency [Eng for the equivalence; Proto for the χ identification]
+
+docs/15 §1.3/§4 closes the theory side of §4.5. The GoI Interaction
+Abstract Machine's execution `Ex(u) = (1−σ²)·…` is defined (terminating)
+**iff `σu` is nilpotent** — `∃k.(σu)^k = 0` (§34.8). §49.57 [Eng],
+*verbatim*, states hyperexecution idempotence "is similar to the
+nilpotency property in GoI." So the §3.1 idempotence-loss⟺whistle
+proposition is, restated in GoI terms:
+
+> `σu` **nilpotent** ⟺ objective/idempotent (§49.55) ⟺ the token
+> machine halts with every feedback path cancelled ⟺ **`χ = 0`**.
+> `σu` **non-nilpotent** ⟺ a persistent (non-cancelling) feedback path
+> ⟺ the Kruskal whistle must blow on the layer trace (wqo) ⟺ **`χ > 0`**.
+
+This is not a second artifact to build and not a competing model: it is
+the *proof that §4.5's fixpoint is the right one*. The charge `χ` =
+"forcing events dependency-below a later forcing event, integrated over
+layers" (§4.5) **is** the count of token transitions on non-cancelling
+feedback paths — i.e. a measure of how far `σu` is from nilpotent. The
+KAM-as-constellation is, line for line, the GoI token machine
+(§57.19+§49.57); §49.50's subjective ray re-opening a match is exactly a
+non-cancelled GoI feedback edge. The two boundary conditions §4.5
+already requires (`χ = 0` on objective fragments, `χ` monotone in
+semaphore depth) are precisely nilpotency and non-nilpotency-degree —
+so the GoI identification *derives* the boundary conditions §4.5 had to
+postulate, rather than merely being consistent with them. [Eng] for
+idempotence⟺nilpotency (§49.57 verbatim); [Proto] for the `χ ≡
+non-nilpotency-degree` identification (Eng has no `χ`). Consequence for
+§5: the Stage-2 `χ` and the Stage-3 charge claim are testing a
+quantity with an Eng-grounded meaning (distance from GoI nilpotency),
+which sharpens — does not replace — the §4.5 definition and the §5
+falsifiers.
+
 ---
 
 ## 5. Staged, differential-oracle-gated implementation plan
