@@ -530,3 +530,29 @@ AEx-layer boundary, galaxy.rs:864-893) in the same harness. Then build
 KA2 (if H2; fastest) or interaction-net (if H1). Then Σ(Φ) companion.
 Faithfulness invariant unchanged (iex oracle / psi_compatible gate /
 two-tier deopt / N-KA-cover honest negative).
+
+## Σ1 ATTEMPT — honest negative, REVERTED (not shipped unproven)
+Σ0 (compiled Σ(Φ) table, 016e8ee) STANDS — proven on real galaxy Φ.
+Σ1 (iex_spec) attempted as a prefix-accelerator (Unwind/Delta fire
+while they apply, then delegate the remainder to the proven iex_fast =
+the deopt). FAILED its own gate: psi_compatible(iex, iex_spec) RED on
+the combinator SKK corpus — even though combinator-core encoding
+(+P/-P/st/dot/a/eps) is byte-identical to galaxy (combinator.rs:101-190),
+so NOT a corpus artifact. Reverted interactive.rs to f5e845c (Stage-1b
+proven state); iex_spec was uncommitted + wired nowhere ⇒ engine
+untouched, all gates green. Discipline: never ship an unproven engine
+tier; an honest negative beats a faked green.
+HYPOTHESIS for the careful redo (flagged, unverified): the
+prefix-accelerate-then-delegate composition is NOT trivially
+step-identical to iex_fast. "focus = a(_,_) ⇒ Unwind" over-assumes the
+leftmost-redex; iex/iex_fast redex SELECTION (mat-scan order, value vs
+redex a-nodes, exhausted continuation) differs from a hand-rolled KAM
+loop ⇒ iex_spec over-/mis-reduces vs iex strategy ⇒ divergent Ψ. The
+correct Σ1 must REPLICATE iex_fast_inner exact redex selection (e.g.
+specialise the per-step body INSIDE iex_fast_inner: at the chosen
+redex, if its head is in Σ(Φ), apply the closed Transition instead of
+mat+unify+fuse — same redex, cheaper realisation), NOT a separate
+loop. That is the docs/17 "sibling tier reusing iex_fast_inner"
+intent; my prefix-loop shortcut was the error. Σ1 redo = in-loop
+specialisation, psi_compatible+step-identity gated. Deferred to a
+careful pass; Σ0 is the durable down-payment.
