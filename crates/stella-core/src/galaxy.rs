@@ -705,6 +705,13 @@ fn force_value(
     let f = eval_forced(phi, term, fuel, budget - 1); // strictly smaller
     TR_DEPTH.with(|c| c.set(c.get().saturating_sub(1)));
     let rb = readback_ray(f.final_ray.unwrap_or(f.value));
+    // docs/08 Stage-1 tap: one canonicalised state per resolved AEx layer
+    // (no-op unless a harness installed the sink).
+    LAYER_TRACE.with(|t| {
+        if let Some(v) = t.borrow_mut().as_mut() {
+            v.push(crate::antiunify::canonical(rb));
+        }
+    });
     let result: (ForcedValue, usize) = if crate::sbinarith::dsint(rb).is_some() {
         (ForcedValue::Numeral(rb), f.steps)
     } else if f.fully_reduced
@@ -860,6 +867,26 @@ thread_local! {
     /// value-identical (not a speculative jet) ⇒ result-equivalence trivial.
     static FORCE_MEMO: std::cell::RefCell<rustc_hash::FxHashMap<TermId, (ForcedValue, usize)>> =
         std::cell::RefCell::new(rustc_hash::FxHashMap::default());
+    /// docs/08 Stage-1 per-AEx-layer trace tap. **Pure observation,
+    /// behaviour-preserving:** `force_value` pushes the canonicalised
+    /// forced readback of each recursive layer here *iff a measurement
+    /// harness installed a sink* (`layer_trace_begin`). Production and the
+    /// test suite never install one ⇒ `None` ⇒ a single branch, byte-
+    /// identical. This is the §3.1 trace the outer-`final_ray` probes
+    /// structurally cannot see (the divergence lives in this recursion).
+    static LAYER_TRACE: std::cell::RefCell<Option<Vec<TermId>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Install a fresh per-layer trace sink (docs/08 Stage-1). Measurement
+/// harnesses only — see [`LAYER_TRACE`].
+pub fn layer_trace_begin() {
+    LAYER_TRACE.with(|t| *t.borrow_mut() = Some(Vec::new()));
+}
+/// Take the accumulated per-AEx-layer trace (canonicalised readbacks, in
+/// `force_value` resolution order) and clear the sink.
+pub fn layer_trace_take() -> Vec<TermId> {
+    LAYER_TRACE.with(|t| t.borrow_mut().take().unwrap_or_default())
 }
 /// Env-gated (`STELLA_GALAXY_TRACE=1`) one-line forcing trace — the
 /// instrument that shows exactly which Push-form op resolves and where the
