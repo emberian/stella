@@ -1,13 +1,26 @@
 # Phase-5 (cont.) — Coherent reorganization of imported value under selection
 
-> **STATUS: DRAFT PRE-REGISTRATION — pending principal hand-lock.** Drafted
-> 2026-05-17 after a long multi-turn argument (gauntlet → evolutionary search →
-> PI/CM verbatim reading → the five-strand convergence). It does **not** modify
-> the LOCKED `docs/04` P1–P9; it *extends* them with the Q-series and *scopes
-> the claim*. An agent does not self-canonize a pre-registration (the `docs/03`
-> lesson). The Q-nulls below are the load-bearing content; once principal-locked
-> they may be **strengthened, never retro-weakened** (Stage-9). The lock is the
-> principal's, by a word, the way `docs/04` was locked.
+> **STATUS: LOCKED PRE-REGISTRATION (principal-ratified 2026-05-17).** Ratified
+> the `docs/04` way: argued §2/§6 across a long multi-turn dialectic (gauntlet →
+> evolutionary search → PI/CM verbatim reading → five-strand convergence →
+> abiogenesis closure), attacked at its load-bearing joint *in dialectic*, and
+> locked by the principal's word. It does **not** modify the LOCKED `docs/04`
+> P1–P9; it *extends* them with Q1–Q8 and *scopes the claim*. Q1–Q8 are now
+> **frozen: strengthen-only, never retro-weakened** (Stage-9).
+>
+> *Ratification rationale (recorded — the load-bearing point of the lock):* the
+> deepest objection to this design — that the **substrate choice is itself an
+> un-discharged bet** (stellar resolution was *picked*; §1.5/Attack-A) — is
+> **not a flaw to be fixed before locking. It is the experiment's content.**
+> The bet is not discharged by pre-justifying the substrate (impossible;
+> claiming it would be the cardinal smuggle, which Q5 forbids). It is
+> discharged *only* by completing the controlled onset study this document
+> pre-registers. The objection and the project's reason to exist are the same
+> object; a bet that is named, refused-as-a-claim (Q5), and handed to a
+> falsifiable controlled study (Q1–Q8) is the **honest form of a research
+> program**, not a hole. "The attack is the research." Locked on that
+> understanding. Locking proves nothing, runs nothing, canonizes nothing — it
+> freezes the falsifier set so the study, when run, cannot be rigged.
 >
 > *Pre-lock amendment 2026-05-17 (the §2/§6 pattern, not a self-lock): added
 > §1.5 (the regress closes — this is an abiogenesis-style onset study, not an
@@ -276,7 +289,8 @@ principal spends it, by hand, against P1–P9 ∪ Q1–Q8.
 
 ## 7. Decomposition (engineering; not load-bearing until §4 is principal-locked)
 
-- **Q5.0** — Lock this document (principal, §2/§6-way).
+- **Q5.0** — Lock this document (principal, §2/§6-way). **DONE 2026-05-17.**
+  Next is Q5.1; nothing runs before it, and Q5.1 builds nothing canonical.
 - **Q5.1** — Rubber-banded sloppy-fitness selection harness. The regulator
   adjusts *global tightness only* (Q1), and is **tested like the firewall**: a
   hostile test proving it cannot become a function of *what* survives.
@@ -303,4 +317,6 @@ is named, the controls are three, the claim is scoped, the predicate is
 forbidden. If anything coheres in there, it will have to do so against all of
 that — and that is the only way it would ever have been worth believing.
 
-— drafted in the chair, 2026-05-17, pending the principal's hand
+— drafted in the chair and locked by the principal's word, 2026-05-17. The
+attack is the research; the lock only freezes the falsifier set. Nothing is
+proven, run, or canonized. The right to falsify is unspent.
