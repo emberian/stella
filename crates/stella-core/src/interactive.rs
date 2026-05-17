@@ -78,9 +78,10 @@ use crate::constellation::{Constellation, Star};
 use crate::dep_graph::{all_colours, ray_colours};
 use crate::polarised::{matchable, matchable_fast, ray_polarity, underlying_term, Polarity};
 use crate::subst::{freshen, Substitution};
-use crate::term::{get, mk_var_interned, Term, TermData, Var};
+use crate::term::{get, mk_app, mk_var_interned, Term, TermData, Var};
 use crate::unify::{unify, Equation};
 use crate::index::RayIndex;
+use crate::spec_phi::{spec_star, Transition as SpecTr};
 use rustc_hash::FxHashSet;
 use std::collections::HashSet;
 
@@ -281,6 +282,13 @@ fn ray_csym(r: Term) -> Option<crate::term::Sym> {
 pub struct IexAccel {
     idx: RayIndex,
     phi_csyms: FxHashSet<crate::term::Sym>,
+    /// Σ(Φ) residual, parallel to `phi` by star index: the precomputed
+    /// closed [`SpecTr`] + its negative-ray index for each specialisable
+    /// Φ-star (`None` ⇒ not specialisable ⇒ generic path). Built once per
+    /// fixed Φ (the partial-evaluation residual); consulted **only** by the
+    /// `iex_spec` tier — `iex_fast`/`iex_tabled`/reference `iex` never read
+    /// it, so their proven byte-identity is untouched.
+    spec: Vec<Option<(usize, SpecTr)>>,
 }
 
 impl IexAccel {
@@ -297,7 +305,8 @@ impl IexAccel {
                 }
             }
         }
-        Self { idx, phi_csyms }
+        let spec = phi.iter().map(|s| spec_star(s)).collect();
+        Self { idx, phi_csyms, spec }
     }
 }
 
@@ -939,6 +948,105 @@ fn ks_add(slot: &'static std::thread::LocalKey<std::cell::Cell<f64>>, dt: std::t
 /// self-interactions). The caller mutates Ψ in place — order-preserving
 /// `remove(star_idx)` + `extend(produced)` — so there is no per-step
 /// `Vec<Star>` realloc. Same Ψ as the reference's filter-collect+push.
+/// Σ(Φ) in-loop realiser — the closed [`SpecTr`] applied to *iex_fast's
+/// own* chosen redex `(selected_star, ray_idx)` against the matched Φ-star
+/// `phi_star` (negative pattern ray `neg_idx`). Returns the SAME resolvent
+/// the generic α-rename + `unify_fast` + θ-apply would build for this
+/// `(ik,jk)` — but with no α-rename / no general unify / no whole-star
+/// apply (the Futamura residual). Result-equivalent on the δ/Push skeleton:
+/// the Φ pattern is linear in fresh-equiv vars ⇒ its MGU is the one-sided
+/// match read positionally off the Ψ focus; the generic path α-renames Φ so
+/// its θ is identity on the Ψ remainder ⇒ those rays pass through verbatim
+/// (up to the α-naming of fresh vars, which `psi_compatible`'s canonical
+/// form absorbs — the sibling-tier gate, exactly like `iex_tabled`).
+/// `None` ⇒ delegate (Σ1 Splice, contractum-side match, or any shape
+/// mismatch — `psi_compatible` + reference `iex` are the backstop).
+#[cfg(test)]
+pub(crate) static SPEC_HITS: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+/// `±P(st(M, π))` → `(pol_sym, st_sym, M, π)`, structurally (the same
+/// polarity-agnostic shape `spec_phi::unwrap_st` classifies on — head is the
+/// bare polarity symbol `P`/`+P`/`-P`, **not** stripped by
+/// `underlying_term`). `None` if not that shape.
+fn split_pol_st(
+    ray: crate::term::TermId,
+) -> Option<(
+    crate::term::Sym,
+    crate::term::Sym,
+    crate::term::TermId,
+    crate::term::TermId,
+)> {
+    let TermData::App(pol, a) = get(ray) else {
+        return None;
+    };
+    if a.len() != 1 {
+        return None;
+    }
+    let TermData::App(sts, sa) = get(a[0]) else {
+        return None;
+    };
+    if sts.name.as_str() != "st" || sa.len() != 2 {
+        return None;
+    }
+    Some((pol, sts, sa[0], sa[1]))
+}
+
+fn spec_realise(
+    selected_star: &Star,
+    ray_idx: usize,
+    phi_star: &Star,
+    neg_idx: usize,
+    tr: &SpecTr,
+) -> Option<Star> {
+    if phi_star.len() != 2 {
+        return None;
+    }
+    let contractum_ray = phi_star[1 - neg_idx];
+    let r = selected_star[ray_idx];
+    let (_pol_r, st_sym, focus_m, focus_pi) = split_pol_st(r)?;
+    // The contractum ray's polarity head (e.g. `+P`) + its stack slot — reuse
+    // them verbatim so the minted ray is shape-identical to the generic
+    // resolvent, and read the `·` Sym structurally (no name literal).
+    let (pos_sym, c_st_sym, _c_m, c_pi) = split_pol_st(contractum_ray)?;
+
+    let new_inner = match tr {
+        // -P(st(:N,π)), +P(st(body,π)) ; θ = {π ↦ focus_pi} ; body closed.
+        SpecTr::Delta(body) => mk_app(c_st_sym, vec![*body, focus_pi]),
+        // -P(st(a(M,N),π)), +P(st(M, N·π)). Read M,N off the focus app; the
+        // `·` Sym is the head of the contractum's stack slot.
+        SpecTr::Unwind => {
+            let TermData::App(a_sym, a_args) = get(focus_m) else {
+                return None;
+            };
+            if a_sym.name.as_str() != "a" || a_args.len() != 2 {
+                return None;
+            }
+            let (am, an) = (a_args[0], a_args[1]);
+            let TermData::App(dot_sym, _) = get(c_pi) else {
+                return None;
+            };
+            let _ = st_sym;
+            mk_app(c_st_sym, vec![am, mk_app(dot_sym, vec![an, focus_pi])])
+        }
+        // Σ1 scope: combinator Splice delegates to the generic fast path
+        // (un-delegated in Σ2). Strict ops carry no SpecTr at all.
+        SpecTr::Splice { .. } => return None,
+    };
+    let new_ray = mk_app(pos_sym, vec![new_inner]);
+
+    let mut result: Star = Vec::with_capacity(selected_star.len());
+    for (idx, &ray) in selected_star.iter().enumerate() {
+        if idx != ray_idx {
+            result.push(ray);
+        }
+    }
+    result.push(new_ray);
+    #[cfg(test)]
+    SPEC_HITS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    Some(result)
+}
+
 fn produce_stars_fast(
     accel: &IexAccel,
     phi: &Constellation,
@@ -946,20 +1054,35 @@ fn produce_stars_fast(
     ray_idx: usize,
     counter: &mut u32,
     psi_cs: &FxHashSet<crate::term::Sym>,
+    spec: bool,
 ) -> Vec<Star> {
     let mut produced: Vec<Star> = Vec::new();
     let r = selected_star[ray_idx];
 
     for (ik, jk) in mat_phi_c_accel(accel, phi, r, psi_cs) {
+        // Reference parity: the old scheme consumed one `counter` slot for
+        // the (now-unused) per-fusion prefix before the per-var slots. Keep
+        // it on BOTH paths so the generic fast path's `Var::Idx` numbering
+        // stays byte-identical to the reference engine's (N-KS gate).
+        *counter += 1;
+        // Σ(Φ) tier: at iex_fast's OWN chosen `(ik,jk)`, if Φ-star `ik` is
+        // specialisable and the Ψ focus matched its pattern ray, realise the
+        // resolvent from the closed Transition instead of α-rename+unify+
+        // apply. iex_fast/iex_tabled/iex pass `spec=false` ⇒ untouched.
+        if spec {
+            if let Some((neg_idx, tr)) = &accel.spec[ik] {
+                if jk == *neg_idx {
+                    if let Some(res) =
+                        spec_realise(selected_star, ray_idx, &phi[ik], *neg_idx, tr)
+                    {
+                        produced.push(res);
+                        continue;
+                    }
+                }
+            }
+        }
         let tf = std::time::Instant::now();
-        let phi_star_renamed = {
-            // Reference parity: the old scheme consumed one `counter` slot for
-            // the (now-unused) per-fusion prefix before the per-var slots.
-            // Keep it so the fast path's `Var::Idx` numbering is byte-identical
-            // to the reference engine's (N-KS gate `iex_eq_iex_fast`).
-            *counter += 1;
-            alpha_rename_star_fast(&phi[ik], counter)
-        };
+        let phi_star_renamed = alpha_rename_star_fast(&phi[ik], counter);
         ks_add(&T_FRESH, tf.elapsed());
         let tu = std::time::Instant::now();
         // Fast tier (iex_fast/iex_tabled): the near-linear unifier. The
@@ -1014,7 +1137,7 @@ fn is_normal_form_accel(accel: &IexAccel, phi: &Constellation, psi: &[Star]) -> 
 ///   skipped prefix is non-matchable). Any colour change ⇒ `start = 0`
 ///   (full-rescan fallback). The reference [`iex`] is the differential oracle.
 pub fn iex_fast(phi: &Constellation, psi_init: Vec<Star>, fuel: usize) -> IExResult {
-    iex_fast_inner(&IexAccel::build(phi), phi, psi_init, fuel, false)
+    iex_fast_inner(&IexAccel::build(phi), phi, psi_init, fuel, false, false)
 }
 
 /// Build the KS acceleration structure for a fixed Φ once, to be reused
@@ -1044,7 +1167,7 @@ pub fn iex_fast_with_accel(
     psi_init: Vec<Star>,
     fuel: usize,
 ) -> IExResult {
-    iex_fast_inner(accel, phi, psi_init, fuel, false)
+    iex_fast_inner(accel, phi, psi_init, fuel, false, false)
 }
 
 /// [`iex_tabled`] (KA1 variant-deletion) with a caller-supplied [`IexAccel`].
@@ -1056,7 +1179,7 @@ pub fn iex_tabled_with_accel(
     psi_init: Vec<Star>,
     fuel: usize,
 ) -> IExResult {
-    iex_fast_inner(accel, phi, psi_init, fuel, true)
+    iex_fast_inner(accel, phi, psi_init, fuel, true, false)
 }
 
 /// KA1 — `iex_fast` + **variant-deletion tabling** (spec §9). A produced star
@@ -1072,7 +1195,34 @@ pub fn iex_tabled_with_accel(
 /// (fixpoint termination for step-identity) is the reframed N-KS.
 /// `iex_fast` (the byte-identical jet) is left untouched.
 pub fn iex_tabled(phi: &Constellation, psi_init: Vec<Star>, fuel: usize) -> IExResult {
-    iex_fast_inner(&IexAccel::build(phi), phi, psi_init, fuel, true)
+    iex_fast_inner(&IexAccel::build(phi), phi, psi_init, fuel, true, false)
+}
+
+/// Σ(Φ) — the first Futamura projection as a **sibling fast tier** (docs/14,
+/// docs/17). Identical redex selection to [`iex_fast`] (same `iex_fast_inner`
+/// scan), but at iex_fast's own chosen `(ik,jk)` a specialisable Φ-star's
+/// resolvent is built from the closed [`SpecTr`] residual instead of
+/// α-rename + `unify_fast` + whole-star θ-apply. Σ1 scope: δ + Push only
+/// (combinator `Splice` / strict still delegate to the generic path).
+/// Decision-equivalent to reference [`iex`] (gated by
+/// `faithfulness::psi_compatible`, **step-count identical** to `iex_fast`);
+/// the proven byte-identical `iex_fast`/`iex_tabled`/`iex` are untouched —
+/// this is a parallel tier with the same deopt discipline as `iex_tabled`.
+pub fn iex_spec(phi: &Constellation, psi_init: Vec<Star>, fuel: usize) -> IExResult {
+    iex_fast_inner(&IexAccel::build(phi), phi, psi_init, fuel, false, true)
+}
+
+/// [`iex_spec`] with a caller-supplied [`IexAccel`] (carries the Σ(Φ)
+/// residual; build once per fixed Φ, reuse across runs — the valence/galaxy
+/// hot loop). Provably identical to `iex_spec(phi, …)` when
+/// `accel == build_accel(phi)`.
+pub fn iex_spec_with_accel(
+    accel: &IexAccel,
+    phi: &Constellation,
+    psi_init: Vec<Star>,
+    fuel: usize,
+) -> IExResult {
+    iex_fast_inner(accel, phi, psi_init, fuel, false, true)
 }
 
 /// Conservative α-variant key of a star: `canonical` of its rays as an
@@ -1089,6 +1239,7 @@ fn iex_fast_inner(
     psi_init: Vec<Star>,
     fuel: usize,
     tabling: bool,
+    spec: bool,
 ) -> IExResult {
     let mut psi = psi_init;
     let mut counter = 0u32;
@@ -1142,7 +1293,7 @@ fn iex_fast_inner(
             Some((i, j)) => {
                 let selected = psi.remove(i);
                 let produced =
-                    produce_stars_fast(accel, phi, &selected, j, &mut counter, &psi_cs);
+                    produce_stars_fast(accel, phi, &selected, j, &mut counter, &psi_cs, spec);
                 if tabling {
                     // KA1: drop α-variant redundant stars; keep + table the rest.
                     // (If a step yields only variants ⇒ no growth ⇒ fixpoint.)
@@ -1579,6 +1730,140 @@ mod tests {
         assert!(
             !psi_compatible(&a.psi, &corrupt),
             "gate must catch an unfaithful fast result (wrong-unifier falsifier)"
+        );
+    }
+
+    /// **Σ(Φ) Σ1 differential gate (docs/17 §4).** `iex_spec` = the in-loop
+    /// Futamura sibling tier (δ + Push realised from the closed `SpecTr`;
+    /// Splice/strict delegate). Three guarantees, all on the same corpus the
+    /// `iex_fast` gate uses (incl. the combinator SKK that sank the prior
+    /// prefix-loop attempt — now green because redex selection is *literally*
+    /// iex_fast's):
+    ///   (1) decision-equivalent to reference `iex` (`psi_compatible`);
+    ///   (2) **step-count identical to `iex_fast`** — THE per-step-lever
+    ///       proof: same redex stream, only the realisation is cheaper (if
+    ///       steps moved, the specialisation would be *semantically* wrong,
+    ///       not faster);
+    ///   (3) **per-step structural equivalence to `iex_fast`** — every Ψ
+    ///       star is α-equal to the one the generic α-rename+`unify_fast`+
+    ///       θ-apply path builds. This is the load-bearing Σ1 gate: on the
+    ///       pure-KAM δ/Push corpora the ɟ-concealed *visible* answer is
+    ///       empty (the result lives inside the `+P(st …)` process scaffold
+    ///       `conceal` strips), so `psi_compatible` alone is near-vacuous
+    ///       there — α-equivalence of the actual process states is the
+    ///       non-vacuous faithfulness evidence (honest scoping of the gate,
+    ///       not a weakening of it);
+    ///   (4) **non-vacuity**: the spec realiser provably *fires* (`SPEC_HITS`
+    ///       advances) on combinator + galaxy — the prior prefix-loop's exact
+    ///       failing corpus now in-loop-green;
+    ///   (5) the gate REJECTS a corrupted `SpecTr` (defense-in-depth: the
+    ///       docs/17 Σ1 `Delta(bogus)` negative — proves the realiser
+    ///       consults the residual and the structural gate has teeth).
+    #[test]
+    fn iex_spec_result_eq_iex() {
+        use crate::faithfulness::psi_compatible;
+        use std::sync::atomic::Ordering::Relaxed;
+        let hits = || SPEC_HITS.load(Relaxed);
+        // Element-wise α-equivalence of two Ψ states (iex_spec keeps
+        // iex_fast's exact redex stream + produce order ⇒ index-aligned).
+        let psi_ae = |a: &[Star], b: &[Star]| -> bool {
+            a.len() == b.len()
+                && a.iter()
+                    .zip(b.iter())
+                    .all(|(x, y)| crate::execution::stars_alpha_equiv(x, y))
+        };
+
+        // (a) Horn arithmetic — no `st`/Push shape ⇒ Σ(Φ) delegates wholly
+        // (0 hits): proves the delegation path is inert/correct.
+        let mut phi = add_prog();
+        phi.push(vec![neg_ray("add", vec![nat(3), nat(2), var("R")]), var("R")]);
+        let q = vec![phi.pop().unwrap()];
+        let h_ref = iex(&phi, q.clone(), 5000);
+        let h_fast = iex_fast(&phi, q.clone(), 5000);
+        let h_spec = iex_spec(&phi, q, 5000);
+        assert!(psi_compatible(&h_ref.psi, &h_spec.psi), "Horn: spec ≢ iex");
+        assert_eq!(h_spec.steps, h_fast.steps, "Horn: spec step-count ≠ iex_fast");
+        assert!(psi_ae(&h_fast.psi, &h_spec.psi), "Horn: spec ≇ iex_fast (α)");
+        assert_eq!(h_ref.is_normal_form, h_spec.is_normal_form, "Horn: NF");
+
+        // (b) Combinator core SKK (S is the non-linear duplicating star —
+        // the exact corpus the prior prefix-loop iex_spec failed). Push→
+        // Unwind is realised; S/K/I→Splice delegate (Σ1 scope).
+        let prog = crate::combinator::app_n([
+            crate::combinator::a_("S"),
+            crate::combinator::a_("T"),
+            crate::combinator::a_("T"),
+            crate::combinator::a_("x"),
+        ]);
+        let cphi = crate::combinator::machine_stars();
+        let cpsi = vec![crate::combinator::initial_process(&prog)];
+        let c_ref = iex(&cphi, cpsi.clone(), 3000);
+        let c_fast = iex_fast(&cphi, cpsi.clone(), 3000);
+        let c0 = hits();
+        let c_spec = iex_spec(&cphi, cpsi.clone(), 3000);
+        assert!(hits() > c0, "combinator: Σ(Φ) realiser never fired (vacuous)");
+        assert!(psi_compatible(&c_ref.psi, &c_spec.psi), "combinator: spec ≢ iex");
+        assert_eq!(c_spec.steps, c_fast.steps, "combinator: spec step-count ≠ iex_fast");
+        assert!(
+            psi_ae(&c_fast.psi, &c_spec.psi),
+            "combinator: spec ≇ iex_fast (α) — the in-loop Σ1 proof"
+        );
+        assert_eq!(c_ref.is_normal_form, c_spec.is_normal_form, "combinator: NF");
+
+        // (c) Binary arithmetic module.
+        let bphi = crate::binarith::binarith_module();
+        let bq = vec![vec![
+            neg_ray("add", vec![crate::binarith::nat(5), crate::binarith::nat(6), var("R")]),
+            var("R"),
+        ]];
+        let b_ref = iex(&bphi, bq.clone(), 8000);
+        let b_fast = iex_fast(&bphi, bq.clone(), 8000);
+        let b_spec = iex_spec(&bphi, bq, 8000);
+        assert!(psi_compatible(&b_ref.psi, &b_spec.psi), "binarith: spec ≢ iex");
+        assert_eq!(b_spec.steps, b_fast.steps, "binarith: spec step-count ≠ iex_fast");
+        assert!(psi_ae(&b_fast.psi, &b_spec.psi), "binarith: spec ≇ iex_fast (α)");
+
+        // (d) Galaxy Φ=405 (the real δ/Push skeleton) if the artifact is
+        // present — bounded fuel; identical redex stream ⇒ α-equivalence at
+        // the cutoff is a valid (and here non-vacuous) faithfulness check.
+        const GP: &str = "/Users/ember/dev/embershot/src/galaxy.txt";
+        match std::fs::read_to_string(GP).ok().and_then(|s| crate::galaxy::parse(&s).ok()) {
+            Some(g) if !g.defs.is_empty() => {
+                let gphi = crate::galaxy::constellation(&g);
+                let d0 = g.defs.first().unwrap();
+                let gq = crate::galaxy::initial_psi(crate::galaxy::ref_atom(d0.name));
+                let g_ref = iex(&gphi, gq.clone(), 4000);
+                let g_fast = iex_fast(&gphi, gq.clone(), 4000);
+                let g0 = hits();
+                let g_spec = iex_spec(&gphi, gq, 4000);
+                assert!(hits() > g0, "galaxy: Σ(Φ) realiser never fired (vacuous)");
+                assert!(psi_compatible(&g_ref.psi, &g_spec.psi), "galaxy: spec ≢ iex");
+                assert_eq!(g_spec.steps, g_fast.steps, "galaxy: spec step-count ≠ iex_fast");
+                assert!(
+                    psi_ae(&g_fast.psi, &g_spec.psi),
+                    "galaxy: spec ≇ iex_fast (α) — the in-loop Σ1 proof"
+                );
+            }
+            _ => eprintln!("SKIP galaxy slice: {GP} absent/unparsable/empty"),
+        }
+
+        // (e) Falsifier — corrupt the Σ(Φ) residual and demand the gate goes
+        // RED. Overwrite the combinator Push (Unwind) entry with a bogus
+        // `Delta`; the realiser MUST consult it and build a structurally
+        // wrong resolvent ⇒ the per-step α-gate must reject it.
+        let mut accel = IexAccel::build(&cphi);
+        let push_ix = (0..cphi.len())
+            .find(|&i| matches!(accel.spec[i], Some((_, SpecTr::Unwind))))
+            .expect("combinator Φ must contain a Push→Unwind star");
+        let neg_idx = accel.spec[push_ix].as_ref().unwrap().0;
+        accel.spec[push_ix] = Some((
+            neg_idx,
+            SpecTr::Delta(crate::term::mk_app_str("BOGUS", vec![])),
+        ));
+        let bad = iex_spec_with_accel(&accel, &cphi, cpsi, 3000);
+        assert!(
+            !psi_ae(&c_fast.psi, &bad.psi),
+            "gate MUST reject a corrupted SpecTr (Σ1 Delta(bogus) negative)"
         );
     }
 
