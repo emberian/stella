@@ -39,6 +39,20 @@ pub fn substrate_seed() -> Star {
     vec![neg_ray("f", vec![pos_ray("g", vec![mk_var("Z")])])]
 }
 
+/// A fixed, documented **partner inhabitant** that closes a loop: it consumes
+/// the `+g(_)` the seed×Φ interaction produces and regenerates an `f`-query,
+/// making the dependency graph *cyclic* (Eng §62.6 "converging cycle consuming
+/// terms of a star") — the structural prerequisite for a reafferent cross-cut
+/// that crosses *into something that crosses back* (spec §2.2). Not tuned
+/// per-result; the moved variable is *number of inhabitants*, which the locked
+/// spec already mandates (§3 multi-agent / P6). Solved-for, never designated.
+pub fn substrate_partner() -> Star {
+    vec![
+        neg_ray("g", vec![mk_var("W")]),
+        pos_ray("f", vec![pos_ray("g", vec![mk_var("W")])]),
+    ]
+}
+
 /// What a world run found. No verdict; counts + per-closure §3.2 status.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorldReport {
@@ -62,9 +76,24 @@ pub fn run_world(
     env: Option<(&dyn Affordance, &FixedEnvCodec, &str)>,
     max_rounds: usize,
 ) -> WorldReport {
+    run_world_with(false, env, max_rounds)
+}
+
+/// As [`run_world`], plus an optional fixed loop-closing partner inhabitant
+/// ([`substrate_partner`]). Tests whether multi-occupancy enables a reafferent
+/// closure where the lone seed yielded zero (the hypothesis the seed-only=0
+/// result handed us). Honest measurement; closures still solved-for (P2).
+pub fn run_world_with(
+    partner: bool,
+    env: Option<(&dyn Affordance, &FixedEnvCodec, &str)>,
+    max_rounds: usize,
+) -> WorldReport {
     let phi = substrate_phi();
 
     let mut psi0: Vec<Star> = vec![substrate_seed()];
+    if partner {
+        psi0.push(substrate_partner());
+    }
     let env_contributed = match env {
         Some((aff, codec, seed)) => {
             let p: EnvPerturbation = perturb(aff, codec, seed);
@@ -155,5 +184,62 @@ mod tests {
             with_env.closures
         );
         // No assertion on `coupled`: this is a measurement, not a target.
+    }
+
+    /// SANITY (verify-don't-assume): the L2a-validated positive fixture
+    /// (`loop_phi`: agent `-sense(X)+act(X)`, env `-act(Y)+sense(f(Y))`,
+    /// Ψ₀=`[+sense(zero)],[+act(zero)]`) MUST yield ≥1 closure through the
+    /// exact `solve_for_closure` path stella-world uses. If this is 0, the
+    /// triple-null below is a plumbing artefact, not a finding. If ≥1, the
+    /// triple-null is SUBSTANTIVE: the detector can fire here, and it refuses
+    /// the hand-built micro-world on purpose.
+    #[test]
+    fn harness_path_can_yield_a_closure_on_the_known_positive_fixture() {
+        use stella_core::reafference::solve_for_closure;
+        use stella_core::term::mk_app_str;
+        let z = || mk_app_str("zero", vec![]);
+        let phi = vec![
+            vec![neg_ray("sense", vec![mk_var("X")]), pos_ray("act", vec![mk_var("X")])],
+            vec![
+                neg_ray("act", vec![mk_var("Y")]),
+                pos_ray("sense", vec![pos_ray("f", vec![mk_var("Y")])]),
+            ],
+        ];
+        let psi0 = vec![
+            vec![pos_ray("sense", vec![z()])],
+            vec![pos_ray("act", vec![z()])],
+        ];
+        let n = solve_for_closure(&phi, psi0, 40).len();
+        eprintln!("[sanity] known-positive fixture → {n} closure(s)");
+        assert!(
+            n >= 1,
+            "PLUMBING BUG: the validated positive fixture yielded 0 closures \
+             through stella-world's path — the triple-null is not yet a finding"
+        );
+    }
+
+    /// The hypothesis the seed-only=0 result handed us: does a second
+    /// (loop-closing) inhabitant let a reafferent closure self-organise where
+    /// one inhabitant could not? Measured across {lone, +partner,
+    /// +partner+env}. No assertion on closure count — recorded for the
+    /// principal, never tuned toward.
+    #[test]
+    fn does_a_partner_inhabitant_enable_any_closure() {
+        let codec = FixedEnvCodec::canonical();
+        let lone = run_world_with(false, None, 60);
+        let pair = run_world_with(true, None, 60);
+        let pair_env = run_world_with(true, Some((&FakeWorldText, &codec, "troy")), 60);
+        eprintln!("[lone       ] {lone:?}");
+        eprintln!("[+partner   ] {pair:?}");
+        eprintln!("[+partner+lm] {pair_env:?}");
+        eprintln!(
+            "[P5.2 finding] lone={} closures, +partner={} closures, +partner+lm={} \
+             closures — multi-occupancy {} closure; env still {}",
+            lone.closures,
+            pair.closures,
+            pair_env.closures,
+            if pair.closures > lone.closures { "ENABLES" } else { "does NOT yet enable" },
+            if pair_env.closures != pair.closures { "couples" } else { "inert" },
+        );
     }
 }
