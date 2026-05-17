@@ -269,6 +269,7 @@ const TEMPLATE_IDE = `
           <option value="ortho">Orthogonality — Φ₁ ⊥ Φ₂</option>
           <option value="proofnet">Proof net — correctness + Φ_comp</option>
           <option value="behaviour">Behaviour / type — A^⊥⊥</option>
+          <option value="compare">Compare — same result? ω delta</option>
         </select>
         <span class="stx-bar__spacer"></span>
         <button class="stx-iconbtn" data-role="lclose">✕</button>
@@ -477,6 +478,12 @@ const LSPEC = {
   "members": ["[+a(X)]"],
   "universe": ["[+a(X)]", "[-a(X), R]"],
   "orth": "roots"
+}`,
+  compare: `{
+  "phiA": "[+add(0, Y, Y)] + [-add(X, Y, Z), +add(s(X), Y, s(Z))]",
+  "psiA": "[-add(s(0), s(0), R), R]",
+  "phiB": "[+add(0, Y, Y)] + [-add(X, Y, Z), +add(s(X), Y, s(Z))]",
+  "psiB": "[-add(s(s(0)), 0, R), R]"
 }`,
 };
 
@@ -885,7 +892,23 @@ export async function mountExplorer(root, opts = {}) {
       `<div class="stx-ex__set">${set(res.alt)}</div></div>` +
       `<div class="stx-ex__grp"><span class="stx-obs__lab">raw CEx cross-check · copy budget k=${res.cex_k} (renamed copies; research aid)</span>` +
       `<div class="stx-ex__set">${set(res.cex)}</div></div>` +
-      `<p class="stx-ex__note">${esc(res.note)}</p>`;
+      `<p class="stx-ex__note">${esc(res.note)}</p>` +
+      `<div class="stx-ex__grp" data-role="exmeasures"></div>`;
+    // Cheap quantitative strip (ω-weight §79, visibility, counts).
+    try {
+      const m = JSON.parse(mod.lc_measures(phi, psi));
+      if (m.ok) {
+        const tgt = $("exmeasures");
+        if (tgt) tgt.innerHTML =
+          `<span class="stx-obs__lab">measures</span><div class="stx-ex__set">` +
+          `<span class="stx-obs__s">ω(Φ⊎Ψ) = ${m.omega_cfg}</span>` +
+          `<span class="stx-obs__s">ω(Φ) = ${m.omega_phi}</span>` +
+          `<span class="stx-obs__s">ω(Ψ) = ${m.omega_psi}</span>` +
+          `<span class="stx-obs__s">visible ${m.visible ? "yes" : "no"}</span>` +
+          `<span class="stx-obs__s">Φ ${m.stars_phi}★/${m.rays_phi} rays</span>` +
+          `<span class="stx-obs__s">Ψ ${m.stars_psi}★/${m.rays_psi} rays</span></div>`;
+      }
+    } catch (_) { /* measures are a nicety; never block the Ex view */ }
   }
 
   // A preset is now just an editable example: pull its Display source.
@@ -1020,6 +1043,9 @@ export async function mountExplorer(root, opts = {}) {
         } else if (lclass.value === "proofnet") {
           res = JSON.parse(mod.lc_proofnet(spec.kind || "mll",
             JSON.stringify({ links: spec.links || [] })));
+        } else if (lclass.value === "compare") {
+          res = JSON.parse(mod.lc_compare(spec.phiA || "", spec.psiA || "",
+            spec.phiB || "", spec.psiB || "", fuelVal()));
         } else {
           res = JSON.parse(mod.lc_behaviour(lspec.value));
         }
@@ -1051,6 +1077,19 @@ export async function mountExplorer(root, opts = {}) {
           `<div class="stx-ex__grp"><span class="stx-obs__lab">saturated diagrams</span>` +
           `<div class="stx-ex__set">${dg || '<span class="stx-obs__none">—</span>'}</div>` +
           `<p class="stx-ex__note">${esc(res.diag_note)}</p></div>`;
+      } else if (lclass.value === "compare") {
+        const set = (arr) => arr.length
+          ? arr.map((s) => `<span class="stx-obs__s">${esc(s)}</span>`).join("")
+          : `<span class="stx-obs__none">∅</span>`;
+        lout.innerHTML =
+          `<div class="stx-ex__row">${res.same
+            ? '<span class="stx-ex__ok">✓ same observable — A and B compute the same result</span>'
+            : '<span class="stx-ex__no">≠ different observables</span>'}</div>` +
+          `<div class="stx-ex__grp"><span class="stx-obs__lab">A — ɟ · ω = ${res.omega_a}</span>` +
+          `<div class="stx-ex__set">${set(res.obs_a)}</div></div>` +
+          `<div class="stx-ex__grp"><span class="stx-obs__lab">B — ɟ · ω = ${res.omega_b}</span>` +
+          `<div class="stx-ex__set">${set(res.obs_b)}</div></div>` +
+          `<p class="stx-ex__note">Δω = ${res.omega_b - res.omega_a}. Exact engine (Stage 0) both sides.</p>`;
       } else {
         lout.innerHTML =
           `<div class="stx-ex__grp"><span class="stx-obs__lab">behaviour over a finite universe (⊥<sup>${esc(res.orth)}</sup>)</span>` +

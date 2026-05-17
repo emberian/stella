@@ -24,6 +24,7 @@ use crate::logic::{
     behaviour as lc_behaviour_impl, orthogonality as lc_ortho_impl,
     proofnet as lc_proofnet_impl,
 };
+use crate::measures::{compare as mz_compare_impl, measures as mz_measures_impl};
 use crate::presets::{all_presets, all_step_data, preset_io};
 use crate::stepper::{capture_path, capture_steps, StepSnapshot};
 use stella_core::constellation::Constellation;
@@ -351,6 +352,24 @@ pub fn lc_proofnet(kind: &str, json: &str) -> String {
 #[wasm_bindgen]
 pub fn lc_behaviour(json: &str) -> String {
     match lc_behaviour_impl(json) {
+        Ok(j) => j,
+        Err(e) => format!("{{\"ok\":false,\"error\":{}}}", json_str(&e)),
+    }
+}
+
+/// ω-weight + visibility + structural counts for Φ ⊢ Ψ (no execution).
+#[wasm_bindgen]
+pub fn lc_measures(phi: &str, psi: &str) -> String {
+    match mz_measures_impl(phi, psi) {
+        Ok(j) => j,
+        Err(e) => format!("{{\"ok\":false,\"error\":{}}}", json_str(&e)),
+    }
+}
+
+/// Compare two configurations: same observable? ω of each result.
+#[wasm_bindgen]
+pub fn lc_compare(pa: &str, qa: &str, pb: &str, qb: &str, fuel: usize) -> String {
+    match mz_compare_impl(pa, qa, pb, qb, fuel_or(fuel)) {
         Ok(j) => j,
         Err(e) => format!("{{\"ok\":false,\"error\":{}}}", json_str(&e)),
     }

@@ -121,6 +121,59 @@ export function lc_behaviour(json) {
 }
 
 /**
+ * Compare two configurations: same observable? ω of each result.
+ * @param {string} pa
+ * @param {string} qa
+ * @param {string} pb
+ * @param {string} qb
+ * @param {number} fuel
+ * @returns {string}
+ */
+export function lc_compare(pa, qa, pb, qb, fuel) {
+    let deferred5_0;
+    let deferred5_1;
+    try {
+        const ptr0 = passStringToWasm0(pa, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(qa, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(pb, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ptr3 = passStringToWasm0(qb, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len3 = WASM_VECTOR_LEN;
+        const ret = wasm.lc_compare(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, fuel);
+        deferred5_0 = ret[0];
+        deferred5_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
+    }
+}
+
+/**
+ * ω-weight + visibility + structural counts for Φ ⊢ Ψ (no execution).
+ * @param {string} phi
+ * @param {string} psi
+ * @returns {string}
+ */
+export function lc_measures(phi, psi) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(phi, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(psi, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.lc_measures(ptr0, len0, ptr1, len1);
+        deferred3_0 = ret[0];
+        deferred3_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
  * Logic workbench — orthogonality `Φ₁ ⊥ Φ₂` (the three relations).
  * @param {string} phi1
  * @param {string} phi2
