@@ -492,3 +492,20 @@ falsifier the validator must catch.
 4. Then: KA1 cheap-key+cross-run table (D, valence) → rayon (D) → KA2
    (C, Z3) with certified-only-during-search; §49.50-polarity (E) as the
    thesis-nearest deep track.
+
+## A1. IN FLIGHT — galaxy-execution research swarm (4 read-only agents)
+The measured blocker is precise: galaxy data[0] = a long *non-redundant*
+reduction; Lever C (memo) proven insufficient (b6c65d5). Surveying the
+reduction-technology possibility space properly (not picking from memory):
+- docs/12 a9bfb8d optimal/interaction-combinator reduction (HVM/Lafont;
+  shares redexes not just subterms; galaxy binder-free = ideal).
+- docs/13 a2f5bc supercompilation/distillation (Hamilton superlinear;
+  KG8 whistle substrate; KA2 vs full).
+- docs/14 aee2d6e staged-compilation/Futamura/GRIN (compile fixed Φ=405;
+  sharpen docs/11 Lever B).
+- docs/15 ad32c9c GoI/token-machine (on-thesis; never materialises the
+  blown-up term; the §49.50-design implementation candidate).
+All psi_compatible/reference-iex/two-tier-gated, staged-falsifiable,
+must answer "does this actually execute galaxy". PLAN: harvest all 4
+(forensic) → synthesize a decision doc (docs/16) → IMPLEMENT the chosen
+path CAREFULLY now (user: careful≠rushed; doing-things-now is wanted).
