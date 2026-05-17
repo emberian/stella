@@ -452,18 +452,31 @@ fn fuse(phi1: &Star, j: usize, phi2_renamed: &Star, j_prime: usize) -> Option<St
     fuse_theta(phi1, j, phi2_renamed, j_prime).map(|(s, _)| s)
 }
 
+/// The unifier strategy: a function pointer with the shared
+/// `Vec<Equation> -> Option<Substitution>` signature. `unify` (reference,
+/// the spec oracle) for every `iex`/`step_at`/diagnostic path;
+/// `unify_fast` (near-linear, result-equivalent — `unify_fast.rs`) ONLY for
+/// the accelerated `produce_stars_fast` path. Statically un-contaminable:
+/// the reference functions hard-code `unify` (docs/09 §C).
+type Solve = fn(Vec<Equation>) -> Option<Substitution>;
+
 /// Fusion that also returns the **exact** unifier `θ` it applied — the
 /// authoritative MGU of this summand (no post-hoc reconstruction).
-fn fuse_theta(
+/// `solve` selects the unifier (see [`Solve`]); the rest is identical for
+/// reference and fast — only the MGU shape differs (α-equal), which
+/// `faithfulness::psi_compatible` tolerates and the old byte-identity gate
+/// could not.
+fn fuse_theta_with(
     phi1: &Star,
     j: usize,
     phi2_renamed: &Star,
     j_prime: usize,
+    solve: Solve,
 ) -> Option<(Star, Substitution)> {
     let r1 = underlying_term(phi1[j]);
     let r2 = underlying_term(phi2_renamed[j_prime]);
     let tun = std::time::Instant::now();
-    let theta = unify(vec![Equation::new(r1, r2)]);
+    let theta = solve(vec![Equation::new(r1, r2)]);
     ks_add(&T_UNIFY, tun.elapsed());
     let theta = theta?;
 
@@ -487,6 +500,34 @@ fn fuse_theta(
     Some((result, theta))
 }
 
+/// Reference fusion-with-θ — the spec-oracle unifier. Every `iex`/`step_at`/
+/// diagnostic caller uses this; byte-for-byte unchanged.
+fn fuse_theta(
+    phi1: &Star,
+    j: usize,
+    phi2_renamed: &Star,
+    j_prime: usize,
+) -> Option<(Star, Substitution)> {
+    fuse_theta_with(phi1, j, phi2_renamed, j_prime, unify)
+}
+
+/// Accelerated fusion-with-θ — near-linear `unify_fast`. ONLY reached from
+/// `produce_stars_fast` (the `iex_fast`/`iex_tabled` tier). Result-equivalent
+/// to `fuse_theta` under the same `Compatible` (MGU α-equal); gated by
+/// `faithfulness::psi_compatible` + reference `iex`.
+fn fuse_theta_fast(
+    phi1: &Star,
+    j: usize,
+    phi2_renamed: &Star,
+    j_prime: usize,
+) -> Option<(Star, Substitution)> {
+    fuse_theta_with(phi1, j, phi2_renamed, j_prime, crate::unify_fast::unify_fast)
+}
+
+fn fuse_fast(phi1: &Star, j: usize, phi2_renamed: &Star, j_prime: usize) -> Option<Star> {
+    fuse_theta_fast(phi1, j, phi2_renamed, j_prime).map(|(s, _)| s)
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Self-interaction (§51.7)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -500,11 +541,18 @@ fn self_interact(star: &Star, j: usize, j_prime: usize) -> Option<Star> {
     self_interact_theta(star, j, j_prime).map(|(s, _)| s)
 }
 
-/// Self-interaction that also returns the exact `θ` it applied.
-fn self_interact_theta(star: &Star, j: usize, j_prime: usize) -> Option<(Star, Substitution)> {
+/// Self-interaction that also returns the exact `θ` it applied. `solve`
+/// selects the unifier ([`Solve`]); reference vs fast differ only in MGU
+/// shape (α-equal).
+fn self_interact_theta_with(
+    star: &Star,
+    j: usize,
+    j_prime: usize,
+    solve: Solve,
+) -> Option<(Star, Substitution)> {
     let r1 = underlying_term(star[j]);
     let r2 = underlying_term(star[j_prime]);
-    let theta = unify(vec![Equation::new(r1, r2)])?;
+    let theta = solve(vec![Equation::new(r1, r2)])?;
 
     let result: Star = star
         .iter()
@@ -513,6 +561,18 @@ fn self_interact_theta(star: &Star, j: usize, j_prime: usize) -> Option<(Star, S
         .map(|(_, &r)| theta.apply(r))
         .collect();
     Some((result, theta))
+}
+
+/// Reference self-interaction-with-θ (spec-oracle unifier). Unchanged for
+/// every `iex`/`step_at`/diagnostic caller.
+fn self_interact_theta(star: &Star, j: usize, j_prime: usize) -> Option<(Star, Substitution)> {
+    self_interact_theta_with(star, j, j_prime, unify)
+}
+
+/// Accelerated self-interaction-with-θ — `unify_fast`, ONLY from
+/// `produce_stars_fast`.
+fn self_interact_fast(star: &Star, j: usize, j_prime: usize) -> Option<Star> {
+    self_interact_theta_with(star, j, j_prime, crate::unify_fast::unify_fast).map(|(s, _)| s)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -902,7 +962,10 @@ fn produce_stars_fast(
         };
         ks_add(&T_FRESH, tf.elapsed());
         let tu = std::time::Instant::now();
-        let fused = fuse(selected_star, ray_idx, &phi_star_renamed, jk);
+        // Fast tier (iex_fast/iex_tabled): the near-linear unifier. The
+        // reference iex path keeps `fuse`/`unify` — this is the entire
+        // accelerated-vs-reference seam (docs/09 §C, exactly 2 call sites).
+        let fused = fuse_fast(selected_star, ray_idx, &phi_star_renamed, jk);
         ks_add(&T_FUSE, tu.elapsed());
         if let Some(fused) = fused {
             produced.push(fused);
@@ -910,7 +973,7 @@ fn produce_stars_fast(
     }
 
     for jk in mat_self(selected_star, ray_idx) {
-        if let Some(si) = self_interact(selected_star, ray_idx, jk) {
+        if let Some(si) = self_interact_fast(selected_star, ray_idx, jk) {
             produced.push(si);
         }
     }
@@ -1453,12 +1516,20 @@ mod tests {
         }
     }
 
-    /// **N-KS gate** (spec §8): `iex_fast` is byte-identical to the reference
-    /// `iex` — same `psi`, `is_normal_form`, `steps` — across the real KS
-    /// workloads. The reference engine is retained as the differential oracle;
-    /// any divergence means the fast path is unfaithful and must be reverted.
+    /// **N-KS gate, reframed (docs/09; spec §8 §10.5).** `iex_fast` now uses
+    /// the near-linear `unify_fast`, whose MGU is α-equal — not byte-equal —
+    /// to the reference `unify`'s. So the gate is proven **result-
+    /// equivalence**, not byte-identity: same ɟ-concealed visible answer
+    /// multiset (`faithfulness::psi_compatible`, itself bootstrap-proven —
+    /// B0a/B0b) and both reach a true normal form. Reference `iex` stays the
+    /// differential oracle; any `psi_compatible` failure ⇒ the fast path is
+    /// unfaithful and must be reverted. (Verified-speculative-runtime model,
+    /// docs/07 §H. Step counts are α-strategy-invariant in practice but no
+    /// longer asserted — the contract is the answer multiset.)
     #[test]
-    fn iex_eq_iex_fast() {
+    fn iex_fast_result_eq_iex() {
+        use crate::faithfulness::psi_compatible;
+
         // (a) Horn arithmetic (recursive Φ reuse).
         let mut phi = add_prog();
         phi.push(vec![
@@ -1468,9 +1539,8 @@ mod tests {
         let q = vec![phi.pop().unwrap()];
         let a = iex(&phi, q.clone(), 5000);
         let b = iex_fast(&phi, q, 5000);
-        assert_eq!(a.psi, b.psi, "Horn: psi differs");
-        assert_eq!(a.is_normal_form, b.is_normal_form);
-        assert_eq!(a.steps, b.steps, "Horn: step count differs");
+        assert!(psi_compatible(&a.psi, &b.psi), "Horn: not result-equivalent");
+        assert_eq!(a.is_normal_form, b.is_normal_form, "Horn: NF disagreement");
 
         // (b) Combinator core (K1) — SKK = I, the non-linear S star.
         let prog = crate::combinator::app_n([
@@ -1483,8 +1553,8 @@ mod tests {
         let cpsi = vec![crate::combinator::initial_process(&prog)];
         let ca = iex(&cphi, cpsi.clone(), 3000);
         let cb = iex_fast(&cphi, cpsi, 3000);
-        assert_eq!(ca.psi, cb.psi, "combinator: psi differs");
-        assert_eq!(ca.steps, cb.steps, "combinator: step count differs");
+        assert!(psi_compatible(&ca.psi, &cb.psi), "combinator: not result-equivalent");
+        assert_eq!(ca.is_normal_form, cb.is_normal_form, "combinator: NF disagreement");
 
         // (c) Binary arithmetic module (KG1a) — add small.
         let bphi = crate::binarith::binarith_module();
@@ -1494,8 +1564,22 @@ mod tests {
         ]];
         let ba = iex(&bphi, bq.clone(), 8000);
         let bb = iex_fast(&bphi, bq, 8000);
-        assert_eq!(ba.psi, bb.psi, "binarith: psi differs");
-        assert_eq!(ba.steps, bb.steps, "binarith: step count differs");
+        assert!(psi_compatible(&ba.psi, &bb.psi), "binarith: not result-equivalent");
+        assert_eq!(ba.is_normal_form, bb.is_normal_form, "binarith: NF disagreement");
+
+        // Falsifier (the wrong-unifier guard): the gate MUST reject an
+        // unfaithful fast result, not just accept faithful ones — else it
+        // proves nothing. Corrupt the Horn fast result with a spurious
+        // all-neutral visible answer and assert psi_compatible is false.
+        let mut corrupt = b.psi.clone();
+        corrupt.push(vec![crate::term::mk_app_str(
+            "BOGUS",
+            vec![crate::term::mk_app_str("z", vec![])],
+        )]);
+        assert!(
+            !psi_compatible(&a.psi, &corrupt),
+            "gate must catch an unfaithful fast result (wrong-unifier falsifier)"
+        );
     }
 
     /// **KA1 differential gate (result-equivalence, the reframed N-KS).**
