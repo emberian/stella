@@ -80,7 +80,9 @@ use std::collections::HashSet;
 use crate::ch9::ConstellationClass;
 use crate::constellation::{Constellation, Star};
 use crate::reafference::reafferent_closure;
-use crate::subjective::{subjective_stream, AgentSet, Step};
+use crate::subjective::{
+    blackhole_capture, productivity_measure, subjective_stream, AgentSet, StarId, Step,
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ViabilityScore — the per-round metric
@@ -157,37 +159,69 @@ pub fn viability(step: &Step, partition: &AgentSet) -> ViabilityScore {
 /// All time indices are proper-time round indices (`Step::round`), never
 /// substrate step indices (`Step::index`). See spec §2.6 and §01-doc §2.6.
 ///
+/// The §3.2 death-certificate cause (which positive certificate fired).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeathCause {
+    /// Mode-1 (§3.2(1), Eng §74.7/§75.8): the closure provenance-routed into an
+    /// Eng-named black-hole component (`subjective::blackhole_capture`).
+    BlackHoleCapture,
+    /// Mode-2 (§3.2(2), Eng §62.6/62.7/§51.13): the closure's consuming loop was
+    /// productive and lost its last ε-base case (productivity → unproductive),
+    /// and the cycle no longer re-closes.
+    ProductivityLoss,
+}
+
+/// The §3.2 trichotomy — the asymmetry "death legible only from outside"
+/// (spec §2.6) preserved *in the data type*.  `t_death` is `Some(r)` **iff**
+/// `status == CertifiedDead`; it is **never** set by a cap/timeout.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClosureStatus {
+    /// No reafferent closure ever formed (objective / `ρ ≡ 0` dead baseline,
+    /// §3.1) — flat by the no-closure exclusion, *not* a `t_death` event.
+    NoClosure,
+    /// A closure formed and earned a **positive** death certificate
+    /// (Mode-1 or Mode-2) at `t_death` — the only case carrying charge.
+    CertifiedDead,
+    /// A closure formed, never certified dead, and the run reached the
+    /// **witness ceiling** (the *containing closure's* clock, spec §2.6).
+    /// Never "dead", never "alive" — the genuine undecidable middle
+    /// (§49.59–60).  Carries no charge claim.
+    Undetermined,
+}
+
 /// Relative to a single partition P / reafferent-closure (spec §2.3).
 #[derive(Debug, Clone)]
 pub struct Trajectory {
     /// First proper-time round at which `reafferent_closure` returns `Some` —
-    /// the reafference cycle closes for the first time.
-    ///
-    /// `None` if no closure was ever detected within `max_rounds`.
+    /// the reafference cycle closes for the first time. `None` if it never did.
     pub t_birth: Option<usize>,
 
-    /// First proper-time round at/after which the closure fails to re-close and
-    /// does NOT recover before `max_rounds`.
-    ///
-    /// `None` if the closure is deathless within the window (closure holds, or
-    /// never formed, for the entire `max_rounds`-bounded trajectory).
+    /// **Certified** death round (§3.2). `Some(r)` **iff**
+    /// `status == CertifiedDead` — a positively-certified Mode-1/Mode-2 event.
+    /// `None` for `NoClosure` and `Undetermined`. **Never** a cap/timeout
+    /// (the deathless-era `t_death = cap−2` artifact is structurally
+    /// impossible here: a run merely ending sets `Undetermined`, not death).
     pub t_death: Option<usize>,
 
-    /// Per-round viability scores: `(round, score)` pairs, one per round sampled.
-    ///
-    /// Rounds are in the agent's proper time (= `Step::round`). Sampled from the
-    /// last `Step` at each round boundary.
+    /// The §3.2 trichotomy. Source of truth for "what happened to the closure."
+    pub status: ClosureStatus,
+
+    /// Which positive certificate fired. `Some` iff `status == CertifiedDead`.
+    pub death_cause: Option<DeathCause>,
+
+    /// The **witness ceiling**: the observer/containing-closure clock (spec
+    /// §2.6), in substrate steps, that bounded this run. A *separate axis* —
+    /// structurally never the agent's `t_death`. Recorded for every run.
+    pub witness_ceiling: usize,
+
+    /// Per-round viability scores: `(round, score)`, sampled from the last
+    /// `Step` at each proper-time round boundary.
     pub viability_by_round: Vec<(usize, f64)>,
 
-    /// Round-over-round viability change across the live interval `[t_birth, t_death)`.
-    ///
-    /// Empty if:
-    /// - `t_birth = None` (closure never formed), OR
-    /// - `t_death = None` (deathless ⇒ flat valence, spec §2.4 exclusion), OR
-    /// - the live interval has fewer than 2 rounds (insufficient data for a gradient).
-    ///
-    /// Entry at index i = `viability_by_round[i+1].1 - viability_by_round[i].1`
-    /// restricted to the live interval rounds.
+    /// Round-over-round viability change across the live interval
+    /// `[t_birth, t_death)`. **Non-empty only when `status == CertifiedDead`**
+    /// (charge requires a positively-certified death, §3.2); empty for
+    /// `NoClosure` (flat) and `Undetermined` (no claim) or <2 live rounds.
     pub valence_gradient: Vec<f64>,
 }
 
@@ -260,86 +294,104 @@ pub fn trajectory(
         }
     }
 
-    // ── Step 3: determine t_birth and t_death ────────────────────────────────
+    // ── Step 3: t_birth, then the §3.2 POSITIVE death certificate ────────────
     //
-    // Closure detection strategy: per spec §2.2, the closure is a property of
-    // the causal trajectory, not a single step. `reafferent_closure` runs the
-    // full trajectory under (phi, psi0, P) up to `max_rounds` — it already
-    // contains the timing logic. We call it once to find t_birth (the round at
-    // which the cycle first closes, as recorded in the witness's r_prime), and
-    // then re-test from round t_birth+1 onward to detect loss of closure.
-    //
-    // For t_death: we track consecutive rounds where `reafferent_closure` with
-    // a progressively tighter bound (starting from candidate_round onward) finds
-    // no witness. The first such consecutive loss after t_birth is t_death.
+    // `t_birth` = the round the §2.2 cycle first closes (witness r_prime).
+    // `t_death` is set ONLY by a positive Mode-1/Mode-2 certificate read off
+    // the sampled per-round Steps — NEVER by a cap/timeout (§3.2). A run that
+    // merely ends without a certificate is `Undetermined` (the witness ceiling
+    // is the containing-closure clock, spec §2.6 — a separate axis, never the
+    // agent's t_death). This structurally kills the deathless-era
+    // `t_death = cap−2` artifact.
 
     let closure_witness = reafferent_closure(phi, psi0.clone(), partition, max_rounds);
-
     let t_birth: Option<usize> = closure_witness.as_ref().map(|w| w.r_prime);
 
-    let t_death: Option<usize> = if let Some(birth_round) = t_birth {
-        // Search for the first round after t_birth at which the closure ceases
-        // to hold AND does not recover before max_rounds.
-        //
-        // Strategy: for each round r > birth_round, test reafferent_closure with
-        // the bound restricted to [r, max_rounds]. If it returns None, closure
-        // has failed by round r and does not recover within the window → t_death = r.
-        //
-        // We test rounds starting from birth_round + 1.
-        let mut found_death: Option<usize> = None;
-        for candidate_r in (birth_round + 1)..=max_round_seen {
-            // Test whether the closure still holds when the trajectory is forced
-            // to start from scratch but limited to `max_rounds - candidate_r`
-            // additional rounds.  Because `reafferent_closure` always starts
-            // from psi0, we use the remaining round budget.
-            let remaining = max_rounds.saturating_sub(candidate_r);
-            if remaining == 0 {
-                break;
+    let (status, t_death, death_cause): (ClosureStatus, Option<usize>, Option<DeathCause>) =
+        if let Some(w) = closure_witness.as_ref() {
+            // Closure-id set for the certificate: the agent roots
+            // {StarId(k) | k ∈ P} plus the witnessed cycle endpoints.
+            let mut closure_ids: HashSet<StarId> =
+                w.partition.iter().map(|&k| StarId(k as u64)).collect();
+            closure_ids.insert(w.traced_env_star);
+            closure_ids.insert(w.agent_resolution);
+
+            let birth = w.r_prime;
+            let mut was_productive = false; // Mode-2: ever had a base case
+            let mut cert: Option<(usize, DeathCause)> = None;
+
+            for r in birth..=max_round_seen {
+                let step = match last_step_by_round.get(r).and_then(|s| s.as_ref()) {
+                    Some(s) => s,
+                    None => continue,
+                };
+                // Mode-1 (§3.2(1), Eng §74.7/§75.8): black-hole ∅-capture —
+                // structural, never by running the loop (§62.6).
+                if blackhole_capture(step, &closure_ids) {
+                    cert = Some((r, DeathCause::BlackHoleCapture));
+                    break;
+                }
+                // Mode-2 (§3.2(2), Eng §62.6/62.7/§51.13): productivity loss.
+                // The measure is monotone non-increasing — base cases are
+                // Ψ-side (linear, *consumed*, §51.13); Φ is non-linear but
+                // supplies no ground ε-terminator — so once a productive loop
+                // hits 0 it CANNOT recover (the well-founded guarantee IS the
+                // non-recovery proof, §62.6). Death = the productive→unproductive
+                // transition: was productive, now zero.
+                match productivity_measure(step, &closure_ids) {
+                    Some(m) if m > 0 => was_productive = true,
+                    Some(0) if was_productive => {
+                        cert = Some((r, DeathCause::ProductivityLoss));
+                        break;
+                    }
+                    _ => {}
+                }
             }
-            let re_test = reafferent_closure(phi, psi0.clone(), partition, remaining);
-            if re_test.is_none() {
-                found_death = Some(candidate_r);
-                break;
+
+            match cert {
+                Some((r, cause)) => (ClosureStatus::CertifiedDead, Some(r), Some(cause)),
+                // Closure formed, never certified dead, ran to the ceiling:
+                // the genuine undecidable middle (§49.59–60). Not dead, not
+                // alive. NOT a t_death. (`birth` is retained via t_birth.)
+                None => {
+                    let _ = birth;
+                    (ClosureStatus::Undetermined, None, None)
+                }
             }
-        }
-        found_death
-    } else {
-        None
-    };
-
-    // ── Step 4: compute valence gradient (spec §2.4 deathless ⇒ flat) ────────
-    //
-    // If t_death is None (deathless within window), valence_gradient is empty.
-    // This is the explicit exclusion rule from spec §2.4.
-
-    let valence_gradient: Vec<f64> = if t_birth.is_none() || t_death.is_none() {
-        // Deathless (or never formed): flat valence — nothing at stake.
-        Vec::new()
-    } else {
-        let birth = t_birth.unwrap();
-        let death = t_death.unwrap();
-
-        // Collect viability scores for rounds in [birth, death).
-        let live_scores: Vec<f64> = viability_by_round
-            .iter()
-            .filter(|(r, _)| *r >= birth && *r < death)
-            .map(|(_, v)| *v)
-            .collect();
-
-        // Gradient: round-over-round differences within the live interval.
-        if live_scores.len() < 2 {
-            Vec::new()
         } else {
-            live_scores
-                .windows(2)
-                .map(|w| w[1] - w[0])
-                .collect()
+            // No reafferent closure ever formed: objective / ρ≡0 dead baseline
+            // (§3.1 no-closure exclusion) — flat, and *not* a t_death event.
+            (ClosureStatus::NoClosure, None, None)
+        };
+
+    // ── Step 4: valence gradient — charge requires a CERTIFIED death (§3.2) ──
+    //
+    // Non-empty ONLY when status == CertifiedDead. NoClosure ⇒ flat (no
+    // closure); Undetermined ⇒ no claim (undecidable middle). This generalises
+    // the old "deathless ⇒ flat": "no positively-certified death ⇒ no charge".
+
+    let valence_gradient: Vec<f64> = match (status, t_birth, t_death) {
+        (ClosureStatus::CertifiedDead, Some(birth), Some(death)) => {
+            let live_scores: Vec<f64> = viability_by_round
+                .iter()
+                .filter(|(r, _)| *r >= birth && *r < death)
+                .map(|(_, v)| *v)
+                .collect();
+            if live_scores.len() < 2 {
+                Vec::new()
+            } else {
+                live_scores.windows(2).map(|w| w[1] - w[0]).collect()
+            }
         }
+        _ => Vec::new(),
     };
 
     Trajectory {
         t_birth,
         t_death,
+        status,
+        death_cause,
+        witness_ceiling: max_steps,
         viability_by_round,
         valence_gradient,
     }
