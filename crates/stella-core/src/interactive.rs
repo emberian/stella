@@ -76,7 +76,7 @@
 
 use crate::constellation::{Constellation, Star};
 use crate::dep_graph::{all_colours, ray_colours};
-use crate::polarised::{matchable, ray_polarity, underlying_term, Polarity};
+use crate::polarised::{matchable, matchable_fast, ray_polarity, underlying_term, Polarity};
 use crate::subst::{freshen, Substitution};
 use crate::term::{get, mk_var_interned, Term, TermData, Var};
 use crate::unify::{unify, Equation};
@@ -274,7 +274,7 @@ fn mat_phi_c_accel(
         if ray_polarity(ray) == Polarity::Neutral {
             continue;
         }
-        if fp_unifiable(r, ray) && matchable(r, ray) {
+        if fp_unifiable(r, ray) && matchable_fast(r, ray) {
             result.push((i, j));
         }
     }
@@ -310,7 +310,7 @@ fn any_match_accel(
             continue;
         }
         let tm = std::time::Instant::now();
-        let m = fp_unifiable(r, ray) && matchable(r, ray);
+        let m = fp_unifiable(r, ray) && matchable_fast(r, ray);
         ks_add(&T_MATCH, tm.elapsed());
         if m {
             return true;
@@ -354,7 +354,7 @@ fn any_self(star: &Star, j: usize) -> bool {
     let r = star[j];
     star.iter()
         .enumerate()
-        .any(|(jk, &ray)| jk != j && matchable(r, ray))
+        .any(|(jk, &ray)| jk != j && matchable_fast(r, ray))
 }
 
 /// Ψ colours as an interned-`Sym` set (allocation-free analogue of
