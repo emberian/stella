@@ -12,6 +12,7 @@
 use std::time::Instant;
 use stella_core::galaxy;
 use stella_core::galaxy_decode::{decode, pretty};
+use stella_core::sbinarith::dsint;
 use stella_core::term::{self, TermData, TermId};
 
 fn ap(f: TermId, x: TermId) -> TermId {
@@ -51,6 +52,56 @@ fn readback(ray: TermId) -> TermId {
         head = ap(head, f);
     }
     head
+}
+
+/// `a(a(cons,H),T)` → `(H,T)`.
+fn as_cons(t: TermId) -> Option<(TermId, TermId)> {
+    let TermData::App(s, a) = term::get(t) else { return None };
+    if s.name.as_str() != "a" || a.len() != 2 {
+        return None;
+    }
+    let TermData::App(s2, a2) = term::get(a[0]) else { return None };
+    if s2.name.as_str() != "a" || a2.len() != 2 {
+        return None;
+    }
+    match term::get(a2[0]) {
+        TermData::App(s3, a3) if a3.is_empty() && s3.name.as_str() == "cons" => {
+            Some((a2[1], a[1]))
+        }
+        _ => None,
+    }
+}
+fn is_nil(t: TermId) -> bool {
+    matches!(term::get(t), TermData::App(s,a) if a.is_empty() && s.name.as_str()=="nil")
+}
+
+/// Deep-force: galaxy's result spine is lazy — `eval_forced` yields only the
+/// outer WHNF cons. To get the full `(flag,newState,data)` we recursively
+/// force+readback each cons field to normal form. Bounded (depth + global
+/// node budget) ⇒ a huge/looping payload is an honest measured stop.
+fn deep_force(
+    phi: &stella_core::constellation::Constellation,
+    t: TermId,
+    fuel: usize,
+    maxf: usize,
+    depth: usize,
+    budget: &mut usize,
+) -> TermId {
+    if *budget == 0 || depth == 0 {
+        return t;
+    }
+    *budget -= 1;
+    let f = galaxy::eval_forced(phi, t, fuel, maxf);
+    let rb = readback(f.final_ray.unwrap_or(f.value));
+    if dsint(rb).is_some() || is_nil(rb) {
+        return rb;
+    }
+    if let Some((h, tl)) = as_cons(rb) {
+        let h2 = deep_force(phi, h, fuel, maxf, depth - 1, budget);
+        let tl2 = deep_force(phi, tl, fuel, maxf, depth - 1, budget);
+        return ap(ap(cst("cons"), h2), tl2);
+    }
+    rb
 }
 
 fn main() {
@@ -103,8 +154,16 @@ fn main() {
                     // forcing fix solved, now on the output side).
                     let rb = readback(ray);
                     println!(
-                        "    decode(readback) = {}",
+                        "    decode(readback)    = {}",
                         pretty(&stella_core::galaxy_decode::decode(rb))
+                    );
+                    // Deep-force the whole lazy result spine to NF.
+                    let mut budget = 200_000usize;
+                    let full = deep_force(&phi, prog, fuel, maxf, 4000, &mut budget);
+                    println!(
+                        "    decode(deep_force)  = {}  (nodes used {})",
+                        pretty(&decode(full)),
+                        200_000 - budget
                     );
                 }
                 None => println!("    (no final ray — Ψ shape unexpected)"),
