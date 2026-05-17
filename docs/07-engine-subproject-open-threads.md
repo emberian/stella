@@ -106,8 +106,48 @@ interactive 14 / sbinarith 11). New examples: `galaxy_drive` (driver +
 readback), `galaxy_chase` (operand-tree diag). **Next B = deep
 recursive readback/force of the `<a/2>` tail** = the `(newState,data)`
 payload still in Push/lazy form ⇒ full `(0,newState,[images])` =
-rasterisable first frame. Old decoder-priority note retained below for
-context but the decoder is BUILT (490168f) and is now the oracle.
+rasterisable first frame.
+
+**KG3h/KG4 — review swarm + architectural unification.** Whack-a-mole
+(KG3e–h) hit the SAME bug class 3× ⇒ ran a 3-agent parallel review
+(forcing-arch / ICFP-faithfulness / decoder). Findings → user decisions
+→ acted:
+- **KG4 (commit f735d20):** replaced 8 per-prim curried+Push detectors +
+  2 duplicated branches + `replace_subterm` with ONE detector
+  (`strict_redex_on_pi`, Push-form only — the KAM always uncurries), ONE
+  forcer (`force_value`, budget-1 ⇒ well-founded), ONE driver
+  (`drive_strict`), `galaxy_bool` at the single tt/ff point. ~250→~120
+  lines. Fixes review defects D1 (tt/ff escape), D2/D3 (eval-order: only
+  the leftmost Push redex is forced — arith_ops 16→10, fully_reduced
+  still TRUE, flag=0 preserved), D6 (well-foundedness), D7 (Nil/Cons
+  committed only when sub-eval fully_reduced). galaxy_chase deleted.
+- **KG4b (commit fb67b92):** sbinarith honest-marking (user:
+  accept-as-disclosed). The magnitude layer (`umag_*`) is genuinely
+  stellar; the **signed layer is host i128 with a hard 128-bit ceiling**
+  (sign/order/zero/division decided on host; `neg` 100% host;
+  galaxy-scale magnitudes silently `None` via `i128::try_from`). Doc
+  rewritten from the "complete and faithful" overclaim to a plain
+  "Faithfulness boundary"; per-site `// HOST:`/`// CEILING:` markers.
+  **TOP RECORDED FAITHFULNESS DEBT:** make the signed layer genuinely
+  stellar (no i128 round-trip, unbounded magnitude). So "galaxy
+  executes, flag=0" is true for the combinator/control skeleton (all 13
+  prim rules verified faithful by review Agent B) but its ARITHMETIC is
+  host-computed within the disclosed §60 concession — not yet a faithful
+  stellar execution of galaxy's numerics.
+- Review Agent B also found: NO `modulate`/`demodulate`/`multipledraw`/
+  `interact` loop exists ⇒ `[0,…,…]` is the raw single-application
+  `(flag,newState,data)`, not a rendered frame; real rendering needs
+  that protocol layer (Track below).
+
+**REMAINING TRACKS (user: do all three, this dep-order):**
+1. ✅ KG4 architectural unification.  2. Decoder: readback-based
+`decode_forced(phi,&Forced)`; recursive readback-aware `decode`; delete
+`best_list_subterm`/`list_score` (review Agent C — the heuristic is what
+produced the spurious `[0,[]]`); swap local `dsint`→`sbinarith::dsint`.
+3. Protocol/render: `interact` loop + `multipledraw` (+ modulate/
+demodulate as the offline galaxy needs) ⇒ end-to-end first frame.
+(Old decoder-priority note retained below; decoder BUILT 490168f, now
+being reworked onto readback.)
 
 (Pre-KG3e text, retained for the measured arc:)
 Measured arc: blocked@5 → KG3b lazy prims → 371-step "NF" → KG3e found
@@ -236,13 +276,15 @@ conclusion (F). (Was deferred "to next checkpoint" — still owed.)
 ## NEXT ACTIONS (priority order)
 1. ~~Harvest both A agents~~ DONE (490168f galaxy_decode, 308189f
    IexAccel). Thread A CLOSED.
-2. ~~Investigate WHY shallow~~ DIAGNOSED (KG3e 6baff61): Push-form `eq`
-   stall, not a true NF. Partially fixed (KG3f 3696dff): Push-form
-   forcing resolves 13+ nested strict ops; one operand → numeral 0.
-   **(NOW TOP)** Drive the residual depth: chase the deeper Push-form
-   `lt`/`div` stall (budget/fuel, instrument deepest stall op, div
-   policy), decoder-gated, until the first interaction yields a real
-   `(flag,newState,data)`.
+2. ~~Diagnose/drive galaxy~~ DONE: KG3e–h drove it to flag=0; KG4
+   (f735d20) unified the evaluator + fixed faithfulness D1/D2/D3/D6/D7;
+   KG4b (fb67b92) honest-marked sbinarith. **(NOW TOP)** Decoder rework
+   (review Agent C): `decode_forced(phi,&Forced)` = `final_ray` →
+   `readback_ray` → recursive readback-aware `decode`; delete
+   `best_list_subterm`/`list_score`; `dsint`→`sbinarith::dsint`. Then
+   protocol/render: `interact` loop + `multipledraw`. Then top
+   faithfulness debt: genuinely-stellar signed arithmetic (kill the
+   sbinarith i128 round-trip/ceiling).
 3. Fold this into `docs/05` §10 (J) — include the KG3d shallow-NF
    finding (decoder faithful; galaxy NF clean-but-shallow, not Opaque).
 4. Then: KA1 cheap-key+cross-run table (D, valence) → rayon (D) → KA2
