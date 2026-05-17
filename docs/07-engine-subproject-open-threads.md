@@ -294,12 +294,18 @@ Decode it with `galaxy_decode::decode_result` as the oracle each step.
   galaxy's δ-heavy KAM). Risk: `apply_smc_rewrite`/`pushout_along_span`
   are `feature="experimental"` in open-hypergraphs 0.3.1 (layering/lax
   stable). Gate = the SAME proven `psi_compatible` + reference `iex`.
-- triangular/union-find substitution in `fuse` — **DONE (Stage 1a,
-  e3b4030):** `unify_fast.rs` built, differentially proven ≡ the `unify`
-  oracle (3000-case fuzz, mirrored MM cases). NOT yet wired (engine
-  byte-identical). Stage 1b = the `produce_stars_fast` seam (docs/09 §C,
-  2 call sites) + flip `iex_eq_iex_fast`→`psi_compatible` + KS-PROF
-  galaxy Φ=405 before/after.
+- triangular/union-find substitution in `fuse` — **DONE & WIRED & MEASURED
+  (Stage 1a e3b4030 + Stage 1b f5e845c).** `unify_fast.rs` (triangular
+  UF, deferred occurs) proven ≡ `unify` oracle (3000-fuzz); wired into
+  the fast tier via the minimal fn-pointer seam (reference path
+  byte-unchanged, 2 call sites in `produce_stars_fast`); gate flipped
+  `iex_eq_iex_fast`→`iex_fast_result_eq_iex` (psi_compatible) + inline
+  wrong-unifier falsifier. **Measured galaxy Φ=405: unify 0.0194s (53%)
+  → 0.0016s (9%, ~12× kernel); total 0.0366s → 0.0180s ≈ 2.0×.** Zero
+  regressions; reference iex = untouched oracle. **`find` (discrimination
+  matching) is now the dominant phase (~30%) — the NEXT KS lever**
+  (docs/09 §E / docs/10: discrimination-tree indexing beyond
+  `fp_unifiable`).
 - deeper term indexing (discrimination/fingerprint beyond fp_unifiable) —
   matters at galaxy Φ scale (~400 δ-stars).
 - a clean fast `evaluate(constellation)→{NF, closure/viability readout}` API
@@ -449,15 +455,19 @@ falsifier the validator must catch.
    - ✅ Stage 0 `psi_compatible` validator (259befa, forensic-proven).
    - ✅ Stage 1a `unify_fast` built + proven ≡ `unify` oracle (e3b4030);
      engine still byte-identical (not wired).
-   - **(NOW TOP) Stage 1b:** wire `unify_fast` into `produce_stars_fast`
-     (docs/09 §C `Unifier::Fast` seam, exactly 2 call sites) + flip
-     `iex_eq_iex_fast`→`iex_fast_result_eq_iex` (psi_compatible) so the
-     tree stays green + a deliberately-wrong-unifier falsifier + KS-PROF
-     galaxy Φ=405 before/after (unify% MUST drop from ≈53%). One-writer,
-     parent, hot path — deserves fresh focused context.
+   - ✅ Stage 1b (f5e845c): unify_fast wired into the fast tier;
+     measured galaxy Φ=405 ~2.0× total, unify 53%→9%; faithfulness
+     proven (psi_compatible + falsifier); zero regressions.
+   - **(NOW TOP) the NEXT lever is `find` (≈30% now, the new dominant
+     phase):** discrimination-tree / fingerprint indexing beyond
+     `fp_unifiable` (docs/09 §E, docs/10 §2.1) — same two-tier
+     psi_compatible-gated discipline. Then Stage 2/3 below.
    - Stage 2 delete dead byte-identity scaffolding (`*counter+=1` parity
-     hack); retarget `iex_tabled_result_eq_iex` onto `psi_compatible`.
-   - Stage 3 `+varsig+size` node metadata; skip domain-disjoint subtrees.
+     hack at the freshen site); `iex_tabled_result_eq_iex` already
+     result-equiv (passes) — retarget onto `psi_compatible` for
+     uniformity.
+   - Stage 3 `+varsig+size` node metadata; skip domain-disjoint subtrees
+     in unify_fast occurs-pass / `apply`.
 4. Then re-test the galaxy image-data forcing under the faster engine
    (the KG6c payoff). Planned generalization (not a blocker):
    genuinely-stellar fully-general signed arithmetic = the KS stream.
