@@ -13,6 +13,7 @@ pub mod galaxy;
 pub mod galaxy_decode;
 pub mod modulation;
 pub mod interact;
+pub mod evaluate;
 pub mod concrete;
 pub mod nfta;
 pub mod constellation;
