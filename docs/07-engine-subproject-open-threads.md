@@ -21,14 +21,28 @@ Measured KS speedups (release, faithful, vs original reference): binarith/Horn
 `iex_eq_iex_fast` byte-identical, `iex_tabled_result_eq_iex` result-equiv,
 20k `matchable_fast` fuzz, antiunify 6/6).
 
-## A. IN FLIGHT (must harvest on completion)
-- **IexAccel-caching subagent** `a253857384cc7bd43`, worktree, on
-  `interactive.rs`. Adds `iex_fast_with_accel`/`iex_tabled_with_accel` +
-  pub accel build so the valence loop builds the head-index ONCE per fixed Φ
-  (kills per-call `IexAccel::build` for millions-of-small-execs). On
-  completion: cp file, forensic-verify (`iex_eq_iex_fast`,
-  `iex_tabled_result_eq_iex`, `mat_accel_eq_mat_ref`, combinator/arith green +
-  the micro-bench numbers), clean worktree, commit. Disjoint from galaxy.rs.
+## A. IN FLIGHT — TWO subagents, harvest BOTH (worktree-harvest model)
+For each: read its final report (self-describing) → `cp` its new/changed
+file(s) from `.claude/worktrees/agent-<id>/...` into the main tree → add any
+`pub mod` line it specifies to `lib.rs` (parent owns lib.rs) → forensic-verify
+in main tree (DON'T trust self-report) → `git worktree remove --force` +
+`git branch -D worktree-agent-<id>` + `git worktree prune` → commit. Disjoint
+files ⇒ order doesn't matter; both safe.
+
+- **IexAccel-caching** `a253857384cc7bd43`, on `interactive.rs`. Adds
+  `iex_fast_with_accel`/`iex_tabled_with_accel` + pub accel build so the
+  valence loop builds the head-index ONCE per fixed Φ (kills per-call
+  `IexAccel::build` for millions-of-small-execs). Verify: `iex_eq_iex_fast`,
+  `iex_tabled_result_eq_iex`, `mat_accel_eq_mat_ref`, `combinator::`,
+  `arith::` green + paste its micro-bench numbers.
+- **galaxy_decode** `ae872cb047e1025c6`, NEW file
+  `crates/stella-core/src/galaxy_decode.rs` (disjoint from interactive.rs).
+  Faithful GValue decoder of galaxy's NF (kills the lossy focus/π
+  extraction) + `dump_galaxy_nf` diagnostic. Verify: `galaxy_decode::` green;
+  **the most valuable artifact = the pasted `dump_galaxy_nf` output** (galaxy's
+  actual decoded normal form — tells the next session whether the 371-step NF
+  is a clean list (correct-ish) or Opaque-dominated (the honest "NF may be
+  wrong" risk realized). Feeds thread B directly.
 
 ## B. GALAXY SPINE — reprioritized, the next concrete deliverable
 Measured arc: blocked@5 → KG3b lazy prims → **371-step true NF, NO strict
