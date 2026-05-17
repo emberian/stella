@@ -585,8 +585,21 @@ corrupted-`SpecTr` negative the α-gate must reject. `iex_spec_result_eq_iex`
 green: combinator SKK (the prior failing corpus) + galaxy Φ=405 real
 skeleton both fire non-vacuously, step-identical, α-equal to iex_fast,
 decision-equal to reference iex; Horn/binarith delegate inertly; the
-`Delta(bogus)` negative trips. Σ0 + Σ1 now both shipped & proven. Next:
-Σ2 (un-delegate Splice) → Σ3 (wire `iex_spec` as the galaxy
-`eval_forced` tier + KS-PROF Φ=405 before/after: steps identical, wall
-↓ — the find+freshen+fuse+unify+apply envelope collapsing on the 392
-δ-heads).
+`Delta(bogus)` negative trips. Σ0 + Σ1 now both shipped & proven.
+
+## Σ2 DONE — combinator/lazy-prim Splice realised (same gate, green)
+`spec_realise` now handles `SpecTr::Splice{params,body}`: pop
+`params.len()` `dot`-frames off the focus stack, bind positionally into
+the fixed contractum `body` (`Substitution::from_var_pairs`), continue
+on the residual stack — the literal MGU of the linear pattern ⇒
+structurally = the generic α-rename+`unify_fast`+apply (the Σ1
+α-equivalence gate is the backstop and stays green; combinator SKK now
+fully specialises — Push Unwind + S/K/I Splice — galaxy δ+Push+lazy
+prims all realised). Only strict ops (no `SpecTr`) delegate to
+`drive_strict` — the §49.50 boundary held exactly where docs/08 needs
+it. Inertness regression (iex_fast/iex_tabled/accel) re-confirmed:
+`spec=false` byte-identical, untouched. Next: Σ3 — wire `iex_spec` as
+the galaxy `eval_forced` tier + KS-PROF Φ=405 before/after (steps
+identical, wall ↓ — the find+freshen+fuse+unify+apply envelope
+collapsing on the 392 δ-heads). Σ(Φ) stays the per-step companion,
+NOT the galaxy termination-crosser (docs/16 unchanged).

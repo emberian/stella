@@ -1029,9 +1029,31 @@ fn spec_realise(
             let _ = st_sym;
             mk_app(c_st_sym, vec![am, mk_app(dot_sym, vec![an, focus_pi])])
         }
-        // Σ1 scope: combinator Splice delegates to the generic fast path
-        // (un-delegated in Σ2). Strict ops carry no SpecTr at all.
-        SpecTr::Splice { .. } => return None,
+        // Σ2: combinator/lazy-prim Splice. -P(st(H, p1·…·pk·π)),
+        // +P(st(body,π)). Pop k `dot`-frames off the focus stack, bind them
+        // positionally into the fixed contractum `body` (the closed Σ(Φ)
+        // template), continue on the residual stack. θ = {p_i↦f_i} is the
+        // literal MGU of the linear pattern ⇒ structurally = the generic
+        // α-rename+unify+apply (the Σ1 α-gate is the backstop). Strict ops
+        // carry no SpecTr at all (they delegate, unchanged).
+        SpecTr::Splice { params, body } => {
+            let k = params.len();
+            let mut frames: Vec<crate::term::TermId> = Vec::with_capacity(k);
+            let mut cur = focus_pi;
+            for _ in 0..k {
+                let TermData::App(d, da) = get(cur) else {
+                    return None;
+                };
+                if d.name.as_str() != "dot" || da.len() != 2 {
+                    return None;
+                }
+                frames.push(da[0]);
+                cur = da[1];
+            }
+            let rest_pi = cur;
+            let theta = Substitution::from_var_pairs(params.iter().copied().zip(frames));
+            mk_app(c_st_sym, vec![theta.apply(*body), rest_pi])
+        }
     };
     let new_ray = mk_app(pos_sym, vec![new_inner]);
 
@@ -1202,8 +1224,9 @@ pub fn iex_tabled(phi: &Constellation, psi_init: Vec<Star>, fuel: usize) -> IExR
 /// docs/17). Identical redex selection to [`iex_fast`] (same `iex_fast_inner`
 /// scan), but at iex_fast's own chosen `(ik,jk)` a specialisable Φ-star's
 /// resolvent is built from the closed [`SpecTr`] residual instead of
-/// α-rename + `unify_fast` + whole-star θ-apply. Σ1 scope: δ + Push only
-/// (combinator `Splice` / strict still delegate to the generic path).
+/// α-rename + `unify_fast` + whole-star θ-apply. Σ2 scope: δ + Push +
+/// combinator/lazy-prim `Splice` all realised; only strict ops (which
+/// carry no `SpecTr`) delegate to the generic `drive_strict` path.
 /// Decision-equivalent to reference [`iex`] (gated by
 /// `faithfulness::psi_compatible`, **step-count identical** to `iex_fast`);
 /// the proven byte-identical `iex_fast`/`iex_tabled`/`iex` are untouched —
@@ -1733,9 +1756,10 @@ mod tests {
         );
     }
 
-    /// **Σ(Φ) Σ1 differential gate (docs/17 §4).** `iex_spec` = the in-loop
-    /// Futamura sibling tier (δ + Push realised from the closed `SpecTr`;
-    /// Splice/strict delegate). Three guarantees, all on the same corpus the
+    /// **Σ(Φ) Σ1/Σ2 differential gate (docs/17 §4).** `iex_spec` = the
+    /// in-loop Futamura sibling tier (δ + Push + combinator/lazy-prim
+    /// `Splice` all realised from the closed `SpecTr`; only strict ops
+    /// delegate). Three guarantees, all on the same corpus the
     /// `iex_fast` gate uses (incl. the combinator SKK that sank the prior
     /// prefix-loop attempt — now green because redex selection is *literally*
     /// iex_fast's):
@@ -1788,7 +1812,7 @@ mod tests {
 
         // (b) Combinator core SKK (S is the non-linear duplicating star —
         // the exact corpus the prior prefix-loop iex_spec failed). Push→
-        // Unwind is realised; S/K/I→Splice delegate (Σ1 scope).
+        // Unwind AND S/K/I→Splice are now realised (Σ2 scope).
         let prog = crate::combinator::app_n([
             crate::combinator::a_("S"),
             crate::combinator::a_("T"),
