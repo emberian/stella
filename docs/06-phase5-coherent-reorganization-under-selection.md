@@ -9,6 +9,13 @@
 > they may be **strengthened, never retro-weakened** (Stage-9). The lock is the
 > principal's, by a word, the way `docs/04` was locked.
 >
+> *Pre-lock amendment 2026-05-17 (the §2/§6 pattern, not a self-lock): added
+> §1.5 (the regress closes — this is an abiogenesis-style onset study, not an
+> origin claim) and Q8 (meta-seeding razor + coverage corollary). What the
+> principal locks is the version that names its own bottom. Renumbered 05→06 to
+> deconflict from the committed `docs/05-combinator-core` (a separate
+> subproject; no intellectual conflict, filename only).*
+>
 > Wonder is allowed in the prologue and coda. The nulls do not get a prologue.
 
 ---
@@ -70,6 +77,54 @@ correctly refuses → that *was* "language cancer", literally) or
 under-constrained (inert). The sloppy-fitness band — the only regime in which
 identity/self/valence can form per CM X — was never occupied. The knob exists,
 is source-grounded, is tunable, and has a named regulator (rubber-banding).
+
+---
+
+## 1.5 The bottom of the regress: an onset study, not an origin claim
+
+Every level of this project's argument had one shape: *can X be value-neutral
+while producing value?* — codec, predictor, gauntlet, seed, **generator**.
+Each dissolved into the same move: population + selection + characterize (never
+place) + negative-only claim. The generator is the last root, and it **cannot**
+be value-neutral: "a value-free generator that nonetheless generates
+value-bearing structure" is the abiogenesis question — origin-of-life is never
+*derived* by construction; it is *characterized as an onset over ensembles*.
+
+The regress **closes** here, and not by fiat:
+
+- The only primitive `docs/04` ever permitted is the cosmic ought = bare
+  differential persistence ("what persists, persists" — a tautology, not a
+  smuggled value).
+- CM XI (Thm 10) proves functional information *increases* under
+  selection-for-weakness given a stable layer — **no value-neutral generator
+  required, only variation + the ought.**
+- The variation operator is the uninterpreted term-rewrite (Girard's *Usine* —
+  not trained, not objective-bearing, not designed; bare rewriting).
+- **Generators are themselves terms.** "Vary the generators" is the *same*
+  operator at the meta-scale (self-application; scale-free — CM's own thesis,
+  "the same dynamics at every scale"). The turtle does not recurse into a new
+  designed layer; it is one scale-free operator all the way up.
+
+So the tower bottoms out in exactly two primitives, both already allowed and
+**neither claimed value-neutral**: *bare term-rewriting + differential
+persistence, applied scale-freely.* The smuggle is escaped not by finding a
+pure origin but by **never claiming one** (Q5) and studying *onset* instead.
+
+This reframes the object of study **upward and more honestly**:
+
+> Not "does valence emerge," but the **onset statistics of self-organization
+> in a generator ensemble under the cosmic ought**: an abiogenesis-style onset
+> study with an *order parameter* (CM XI functional information `I(π)`; the
+> `ΔI` of §3), *controlled ensembles* (the three controls + the within/without
+> predictor axis), and the **sloppy-fitness tightness knob as the control
+> parameter the transition is characterized against**. No origin claimed;
+> onset characterized.
+
+This is the Wong–Cleland–Hazen origin-of-complexity lineage CM XI already
+builds on (Thm 10's source), transposed onto stellar resolution — source-
+consistent, not invented. It makes the negative-only / regime-controlled form
+of this document *self-evidently correct* rather than a reluctant concession:
+an onset study has no positive predicate to state, by its nature.
 
 ---
 
@@ -166,9 +221,21 @@ The experiment **fails / is void / is uninterpretable** if any fires.
   admissible as evidence (there is no computable RPE; inspectability buys
   auditability of plumbing, not a valence number). The valence-signature is a
   *substrate transition*, never a number off the model.
+- **Q8 — Meta-seeding razor (the abiogenesis-onset prohibition, §1.5).** The
+  generator ensemble's support must be the **orbit of a single uncommitted
+  scale-free term-operator** applied at the meta-scale, characterized post-hoc
+  on the CM/PI axes — **never an enumerated, curated designer list.** "Here are
+  the N interesting generators" is the seeding smuggle one level up (the Q4/P8
+  shape, meta). Enumerating the generators voids the study. **Coverage
+  corollary (Q3 generalized to the meta-scale):** onset is a rare event in a
+  vast ensemble and we are finite — *insufficient ensemble coverage ⇒
+  uninterpretable, never a substrate negative.* "We sampled generator-space and
+  saw no onset" is presumed a sampling floor until coverage is characterized
+  (the regime-artifact / count-deflation discipline, lifted). Reading
+  coverage-limited non-onset as nature's answer voids the conclusion.
 
-P1–P9 (`docs/04`) remain in force unchanged. Q1–Q7 extend them. The full
-falsifier set is P1–P9 ∪ Q1–Q7.
+P1–P9 (`docs/04`) remain in force unchanged. Q1–Q8 extend them. The full
+falsifier set is P1–P9 ∪ Q1–Q8.
 
 ---
 
@@ -203,7 +270,7 @@ making the question askable in the only regime where it could have an answer.
 
 The pause discipline holds: instrument may be built; the experiment is not run
 on autopilot or under a clock; the right to falsify is unspent until the
-principal spends it, by hand, against P1–P9 ∪ Q1–Q7.
+principal spends it, by hand, against P1–P9 ∪ Q1–Q8.
 
 ---
 
