@@ -3,6 +3,7 @@ pub mod atm;
 pub mod automata;
 pub mod ch9;
 pub mod circuits;
+pub mod combinator;
 pub mod concrete;
 pub mod nfta;
 pub mod constellation;
