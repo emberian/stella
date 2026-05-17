@@ -26,7 +26,8 @@ use rustc_hash::FxHashMap;
 use stella_core::constellation::Constellation;
 use stella_core::constellation::Star;
 use stella_core::dep_graph::DepGraph;
-use stella_core::interactive::{iex, mat_phi_colored, step_at};
+use stella_core::concrete::conceal_and_filter;
+use stella_core::interactive::{iex, mat_phi_colored, step_detail};
 use stella_core::polarised::{matchable, ray_polarity, underlying_term, Polarity};
 use stella_core::subst::{fresh_var, Renaming};
 use stella_core::term::Var;
@@ -69,7 +70,27 @@ pub struct StepSnapshot {
     pub fireable: Vec<Fireable>,
     /// The most general unifier of the redex IEx fires next, as
     /// `(variable, term)` display pairs. Empty at the final step.
+    /// (The first summand's θ — kept for back-compat; see `summands`.)
     pub mgu: Vec<(String, String)>,
+    /// The **exact** §51.9 decomposition of the step about to fire: one
+    /// entry per summand of the sum, each with the real θ the engine
+    /// applied (authoritative — not reconstructed). Empty at the final step
+    /// and in the fuel-replay (primer) capture.
+    pub summands: Vec<SummandView>,
+    /// The observable output ɟ(Ψ) at this step — the engine's own
+    /// `conceal_and_filter` (§49.44), not a client-side polarity filter.
+    pub observable: Vec<String>,
+}
+
+/// A single summand of the fired step (for the exact MGU panel).
+#[derive(Debug, Clone)]
+pub struct SummandView {
+    /// `true` = external fusion against Φ; `false` = self-interaction.
+    pub external: bool,
+    /// What it fused against, rendered (`Φ[i][j]` or `self · ray k`).
+    pub target: String,
+    /// The exact unifier applied, as `(variable, term)` pairs.
+    pub theta: Vec<(String, String)>,
 }
 
 /// Capture step snapshots for a preset by fuel-replay.
@@ -141,6 +162,8 @@ pub fn capture_steps(
             is_final,
             fireable,
             mgu,
+            summands: Vec::new(), // primer fuel-replay: see capture_path for exact
+            observable: observable_of(psi),
         });
     }
 
@@ -164,6 +187,20 @@ fn psi_dot(psi: &[Star]) -> String {
         let dg = DepGraph::from_constellation(&pv);
         dep_graph_dot(&dg, &pv)
     }
+}
+
+/// ɟ(Ψ): the engine's own observable output (conceal + noise filter, §49.44).
+fn observable_of(psi: &[Star]) -> Vec<String> {
+    psi_render(&conceal_and_filter(psi))
+}
+
+/// Hide engine-internal fresh vars in a θ and scrub them inside terms.
+fn scrub_pairs(theta: &[(String, String)]) -> Vec<(String, String)> {
+    theta
+        .iter()
+        .filter(|(v, _)| !is_internal_var(v))
+        .map(|(v, t)| (v.clone(), scrub_term(t)))
+        .collect()
 }
 
 /// Drive resolution along an **explicitly chosen path**. At step `k` the redex
@@ -194,6 +231,8 @@ pub fn capture_path(
                 is_final: true,
                 fireable: Vec::new(),
                 mgu: Vec::new(),
+                summands: Vec::new(),
+                observable: observable_of(&psi),
             });
             break;
         }
@@ -209,7 +248,6 @@ pub fn capture_path(
             f.is_next = n == idx;
         }
         let chosen = fireable[idx].clone();
-        let mgu = mgu_of(phi, &psi, &chosen);
         let active_ray = format!(
             "star[{}] ray[{}] {} — {}",
             chosen.star,
@@ -219,6 +257,28 @@ pub fn capture_path(
             else { format!("matches: {}", chosen.targets.join(", ")) }
         );
 
+        // EXACT step: the engine's own §51.9 decomposition with real θ per
+        // summand, and the authoritative successor Ψ — no reconstruction.
+        let det = match step_detail(phi, &psi, chosen.star, chosen.ray, &mut counter) {
+            Some(d) => d,
+            None => break,
+        };
+        let summands: Vec<SummandView> = det
+            .summands
+            .iter()
+            .map(|s| SummandView {
+                external: s.external,
+                target: match (s.external, s.phi_target, s.self_ray) {
+                    (true, Some((i, j)), _) => format!("Φ[{i}][{j}]"),
+                    (false, _, Some(j)) => format!("self · ray {j}"),
+                    _ => String::new(),
+                },
+                theta: scrub_pairs(&s.theta),
+            })
+            .collect();
+        let mgu = summands.first().map(|s| s.theta.clone()).unwrap_or_default();
+        let observable = observable_of(&psi);
+
         snapshots.push(StepSnapshot {
             step: k,
             psi_stars: psi_render(&psi),
@@ -227,12 +287,11 @@ pub fn capture_path(
             is_final: false,
             fireable,
             mgu,
+            summands,
+            observable,
         });
 
-        match step_at(phi, psi, chosen.star, chosen.ray, &mut counter) {
-            Some(next) => psi = next,
-            None => break,
-        }
+        psi = det.psi_after;
     }
     snapshots
 }
