@@ -245,13 +245,25 @@ pub fn decode_forced(
 ) -> GValue {
     let root = f.final_ray.unwrap_or(f.value);
     let mut budget = 50_000usize;
-    deep_decode(phi, root, fuel, max_forcings, 4096, &mut budget)
+    // Memoised graph reduction: a CLOSED subterm's forced readback under a
+    // fixed Φ is a deterministic pure function of its hash-consed `TermId`,
+    // so cache it. Galaxy's image payload is built from massively SHARED
+    // structure that the naive walk re-forces from scratch on every cons
+    // path — the actual reason a single image element does not terminate
+    // (KG6c). Caching the expensive `eval_forced` per distinct input term
+    // turns that exponential re-forcing linear. Sound by construction:
+    // same value, just computed once (result-equivalent trivially). Memo
+    // is per-call (this Φ only) so there is no cross-Φ staleness.
+    let mut memo: rustc_hash::FxHashMap<TermId, TermId> =
+        rustc_hash::FxHashMap::default();
+    deep_decode(phi, root, fuel, max_forcings, 4096, &mut budget, &mut memo)
 }
 
 /// One node of [`decode_forced`]: force `t` to NF, read it back, and if it
 /// is a cons cell recurse into head/tail (re-forcing each). Numerals / nil
 /// / atoms terminate; a non-value or budget/depth exhaustion ⇒
 /// `Opaque("unforced:…")` (honest, never coerced).
+#[allow(clippy::too_many_arguments)]
 fn deep_decode(
     phi: &crate::constellation::Constellation,
     t: TermId,
@@ -259,13 +271,23 @@ fn deep_decode(
     max_forcings: usize,
     depth: usize,
     budget: &mut usize,
+    memo: &mut rustc_hash::FxHashMap<TermId, TermId>,
 ) -> GValue {
     if *budget == 0 || depth == 0 {
         return GValue::Opaque(format!("unforced:{}", head_tag(t)));
     }
-    *budget -= 1;
-    let f = crate::galaxy::eval_forced(phi, t, fuel, max_forcings);
-    let rb = crate::galaxy::readback_ray(f.final_ray.unwrap_or(f.value));
+    // Forced-readback cache (the expensive `eval_forced` is keyed by the
+    // closed input term — deterministic under fixed Φ). A hit costs no
+    // budget: it was already paid once. Misses force once and record.
+    let rb = if let Some(&cached) = memo.get(&t) {
+        cached
+    } else {
+        *budget -= 1;
+        let f = crate::galaxy::eval_forced(phi, t, fuel, max_forcings);
+        let rb = crate::galaxy::readback_ray(f.final_ray.unwrap_or(f.value));
+        memo.insert(t, rb);
+        rb
+    };
     if let Some(n) = dsint(rb) {
         return GValue::Num(n);
     }
@@ -274,8 +296,8 @@ fn deep_decode(
     }
     if let Some((h, tl)) = as_cons_cell(rb) {
         return GValue::Cons(
-            Box::new(deep_decode(phi, h, fuel, max_forcings, depth - 1, budget)),
-            Box::new(deep_decode(phi, tl, fuel, max_forcings, depth - 1, budget)),
+            Box::new(deep_decode(phi, h, fuel, max_forcings, depth - 1, budget, memo)),
+            Box::new(deep_decode(phi, tl, fuel, max_forcings, depth - 1, budget, memo)),
         );
     }
     match get(rb) {
