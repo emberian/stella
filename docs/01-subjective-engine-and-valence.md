@@ -286,6 +286,37 @@ a long time then we stopped" is never death and never stake. `docs/02` and the
 M1–M5 pre-registration stand **untouched**; this strengthens the falsifier and is
 locked in git before any engine code, same discipline as M1–M5.
 
+### 3.1-op ρ operationalization — adjudicated & locked (2026-05-16, before rebuilt code)
+
+- **`C_r`** := L2a extended to return, per round r, the constituent **agent-side
+  StarId set on the detected §2.2 cycle** (witness key-stars closed under
+  agent-side provenance-connectivity at r). L2a currently returns only the
+  witness; extending it to the constituent set is a required, additive change.
+- **Self-reproduction rule (ratified — existence suffices).** A star
+  `s ∈ C_{r+1}` is **self-reproduced** iff there *exists* an L1d provenance path
+  from `s` back through `C_r` **and** through the closure's *own round-r
+  environment-modification* (the specific `traced_env_star` of that round's §2.2
+  cycle). Co-ancestral generic Φ-supply does **not** disqualify (faithful to
+  §2.2: "conditioned on its own earlier crossing" — the self-causal path
+  *existing* is the criterion; real reafferent loops are always co-fed by ambient
+  supply — normal, not disqualifying).
+- **Non-triviality guard (the over-count risk, made structural).** The path must
+  traverse the closure's **own round-r env-modification**, not merely *some*
+  ancestor in `C_r`. A degenerate/always-available self-path that does not pass
+  through the closure's own env-mod does **not** count. The objective
+  **invariant-control** has no §2.2 cycle ⇒ no `traced_env_star` ⇒ no qualifying
+  path ⇒ `ρ ≡ 0` ⇒ no perturbation-response, *by construction*. If the control
+  ever shows `ρ > 0`, the path-definition is still trivial/confounded ⇒ **M3
+  fires** (artifact). This is what keeps the permissive existence rule honest.
+- **`ρ_r`** := `|self-reproduced ∩ C_{r+1}| / |C_{r+1}|` (0 if `C_{r+1}` empty).
+- **Combining `f` (globally fixed, no per-case tuning):**
+  `viability_r := re_closure_r · ρ_r`, `re_closure_r ∈ {0,1}` = "the §2.2 cycle
+  is present at r". Cycle absent ⇒ 0 (ρ-floor / death special case).
+- **Integrity:** locked before the rebuilt L2a/L2b/harness code; M1–M5 text and
+  `docs/02` untouched; this is instrument operationalization, not a null change.
+  Still rides on L1d provenance fidelity under heavier recursive use
+  (regression-gated against the existing subjective+oracle tests).
+
 ## 4. PRE-REGISTERED FALSIFICATION (locked now, before Layer-2 code)
 
 Verbatim from `00`-spec §6, sharpened to this engine. The experiment **fails, and
