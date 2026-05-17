@@ -67,7 +67,7 @@ use std::collections::HashSet;
 use crate::ch9::{saturation_profile, ConstellationClass};
 use crate::constellation::{star_kind, Constellation, Star, StarKind};
 use crate::dep_graph::{all_colours, DepEdge, DepGraph};
-use crate::polarised::{matchable, ray_polarity, Polarity, PolarisedCompat};
+use crate::polarised::{matchable, ray_polarity, Polarity, PolarisedCompat, Ray};
 use crate::subst::Substitution;
 use crate::term::{mk_var_interned, Var, Term};
 use crate::unify::{unify_with, Equation};
@@ -929,6 +929,247 @@ pub fn stream_to_normal_form(
     subjective_stream(phi, psi0)
         .take(max_steps + 1)
         .find(|s| s.is_normal_form)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase-4 §3.2 — intrinsic-death certificates (Eng §62.5–62.7, §74.7, §75.8)
+//
+// Pure, additive instruments over a `Step`.  **No reducer change**: the engine
+// already runs Eng's black-hole as a genuine infinite loop (via the existing
+// `mat_self_local` self-interaction path).  These functions only *observe* it
+// — structurally / over provenance — and **never by running it** (§62.6: under
+// concrete execution the black hole "yields an infinite loop"; §49.59–60:
+// termination is genuinely open).  Detection is scoped to Eng's **named** forms
+// only — §62.5 verbatim: "there is no generic black hole: they necessarily
+// depend on the shape of Φ" — keyed on the *distinguished* black-hole colour
+// symbols Eng introduces solely as erasure markers (`∞`, §75.8; the addr-paired
+// `ω`, §74.7).  Keying on those symbols (not on a generic superterm shape) is
+// the only recogniser that does not collide with §62.7's *productive* loop
+// `[−a(0·W),+a(W)]`, which is structurally near-identical but is alive, not a
+// black hole.  This realises the locked docs/01 §3.2 / §4 scope.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Which Eng-named black-hole form a star matches (`docs/01` §3.2 Mode-1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BlackHoleForm {
+    /// §75.8 ⋋_L: the involutive `∞`-loop `[…, −∞(t), +∞(t)]`.  Eng's `∞` is a
+    /// dedicated black-hole symbol with no productive use; the `−∞/+∞` pair
+    /// self-interacts forever, so no saturated diagram can ever complete.
+    InvolutiveInfinity,
+    /// §74.7 author's solution: the addr-paired `ω` star `[+addr(v), +ω(X),
+    /// −ω(f(X))]`.  `−ω(f(X))` can only be matched by `+ω(X)` of the *same*
+    /// star (same `ω`), which would need a forbidden self-loop ⇒ no saturated
+    /// diagram completes.
+    OmegaWeakening,
+}
+
+/// Neutral colour name of a ray's head symbol (`+c(..)`/`−c(..) ↦ "c"`),
+/// or `None` for a variable / neutral ray.
+fn ray_colour_name(r: Ray) -> Option<String> {
+    match crate::term::get(r) {
+        crate::term::TermData::App(sym, _) if sym.pol != Polarity::Neutral => {
+            Some(sym.name.as_str().to_string())
+        }
+        _ => None,
+    }
+}
+
+/// First argument term of a ray `±c(t, ..)`, or `None` if nullary / variable.
+fn ray_arg0(r: Ray) -> Option<Term> {
+    match crate::term::get(r) {
+        crate::term::TermData::App(_, args) if !args.is_empty() => Some(args[0]),
+        _ => None,
+    }
+}
+
+/// Recognise an Eng-named black-hole star (§74.7 `ω`, §75.8 `∞`).
+///
+/// **Scope (Eng §62.5, verbatim): "there is no generic black hole: they
+/// necessarily depend on the shape of Φ."**  This is therefore *not* a general
+/// oracle — it recognises exactly the two distinguished-symbol signatures of
+/// the forms placed in the Phase-4 corpus, and nothing else.  In particular it
+/// must **not** fire on §62.7's productive loop (a faithfulness invariant,
+/// regression-tested below).
+pub fn blackhole_form(star: &Star) -> Option<BlackHoleForm> {
+    let n = star.len();
+    // §75.8 ∞-loop: a same-star pair −∞(·)/+∞(·) on the distinguished symbol "∞".
+    let mut saw_pos_inf = false;
+    let mut saw_neg_inf = false;
+    for &r in star.iter() {
+        if ray_colour_name(r).as_deref() == Some("∞") {
+            match ray_polarity(r) {
+                Polarity::Pos => saw_pos_inf = true,
+                Polarity::Neg => saw_neg_inf = true,
+                Polarity::Neutral => {}
+            }
+        }
+    }
+    if saw_pos_inf && saw_neg_inf {
+        return Some(BlackHoleForm::InvolutiveInfinity);
+    }
+    // §74.7 ω-weakening: a same-star pair +ω(X) / −ω(g(…X…)) on symbol "ω",
+    // where the negative argument is a *strict* superterm containing the
+    // positive's variable (so the pair cannot self-cancel: §74.7 mechanism).
+    for i in 0..n {
+        for j in 0..n {
+            if i == j {
+                continue;
+            }
+            let (rp, rn) = (star[i], star[j]);
+            if ray_colour_name(rp).as_deref() != Some("ω")
+                || ray_colour_name(rn).as_deref() != Some("ω")
+                || ray_polarity(rp) != Polarity::Pos
+                || ray_polarity(rn) != Polarity::Neg
+            {
+                continue;
+            }
+            if let (Some(ap), Some(an)) = (ray_arg0(rp), ray_arg0(rn)) {
+                if ap.is_var() && !an.is_var() {
+                    let pv = ap.vars();
+                    if pv.iter().all(|v| an.vars().contains(v)) && !pv.is_empty() {
+                        return Some(BlackHoleForm::OmegaWeakening);
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Star-level adjacency from the dep-graph (two stars adjacent iff a `DepEdge`
+/// joins them), then the set of star indices reachable from `seeds`.
+fn reachable_stars(dg: &DepGraph, seeds: &[usize]) -> std::collections::HashSet<usize> {
+    let mut adj: Vec<Vec<usize>> = vec![Vec::new(); dg.n_stars];
+    for e in &dg.edges {
+        let (a, b) = e.star_indices();
+        if a != b && a < dg.n_stars && b < dg.n_stars {
+            adj[a].push(b);
+            adj[b].push(a);
+        }
+    }
+    let mut seen: std::collections::HashSet<usize> = seeds.iter().copied().collect();
+    let mut q: std::collections::VecDeque<usize> = seeds.iter().copied().collect();
+    while let Some(u) = q.pop_front() {
+        for &w in &adj[u] {
+            if seen.insert(w) {
+                q.push_back(w);
+            }
+        }
+    }
+    seen
+}
+
+/// **Mode-1 certificate (§3.2(1)): black-hole ∅-capture.**
+///
+/// `true` iff, at this `Step`, a closure star (by `StarId`) is in the same
+/// dep-graph connected component as an Eng-named black-hole star.  Structural —
+/// computed off `Step::dep_graph` + `Step::psi`, **never by running** the loop
+/// (§62.6).  A `closure` star routed into a black-hole component can never
+/// re-close (no saturated diagram completes through it, §62.5) ⇒ ρ→0.
+pub fn blackhole_capture(step: &Step, closure: &std::collections::HashSet<StarId>) -> bool {
+    let bh_idx: Vec<usize> = step
+        .psi
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| blackhole_form(s).is_some())
+        .map(|(i, _)| i)
+        .collect();
+    if bh_idx.is_empty() {
+        return false;
+    }
+    let closure_idx: Vec<usize> = step
+        .psi_ids
+        .iter()
+        .enumerate()
+        .filter(|(_, id)| closure.contains(id))
+        .map(|(i, _)| i)
+        .collect();
+    if closure_idx.is_empty() {
+        return false;
+    }
+    let reach = reachable_stars(&step.dep_graph, &bh_idx);
+    closure_idx.iter().any(|i| reach.contains(i))
+}
+
+/// **Mode-2 measure (§3.2(2)): productivity (Eng §62.6/§62.7/§51.13).**
+///
+/// Eng §62.7: a consuming loop `[−c(σ), +c(τ)]` (the negative argument the
+/// *strict superterm* — structure is consumed each turn, §62.6 "converging
+/// cycles consuming terms of a star") is **productive** iff a *base-case* ray
+/// can cancel its negative ray: a matchable `+c(g)` whose argument `g` is
+/// **ground** (no variables) — Eng's ε-linearised terminator `[+a(0·0·0·ε)]`
+/// that "forbids any possible additional looping".  Per §51.13 the base cases
+/// are Ψ-side (linear, *consumed*); Φ is non-linear.
+///
+/// Returns the **well-founded measure** (§62.6): the number of distinct Ψ-stars
+/// currently supplying a ground base case for some closure loop ray.  Strictly
+/// non-increasing as the loop consumes them.  `0` while a loop is present = the
+/// loop has lost its last base case ⇒ *productive → unproductive* (the Mode-2
+/// death signature; L2b tracks the transition + non-recovery across rounds).
+/// `None` = the closure has no §62.7-style consuming loop here (Mode-2 N/A).
+pub fn productivity_measure(
+    step: &Step,
+    closure: &std::collections::HashSet<StarId>,
+) -> Option<usize> {
+    // Closure loop *negative* rays: −c(σ) where the same star has +c(τ),
+    // σ a strict superterm of τ (the consuming/recursive shape, §62.7),
+    // and c is NOT a black-hole symbol.
+    let mut loop_neg: Vec<Ray> = Vec::new();
+    for (i, id) in step.psi_ids.iter().enumerate() {
+        if !closure.contains(id) {
+            continue;
+        }
+        let s = &step.psi[i];
+        if blackhole_form(s).is_some() {
+            continue;
+        }
+        for &rn in s.iter() {
+            if ray_polarity(rn) != Polarity::Neg {
+                continue;
+            }
+            let cn = match ray_colour_name(rn) {
+                Some(c) => c,
+                None => continue,
+            };
+            let an = match ray_arg0(rn) {
+                Some(a) => a,
+                None => continue,
+            };
+            for &rp in s.iter() {
+                if ray_polarity(rp) != Polarity::Pos
+                    || ray_colour_name(rp).as_deref() != Some(cn.as_str())
+                {
+                    continue;
+                }
+                if let Some(ap) = ray_arg0(rp) {
+                    // consuming shape: positive arg is a strict subterm of the
+                    // negative arg (σ ⊋ τ) sharing its variables.
+                    if ap.is_var()
+                        && !an.is_var()
+                        && an.vars().iter().any(|v| ap.vars().contains(v))
+                    {
+                        loop_neg.push(rn);
+                    }
+                }
+            }
+        }
+    }
+    if loop_neg.is_empty() {
+        return None;
+    }
+    // Count Ψ-stars bearing a GROUND ray matchable with some closure loop −ray.
+    let mut count = 0usize;
+    for s in step.psi.iter() {
+        let is_base = s.iter().any(|&rb| {
+            rb.vars().is_empty()
+                && ray_polarity(rb) != Polarity::Neutral
+                && loop_neg.iter().any(|&rn| crate::polarised::matchable(rn, rb))
+        });
+        if is_base {
+            count += 1;
+        }
+    }
+    Some(count)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1890,5 +2131,133 @@ mod tests {
                 step0.provenance.get(&id)
             );
         }
+    }
+
+    // ── Phase-4 §3.2 death-certificate instruments ───────────────────────────
+
+    /// §75.8 ⋋_L black-hole `[−w(X), −∞(X); +∞(X)]` is recognised.
+    #[test]
+    fn blackhole_recognises_eng_758_infinity() {
+        let bh: Star = vec![
+            neg_ray("w", vec![var("X")]),
+            neg_ray("∞", vec![var("X")]),
+            pos_ray("∞", vec![var("X")]),
+        ];
+        assert_eq!(blackhole_form(&bh), Some(BlackHoleForm::InvolutiveInfinity));
+    }
+
+    /// §74.7 author's-solution black-hole `[+addr(v), +ω(X), −ω(f(X))]`.
+    #[test]
+    fn blackhole_recognises_eng_747_omega() {
+        let bh: Star = vec![
+            pos_ray("addr", vec![c("v")]),
+            pos_ray("ω", vec![var("X")]),
+            neg_ray("ω", vec![app("f", vec![var("X")])]),
+        ];
+        assert_eq!(blackhole_form(&bh), Some(BlackHoleForm::OmegaWeakening));
+    }
+
+    /// **Faithfulness invariant (Eng §62.7).** The *productive* loop
+    /// `[−a(0·W), +a(W)]` is structurally near-identical to a §62.5 black hole
+    /// but is ALIVE, not erasing.  The recogniser must NOT fire on it — else
+    /// Mode-2's productive loops would be mis-killed as Mode-1 captures.
+    #[test]
+    fn blackhole_does_not_fire_on_eng_627_productive_loop() {
+        let loop_star: Star = vec![
+            neg_ray("a", vec![app("·", vec![c("0"), var("W")])]),
+            pos_ray("a", vec![var("W")]),
+        ];
+        assert_eq!(
+            blackhole_form(&loop_star),
+            None,
+            "§62.7 productive loop must not be flagged as a black hole"
+        );
+        // Ordinary objective stars are not black holes either.
+        let add_base: Star = vec![pos_ray("add", vec![c("0"), var("Y"), var("Y")])];
+        let add_step: Star = vec![
+            neg_ray("add", vec![var("X"), var("Y"), var("Z")]),
+            pos_ray("add", vec![app("s", vec![var("X")]), var("Y"), app("s", vec![var("Z")])]),
+        ];
+        assert_eq!(blackhole_form(&add_base), None);
+        assert_eq!(blackhole_form(&add_step), None);
+    }
+
+    /// **Faithfulness: the engine runs Eng's REAL infinite loop** (§62.6) — a
+    /// seeded `∞`-black-hole does not silently terminate.  The bounded Ch11
+    /// engine could only surrogate this; `subjective_stream` runs it.
+    #[test]
+    fn engine_genuinely_loops_on_seeded_infinity_blackhole() {
+        let phi: Constellation = vec![];
+        let psi0: Vec<Star> = vec![vec![
+            neg_ray("∞", vec![var("X")]),
+            pos_ray("∞", vec![var("X")]),
+        ]];
+        // If the ∞-loop silently normalised, a normal form would appear fast.
+        // Faithful behaviour: it keeps producing steps (genuine non-termination,
+        // §49.60).  We observe 200 steps without a global-NF exhaustion.
+        let saw_nf_exhaustion = subjective_stream(&phi, psi0)
+            .take(200)
+            .any(|s| s.is_normal_form && s.psi.is_empty());
+        assert!(
+            !saw_nf_exhaustion,
+            "seeded §75.8 ∞-black-hole must NOT erase-to-∅ by running \
+             (that is the undecidable loop, §62.6/§49.60) — it loops"
+        );
+    }
+
+    /// ∅-capture certificate fires iff a closure star is in the black-hole's
+    /// dep-graph component; it does not fire when no black hole is present.
+    #[test]
+    fn blackhole_capture_certificate_is_structural() {
+        use std::collections::HashSet;
+        // Closure star [+w(a)] connected to black-hole [−w(X),−∞(X);+∞(X)].
+        let phi: Constellation = vec![];
+        let psi0: Vec<Star> = vec![
+            vec![pos_ray("w", vec![c("a")])],
+            vec![
+                neg_ray("w", vec![var("X")]),
+                neg_ray("∞", vec![var("X")]),
+                pos_ray("∞", vec![var("X")]),
+            ],
+        ];
+        let step = subjective_stream(&phi, psi0).next().expect("step");
+        let closure: HashSet<StarId> = [StarId(0)].into_iter().collect();
+        assert!(
+            blackhole_capture(&step, &closure),
+            "closure star matchable-connected to ∞-black-hole ⇒ ∅-capture"
+        );
+
+        // No black hole → never captured.
+        let phi2: Constellation = vec![];
+        let psi2: Vec<Star> =
+            vec![vec![pos_ray("w", vec![c("a")])], vec![neg_ray("w", vec![var("X")])]];
+        let step2 = subjective_stream(&phi2, psi2).next().expect("step");
+        assert!(!blackhole_capture(&step2, &closure));
+    }
+
+    /// §62.7 productivity measure: > 0 with a ground base case present,
+    /// `None` when the closure has no consuming loop.
+    #[test]
+    fn productivity_measure_counts_eng_627_base_cases() {
+        use std::collections::HashSet;
+        // Consuming loop [−a(0·W),+a(W)] + ground base case [+a(0·0·0·ε)].
+        let zero_w = app("·", vec![c("0"), var("W")]);
+        let base = app(
+            "·",
+            vec![c("0"), app("·", vec![c("0"), app("·", vec![c("0"), c("ε")])])],
+        );
+        let phi: Constellation = vec![];
+        let psi0: Vec<Star> = vec![
+            vec![neg_ray("a", vec![zero_w]), pos_ray("a", vec![var("W")])],
+            vec![pos_ray("a", vec![base])],
+        ];
+        let step = subjective_stream(&phi, psi0).next().expect("step");
+        let closure: HashSet<StarId> = [StarId(0)].into_iter().collect();
+        let m = productivity_measure(&step, &closure);
+        assert_eq!(m, Some(1), "one ground base case ⇒ measure 1 (productive)");
+
+        // A closure with no consuming loop ⇒ Mode-2 N/A.
+        let none_closure: HashSet<StarId> = [StarId(1)].into_iter().collect();
+        assert_eq!(productivity_measure(&step, &none_closure), None);
     }
 }
