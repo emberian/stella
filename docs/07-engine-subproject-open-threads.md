@@ -386,12 +386,28 @@ arbitrarily stale base ⇒ DIFF-AND-PORT shared files, never blind-`cp`;
 §A); "blockers" keep turning out to be census artifacts — always confirm
 via precise-redex detection, not head-census.
 
-## J. OUTSTANDING DOC TODO
-`docs/05` needs a strengthen-only §10/§11 addendum folding in: the
-valence-workload reprioritization (H), the two-workloads frame, the lighter
-regime (I), the Z3 affordance (C), the galaxy reprioritization (B: decoder=
-rendering=oracle), the §49.50-polarity track (E), the theory-modulo
-conclusion (F). (Was deferred "to next checkpoint" — still owed.)
+## J. OUTSTANDING DOC TODO — ✅ DONE (commit d012bab)
+`docs/05 §10` strengthen-only fold landed (§1–9 LOCKED): galaxy
+faithful/throughput-gated, the TWO corrected framings (arithmetic=
+intrinsic-not-debt; valence=future-only), KG7/8/9 foundations, N-KS
+reframed to proven multiset result-equivalence, theory-modulo+Z3. Thread
+closed. (Housekeeping also done: galaxy_drive dead code dropped + 4
+orphaned worktrees cleaned, commit 581eca2.)
+
+## J2. IN FLIGHT — Stage 0 validator (write-agent a621775a367abb4e5)
+`crates/stella-core/src/faithfulness.rs` (NEW disjoint, read-only on
+engine): `psi_compatible` decision-only validator (conceal→canonical→
+multiset) + Stage-0 bootstrap (B0a on byte-identical iex/iex_fast must
+pass; B0b Goodhart negatives must fail incl. the duplicate-answer
+multiset case) + `ObsRecord` (the obs-equivalence corpus artifact —
+docs/07 §G substrate, capture-not-discard; persistence opt-in/inert).
+Also resolves docs/09 §G.5 empirically (does conceal(iex) ever yield
+duplicate canonical stars on the corpora → multiset vs set). Harvest:
+forensic-verify HARD (it is THE faithfulness instrument — the bootstrap
+must actually prove it; never trust self-report) → wire `pub mod` →
+commit. Then parent does docs/09 Stages 1–3 (hot path, one-writer).
+Pending user nod: docs/09 §G.4 (byte-identity → proven-validator is the
+right Eng story; recorded as consistent w/ §H, awaiting explicit ok).
 
 ## NEXT ACTIONS (priority order)
 1. ~~Harvest both A agents~~ DONE (490168f galaxy_decode, 308189f
