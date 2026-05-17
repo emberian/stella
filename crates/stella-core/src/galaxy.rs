@@ -666,6 +666,7 @@ fn st_inner(ray: TermId) -> Option<TermId> {
 }
 
 /// Classified WHNF of a forced sub-term (the only thing the driver needs).
+#[derive(Clone, Copy)]
 enum ForcedValue {
     Numeral(TermId),
     Nil,
@@ -690,31 +691,48 @@ fn force_value(
     if budget == 0 {
         return (ForcedValue::Residual, 0);
     }
+    // Memo lookup — ONLY for closed terms (soundness gate, docs/11 §G:
+    // an open term's NF depends on ambient substitution; galaxy process
+    // terms are var-free so this is the common, sound case). A hit pays
+    // no fuel/budget — the reduction was already performed once.
+    let cacheable = crate::term::is_ground(term);
+    if cacheable {
+        if let Some(hit) = FORCE_MEMO.with(|m| m.borrow().get(&term).copied()) {
+            return hit;
+        }
+    }
     TR_DEPTH.with(|c| c.set(c.get() + 1));
     let f = eval_forced(phi, term, fuel, budget - 1); // strictly smaller
     TR_DEPTH.with(|c| c.set(c.get().saturating_sub(1)));
     let rb = readback_ray(f.final_ray.unwrap_or(f.value));
-    if crate::sbinarith::dsint(rb).is_some() {
-        return (ForcedValue::Numeral(rb), f.steps);
+    let result: (ForcedValue, usize) = if crate::sbinarith::dsint(rb).is_some() {
+        (ForcedValue::Numeral(rb), f.steps)
+    } else if f.fully_reduced
+        && matches!(term::get(rb), TermData::App(s, a) if a.is_empty() && s.name.as_str() == "nil")
+    {
+        (ForcedValue::Nil, f.steps)
+    } else if f.fully_reduced && is_listish_value(rb) {
+        (ForcedValue::Cons, f.steps)
+    } else {
+        gtrace(format_args!(
+            "  └ operand NOT a value: rb_head={} fully_reduced={}",
+            match term::get(rb) {
+                TermData::Var(_) => "<var>".into(),
+                TermData::App(s, a) => format!("{}/{}", s.name.as_str(), a.len()),
+            },
+            f.fully_reduced
+        ));
+        (ForcedValue::Residual, f.steps)
+    };
+    // Cache the deterministic result for this closed term. Never cache a
+    // `Residual` from budget/fuel exhaustion as if final — it is a
+    // *measured stop*, not the term's true NF, and a deeper call may have
+    // more budget. (A genuine non-value residual is still deterministic,
+    // but conservatively we only memo decided values + true NFs.)
+    if cacheable && !matches!(result.0, ForcedValue::Residual) {
+        FORCE_MEMO.with(|m| m.borrow_mut().insert(term, result));
     }
-    if f.fully_reduced {
-        match term::get(rb) {
-            TermData::App(s, a) if a.is_empty() && s.name.as_str() == "nil" => {
-                return (ForcedValue::Nil, f.steps);
-            }
-            _ if is_listish_value(rb) => return (ForcedValue::Cons, f.steps),
-            _ => {}
-        }
-    }
-    gtrace(format_args!(
-        "  └ operand NOT a value: rb_head={} fully_reduced={}",
-        match term::get(rb) {
-            TermData::Var(_) => "<var>".into(),
-            TermData::App(s, a) => format!("{}/{}", s.name.as_str(), a.len()),
-        },
-        f.fully_reduced
-    ));
-    (ForcedValue::Residual, f.steps)
+    result
 }
 
 /// Resolve ONE strict redex (disclosed §60 host-forcing). Force operands via
@@ -828,6 +846,20 @@ pub struct Forced {
 thread_local! {
     /// Recursion depth for `STELLA_GALAXY_TRACE` indentation.
     static TR_DEPTH: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// Memoised graph reduction (docs/11 Lever C). A **closed** (`is_ground`)
+    /// term's forced result under a fixed Φ is a deterministic pure function
+    /// of its hash-consed `TermId`, so `force_value` caches it. Galaxy's
+    /// image payload is massively *shared* structure re-forced from scratch
+    /// per visit — the literal reason one image element does not terminate
+    /// (KG6c). Caching collapses that exponential re-forcing to linear.
+    /// SOUNDNESS: writes are gated on `term::is_ground` (an open term's NF
+    /// depends on ambient substitution — caching it by `TermId` alone would
+    /// be silently unsound; galaxy process terms are var-free so this loses
+    /// nothing). Scope = one outermost `eval_forced` tree (cleared when
+    /// `TR_DEPTH == 0`) ⇒ one fixed Φ ⇒ no cross-Φ staleness. Result is
+    /// value-identical (not a speculative jet) ⇒ result-equivalence trivial.
+    static FORCE_MEMO: std::cell::RefCell<rustc_hash::FxHashMap<TermId, (ForcedValue, usize)>> =
+        std::cell::RefCell::new(rustc_hash::FxHashMap::default());
 }
 /// Env-gated (`STELLA_GALAXY_TRACE=1`) one-line forcing trace — the
 /// instrument that shows exactly which Push-form op resolves and where the
@@ -856,6 +888,11 @@ fn gtrace(args: std::fmt::Arguments) {
 /// non-value operand, DivByZero (stuck by ICFP spec), or an sbinarith
 /// past `sub_fuel` all return `fully_reduced=false` honestly.
 pub fn eval_forced(phi: &Constellation, prog: TermId, fuel: usize, max_forcings: usize) -> Forced {
+    // Outermost call (not re-entered via force_value) ⇒ fresh memo: it is
+    // valid only for THIS Φ/forcing tree (docs/11 Lever C scope).
+    if TR_DEPTH.with(|c| c.get()) == 0 {
+        FORCE_MEMO.with(|m| m.borrow_mut().clear());
+    }
     // State = the process Ψ (preserving the KAM stack across resumes).
     let mut psi: Vec<Star> = vec![vec![pp(st(prog, cst("eps")))]];
     let mut total = 0usize;
