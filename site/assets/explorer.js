@@ -11,6 +11,10 @@
 const WASM_URL = new URL("../pkg/stella_viz_wasm.js", import.meta.url).href;
 const VIZ_URL = new URL("./vendor/viz-standalone.js", import.meta.url).href;
 
+// The Stella visual kit — star-and-ray glyphs, fields, verdict chips,
+// closure + proof-structure plates. Renders exact engine output; no inference.
+import * as DGM from "./diagram.js";
+
 let wasmReady = null;
 let vizReady = null;
 
@@ -878,35 +882,42 @@ export async function mountExplorer(root, opts = {}) {
     try { res = JSON.parse(mod.ex_run(phi, psi, k, fuelVal())); }
     catch (e) { body.innerHTML = `<p class="reader-status error">engine error: ${esc(e.message)}</p>`; return; }
     if (!res.ok) { body.innerHTML = `<p class="reader-status error">${esc(res.error)}</p>`; return; }
-    const set = (arr) => arr.length
-      ? arr.map((s) => `<span class="stx-obs__s">${esc(s)}</span>`).join("")
-      : `<span class="stx-obs__none">∅</span>`;
-    const badge = res.order_independent
-      ? `<span class="stx-ex__ok">✓ strategy-independent — same ɟ under the default and an alternate firing order (exact engine)</span>`
-      : `<span class="stx-ex__no">≠ different ɟ under another order — non-confluent here, or fuel exhausted</span>`;
-    body.innerHTML =
-      `<div class="stx-ex__row">${badge}</div>` +
-      `<div class="stx-ex__grp"><span class="stx-obs__lab">the result — ɟ(IEx), exact (Stage 0)</span>` +
-      `<div class="stx-ex__set">${set(res.result)}</div></div>` +
-      `<div class="stx-ex__grp"><span class="stx-obs__lab">ɟ under an alternate firing order (exact)</span>` +
-      `<div class="stx-ex__set">${set(res.alt)}</div></div>` +
-      `<div class="stx-ex__grp"><span class="stx-obs__lab">raw CEx cross-check · copy budget k=${res.cex_k} (renamed copies; research aid)</span>` +
-      `<div class="stx-ex__set">${set(res.cex)}</div></div>` +
-      `<p class="stx-ex__note">${esc(res.note)}</p>` +
-      `<div class="stx-ex__grp" data-role="exmeasures"></div>`;
-    // Cheap quantitative strip (ω-weight §79, visibility, counts).
+    body.textContent = "";
+    body.appendChild(DGM.chip(
+      res.order_independent ? "strategy-independent ɟ" : "order-sensitive ɟ",
+      res.order_independent ? "ok" : "no",
+      res.order_independent
+        ? "same ɟ under the default and an alternate firing order — exact engine"
+        : "different ɟ under another order — non-confluent here, or fuel exhausted"));
+    body.appendChild(DGM.setField(res.result, { title: "the result — ɟ(IEx), exact (Stage 0)" }));
+    body.appendChild(DGM.setField(res.alt, { title: "ɟ under an alternate firing order (exact)" }));
+    body.appendChild(DGM.setField(res.cex, {
+      title: `raw CEx cross-check · copy budget k=${res.cex_k} (renamed copies; research aid)`,
+    }));
+    body.appendChild(DGM.legend());
+    const note = document.createElement("p");
+    note.className = "stx-ex__note";
+    note.textContent = res.note;
+    body.appendChild(note);
+    // Quantitative strip (ω-weight §79, visibility, counts) as stat tiles.
     try {
       const m = JSON.parse(mod.lc_measures(phi, psi));
       if (m.ok) {
-        const tgt = $("exmeasures");
-        if (tgt) tgt.innerHTML =
-          `<span class="stx-obs__lab">measures</span><div class="stx-ex__set">` +
-          `<span class="stx-obs__s">ω(Φ⊎Ψ) = ${m.omega_cfg}</span>` +
-          `<span class="stx-obs__s">ω(Φ) = ${m.omega_phi}</span>` +
-          `<span class="stx-obs__s">ω(Ψ) = ${m.omega_psi}</span>` +
-          `<span class="stx-obs__s">visible ${m.visible ? "yes" : "no"}</span>` +
-          `<span class="stx-obs__s">Φ ${m.stars_phi}★/${m.rays_phi} rays</span>` +
-          `<span class="stx-obs__s">Ψ ${m.stars_psi}★/${m.rays_psi} rays</span></div>`;
+        const mw = document.createElement("div");
+        mw.className = "stx-ex__grp";
+        const lab = document.createElement("span");
+        lab.className = "stx-obs__lab";
+        lab.textContent = "measures — ω-weight §79, visibility, structure";
+        mw.appendChild(lab);
+        mw.appendChild(DGM.tiles([
+          { k: "ω(Φ⊎Ψ)", v: m.omega_cfg },
+          { k: "ω(Φ)", v: m.omega_phi },
+          { k: "ω(Ψ)", v: m.omega_psi, tone: "warm" },
+          { k: "visible", v: m.visible ? "yes" : "no", tone: "cool" },
+          { k: "Φ ★/rays", v: `${m.stars_phi}/${m.rays_phi}` },
+          { k: "Ψ ★/rays", v: `${m.stars_psi}/${m.rays_psi}`, tone: "warm" },
+        ]));
+        body.appendChild(mw);
       }
     } catch (_) { /* measures are a nicety; never block the Ex view */ }
   }
@@ -1052,54 +1063,74 @@ export async function mountExplorer(root, opts = {}) {
       } catch (e) { lerr.textContent = "engine error: " + e.message; return; }
       if (!res.ok) { lerr.textContent = res.error || "failed"; return; }
 
+      lout.textContent = "";
+      const lgrp = (labTxt, node) => {
+        const g = document.createElement("div");
+        g.className = "stx-ex__grp";
+        const l = document.createElement("span");
+        l.className = "stx-obs__lab";
+        l.textContent = labTxt;
+        g.appendChild(l);
+        g.appendChild(node);
+        return g;
+      };
+      const lnote = (t) => {
+        const p = document.createElement("p");
+        p.className = "stx-ex__note";
+        p.textContent = t;
+        return p;
+      };
+      const lrow = (...chips) => {
+        const r = document.createElement("div");
+        r.className = "stx-ex__set";
+        chips.forEach((c) => r.appendChild(c));
+        return r;
+      };
+
       if (lclass.value === "ortho") {
-        lout.innerHTML =
-          `<div class="stx-ex__grp"><span class="stx-obs__lab">Φ₁ ⊥ Φ₂ — the three relations</span>` +
-          `<div class="stx-ex__set">` +
-          `<span class="stx-obs__s">⊥<sup>fin</sup> ${yesno(res.fin)}</span>` +
-          `<span class="stx-obs__s">⊥<sup>1</sup> ${yesno(res.one)}</span>` +
-          `<span class="stx-obs__s">⊥<sup>R</sup> ${yesno(res.roots)}</span></div></div>`;
+        lout.appendChild(lgrp("Φ₁ ⊥ Φ₂ — the three orthogonality relations",
+          lrow(
+            DGM.chip("⊥fin", res.fin ? "ok" : "no", "finite — the interaction normalises"),
+            DGM.chip("⊥1", res.one ? "ok" : "no", "single-component (proof-net ⊥¹)"),
+            DGM.chip("⊥R", res.roots ? "ok" : "no", "root-based (⊥ᴿ)"))));
+        if (spec.phi1) lout.appendChild(DGM.field(spec.phi1, { title: "Φ₁" }));
+        if (spec.phi2) lout.appendChild(DGM.field(spec.phi2, { title: "Φ₂" }));
       } else if (lclass.value === "proofnet") {
         lastPhiComp = res.phi || "";
         lload.hidden = !lastPhiComp;
-        const v = res.verdict === true ? '<span class="stx-ex__ok">correct</span>'
-          : res.verdict === false ? '<span class="stx-ex__no">not correct</span>'
-          : '<span class="stx-obs__none">N/A</span>';
-        const dg = (res.diagrams || []).map((d, i) =>
-          `<span class="stx-obs__s">δ${i}: ${d.vertices}v/${d.edges}e ` +
-          `${d.connected ? "conn" : "disc"} · ${d.correct ? "correct" : "incorrect"}` +
-          `${d.actualised ? " · ↓" + esc(d.actualised) : ""}</span>`).join("");
-        lout.innerHTML =
-          `<div class="stx-ex__row"><span class="stx-ex__ok" style="background:none;border:none;padding:0">${esc(res.verdict_name)} criterion:</span> ${v}</div>` +
-          `<p class="stx-ex__note">${esc(res.verdict_note)}</p>` +
-          `<div class="stx-ex__grp"><span class="stx-obs__lab">Φ_comp (editable, runnable)</span>` +
-          `<div class="stx-ex__set"><span class="stx-obs__s">${esc(res.phi)}</span></div></div>` +
-          `<div class="stx-ex__grp"><span class="stx-obs__lab">saturated diagrams</span>` +
-          `<div class="stx-ex__set">${dg || '<span class="stx-obs__none">—</span>'}</div>` +
-          `<p class="stx-ex__note">${esc(res.diag_note)}</p></div>`;
+        const state = res.verdict === true ? "ok" : res.verdict === false ? "no" : "na";
+        lout.appendChild(lrow(DGM.chip(esc(res.verdict_name) + " criterion", state,
+          res.verdict === true ? "correct" : res.verdict === false ? "not correct" : "not applicable")));
+        lout.appendChild(lnote(res.verdict_note));
+        lout.appendChild(lgrp("proof-structure — your spec · axiom arcs above, cut below",
+          DGM.proofStructure(spec.kind || "mll", spec.links || [])));
+        lout.appendChild(lgrp("Φ_comp (editable, runnable)", DGM.field(res.phi, { title: "Φ_comp" })));
+        if (res.diagrams && res.diagrams.length) {
+          lout.appendChild(lgrp("saturated diagrams",
+            lrow(...res.diagrams.map((d, i) =>
+              DGM.chip(`δ${i} · ${d.vertices}v/${d.edges}e`, d.correct ? "ok" : "no",
+                `${d.connected ? "connected" : "disconnected"}${d.actualised ? " · ↓" + d.actualised : ""}`)))));
+        }
+        lout.appendChild(lnote(res.diag_note));
       } else if (lclass.value === "compare") {
-        const set = (arr) => arr.length
-          ? arr.map((s) => `<span class="stx-obs__s">${esc(s)}</span>`).join("")
-          : `<span class="stx-obs__none">∅</span>`;
-        lout.innerHTML =
-          `<div class="stx-ex__row">${res.same
-            ? '<span class="stx-ex__ok">✓ same observable — A and B compute the same result</span>'
-            : '<span class="stx-ex__no">≠ different observables</span>'}</div>` +
-          `<div class="stx-ex__grp"><span class="stx-obs__lab">A — ɟ · ω = ${res.omega_a}</span>` +
-          `<div class="stx-ex__set">${set(res.obs_a)}</div></div>` +
-          `<div class="stx-ex__grp"><span class="stx-obs__lab">B — ɟ · ω = ${res.omega_b}</span>` +
-          `<div class="stx-ex__set">${set(res.obs_b)}</div></div>` +
-          `<p class="stx-ex__note">Δω = ${res.omega_b - res.omega_a}. Exact engine (Stage 0) both sides.</p>`;
+        lout.appendChild(lrow(DGM.chip(
+          res.same ? "same observable" : "different observables",
+          res.same ? "ok" : "no",
+          res.same ? "A and B compute the same result" : "A and B diverge")));
+        lout.appendChild(lgrp(`A — ɟ · ω = ${res.omega_a}`, DGM.setField(res.obs_a)));
+        lout.appendChild(lgrp(`B — ɟ · ω = ${res.omega_b}`, DGM.setField(res.obs_b)));
+        lout.appendChild(DGM.tiles([
+          { k: "ω(A)", v: res.omega_a },
+          { k: "ω(B)", v: res.omega_b, tone: "warm" },
+          { k: "Δω", v: res.omega_b - res.omega_a, tone: "cool" },
+        ]));
+        lout.appendChild(lnote("Exact engine (Stage 0) both sides."));
       } else {
-        lout.innerHTML =
-          `<div class="stx-ex__grp"><span class="stx-obs__lab">behaviour over a finite universe (⊥<sup>${esc(res.orth)}</sup>)</span>` +
-          `<div class="stx-ex__set">` +
-          `<span class="stx-obs__s">|A| = ${res.a}</span>` +
-          `<span class="stx-obs__s">|A<sup>⊥</sup>| = ${res.a_perp}</span>` +
-          `<span class="stx-obs__s">|A<sup>⊥⊥</sup>| = ${res.a_biperp}</span>` +
-          `<span class="stx-obs__s">A = A<sup>⊥⊥</sup> (is a behaviour) ${yesno(res.is_behaviour)}</span>` +
-          `</div></div>` +
-          `<p class="stx-ex__note">A type, in transcendental syntax, is exactly a behaviour: a set fixed by bi-orthogonal closure. Membership of a Φ is orthogonality to every test.</p>`;
+        lout.appendChild(lgrp(`bi-orthogonal closure  (⊥${res.orth})`,
+          DGM.closure(res.a, res.a_perp, res.a_biperp, res.is_behaviour)));
+        lout.appendChild(lnote(
+          "A type, in transcendental syntax, is exactly a behaviour: a set fixed by " +
+          "bi-orthogonal closure. Membership of a Φ is orthogonality to every test."));
       }
     });
 
