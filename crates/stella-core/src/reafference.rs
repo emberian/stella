@@ -472,6 +472,232 @@ pub fn reafferent_closure(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// §3.1-op: C_r — per-round closure-constituent StarId sets
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Per-round closure-constituent record for §3.1-op `C_r`.
+///
+/// `round` = `r_prime` — the round at which the §2.2 cycle was detected (the
+/// agent's proper-time tick when the cycle closed).  This is the round at which
+/// `re_closure_r = 1` in `viability_internal_by_round`.
+///
+/// `traced_env_star` = the env-modification `StarId` from the earlier round
+/// `r_past < round`, which is the non-triviality guard anchor for ρ: a star in
+/// C_{r+1} must provenance-trace through this id.
+///
+/// `stars` = the agent-side `StarId` set on the §2.2 cycle at round `r_prime`,
+/// closed under agent-side provenance-connectivity.
+///
+/// This is the operational realisation of `C_r` from
+/// `docs/01-subjective-engine-and-valence.md §3.1-op`.
+#[derive(Debug, Clone)]
+pub struct ClosureConstituents {
+    /// The detection round `r_prime` (the closure's live round r).
+    pub round: usize,
+    /// The env-modification StarId (from `r_past < round`).
+    /// Non-triviality guard anchor: C_{r+1} stars must trace through this.
+    pub traced_env_star: StarId,
+    /// The agent-side StarId set on the §2.2 cycle at detection round `r_prime`.
+    pub stars: HashSet<StarId>,
+}
+
+/// Collect all `StarId`s reachable downward in the provenance DAG from `root`
+/// that have agent ancestry (i.e., appear in `agent_root_ids` or have an ancestor
+/// in `agent_root_ids`).  Used to close `C_r` under provenance-connectivity.
+///
+/// # Algorithm
+///
+/// We invert the provenance DAG edges: for each node, find all nodes that have it
+/// as a parent.  Then BFS from `root` through the inverted graph, keeping only
+/// nodes with agent ancestry.
+fn agent_provenance_component(
+    prov: &HashMap<StarId, Provenance>,
+    root: StarId,
+    agent_root_ids: &HashSet<StarId>,
+    alive_ids: &HashSet<StarId>,
+) -> HashSet<StarId> {
+    // Build reverse-edge map: child → parents.
+    let mut children_of: HashMap<StarId, Vec<StarId>> = HashMap::new();
+    for (&child, p) in prov.iter() {
+        match p {
+            Provenance::Initial => {}
+            Provenance::Fused { parent_psi, parent_phi_id, .. } => {
+                children_of.entry(*parent_psi).or_default().push(child);
+                children_of.entry(*parent_phi_id).or_default().push(child);
+            }
+            Provenance::SelfInteracted { parent, .. } => {
+                children_of.entry(*parent).or_default().push(child);
+            }
+        }
+    }
+    // BFS downward from root, keeping agent-ancestry + alive nodes.
+    let mut component: HashSet<StarId> = HashSet::new();
+    let mut queue: VecDeque<StarId> = VecDeque::new();
+    if alive_ids.contains(&root) && has_agent_ancestry(prov, root, agent_root_ids) {
+        component.insert(root);
+        queue.push_back(root);
+    }
+    while let Some(cur) = queue.pop_front() {
+        if let Some(children) = children_of.get(&cur) {
+            for &child in children {
+                if !component.contains(&child)
+                    && alive_ids.contains(&child)
+                    && has_agent_ancestry(prov, child, agent_root_ids)
+                {
+                    component.insert(child);
+                    queue.push_back(child);
+                }
+            }
+        }
+    }
+    component
+}
+
+/// Return per-round `C_r` constituents for a given partition P over a bounded
+/// trajectory (additive; does NOT change `reafferent_closure`/`solve_for_closure`
+/// behaviour).
+///
+/// For each round r at which a §2.2 cycle is detected (i.e., round `w.r` or
+/// `w.r_prime` of the first `ClosureWitness` found), this function records the
+/// constituent StarId set `C_r`: agent-side live stars at round r that are
+/// provenance-connected to the §2.2 cycle witness.
+///
+/// # Returns
+///
+/// `Some(Vec<ClosureConstituents>)` if the §2.2 cycle is detected at least once;
+/// `None` if no closure witness is found within `max_rounds`.
+///
+/// Each entry covers one round at which the cycle fires.  For a living closure
+/// that re-closes multiple times, the vector has one entry per detected re-closure.
+///
+/// # Faithfulness note
+///
+/// `C_r` is defined over the **first** closure witness found (matching
+/// `reafferent_closure`'s behaviour: earliest causal evidence wins).  In
+/// `viability_internal`, `C_{r+1}` refers to the constituents recorded at the
+/// round after a closure is confirmed — since `reafferent_closure` runs once
+/// holistically, we gather constituents round-by-round by running the stream and
+/// recording which agent-side stars are alive and provenance-reachable at each
+/// round boundary where a cross-cut env star has been recorded.
+pub fn closure_constituents(
+    phi: &Constellation,
+    psi0: Vec<Star>,
+    partition: &AgentSet,
+    max_rounds: usize,
+) -> Option<Vec<ClosureConstituents>> {
+    let agent_root_ids = agent_root_ids_from_partition(partition);
+
+    // Parallel to `reafferent_closure`: accumulate env stars by round.
+    let mut env_stars_by_round: Vec<Vec<(StarId, (usize, usize))>> = Vec::new();
+    // Collect (round, last_step_at_that_round) for constituent computation.
+    let mut last_step_by_round: Vec<Option<crate::subjective::Step>> = Vec::new();
+
+    let max_steps = (max_rounds + 2) * 50;
+    let stream = subjective_stream(phi, psi0).take(max_steps);
+
+    // Track discovered cycle events (r_past, env_star_id, r_prime) in order.
+    let mut cycle_events: Vec<(usize, StarId, usize)> = Vec::new();
+
+    for step in stream {
+        let r = step.round;
+        if r > max_rounds {
+            break;
+        }
+        while env_stars_by_round.len() <= r {
+            env_stars_by_round.push(Vec::new());
+        }
+        while last_step_by_round.len() <= r {
+            last_step_by_round.push(None);
+        }
+        last_step_by_round[r] = Some(step.clone());
+
+        let new_env_stars = find_cross_cut_env_stars_at_round(&step, r, &agent_root_ids);
+        for pair in new_env_stars {
+            if !env_stars_by_round[r].contains(&pair) {
+                env_stars_by_round[r].push(pair.clone());
+            }
+        }
+
+        for r_past in 0..r {
+            for (env_star_id, _crossing_edge) in &env_stars_by_round[r_past] {
+                let agent_resolutions =
+                    find_agent_resolutions_tracing_through(&step, *env_star_id, &agent_root_ids);
+                if !agent_resolutions.is_empty() {
+                    // Record this cycle event if not already recorded for this r_prime = r.
+                    // (Multiple r_past values can contribute to the same r_prime detection —
+                    //  we take the first/earliest r_past per r_prime.)
+                    let already = cycle_events.iter().any(|(_, _, rprime)| *rprime == r);
+                    if !already {
+                        cycle_events.push((r_past, *env_star_id, r));
+                    }
+                }
+            }
+        }
+
+        if step.is_normal_form && r >= max_rounds {
+            break;
+        }
+    }
+
+    if cycle_events.is_empty() {
+        return None;
+    }
+
+    // Build ClosureConstituents for each unique round at which a cycle event fires.
+    // `C_r` for round r_past = agent-side live stars at r_past provenance-connected
+    // to the agent_resolution witness found at r_prime.
+    let mut result: Vec<ClosureConstituents> = Vec::new();
+
+    for (r_past, env_star_id, r_prime) in &cycle_events {
+        // Use the step snapshot at round r_prime (when the cycle was detected).
+        let step_at_rprime = match last_step_by_round.get(*r_prime).and_then(|s| s.as_ref()) {
+            Some(s) => s,
+            None => continue,
+        };
+
+        // Agent-side live stars at r_prime that trace through env_star_id.
+        let agent_resolutions = find_agent_resolutions_tracing_through(
+            step_at_rprime, *env_star_id, &agent_root_ids,
+        );
+        if agent_resolutions.is_empty() {
+            continue;
+        }
+
+        let alive_ids: HashSet<StarId> = step_at_rprime.psi_ids.iter().copied().collect();
+        let root_id = agent_resolutions[0];
+
+        // Close under agent-side provenance-connectivity.
+        let component = agent_provenance_component(
+            &step_at_rprime.provenance,
+            root_id,
+            &agent_root_ids,
+            &alive_ids,
+        );
+
+        // Also include the initial agent roots that are still alive.
+        let mut stars = component;
+        for &aid in &agent_root_ids {
+            if alive_ids.contains(&aid) {
+                stars.insert(aid);
+            }
+        }
+
+        // Index by r_prime (the detection/live round).
+        // Avoid duplicates for the same r_prime.
+        let already = result.iter().any(|cc| cc.round == *r_prime);
+        if !already {
+            result.push(ClosureConstituents {
+                round: *r_prime,
+                traced_env_star: *env_star_id,
+                stars,
+            });
+        }
+    }
+
+    if result.is_empty() { None } else { Some(result) }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Partition search: solve_for_closure
 // ─────────────────────────────────────────────────────────────────────────────
 
