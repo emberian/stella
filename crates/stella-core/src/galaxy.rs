@@ -453,6 +453,19 @@ pub fn prim_stars() -> Constellation {
         vec![np(st(cst("cdr"), dot(p, pi))), pp(st(a(p, cst("f")), pi))],
         // nil x → t   (empty list applied to anything is true)
         vec![np(st(cst("nil"), dot(x, pi))), pp(st(cst("t"), pi))],
+        // isnil — constructor pattern-match (pure, no forcing): fires iff the
+        // argument is *already* a `nil` atom or a `cons x y` cell value on the
+        // stack. `isnil nil → t`. The 2-arg `a(a(cons,X),Y)` is exactly the
+        // list-cell value (cons needs 3 args to fire, so 2-applied is stuck =
+        // a value). NOT host-forced: whether galaxy's combinator structure
+        // delivers a forced constructor here is an empirical question the
+        // probe answers — if these don't fire, that *measures* the genuine
+        // §58/§60 strictness need (then forcing is added, disclosed).
+        vec![np(st(cst("isnil"), dot(cst("nil"), pi))), pp(st(cst("t"), pi))],
+        vec![
+            np(st(cst("isnil"), dot(a(a(cst("cons"), x), y), pi))),
+            pp(st(cst("f"), pi)),
+        ],
     ]
 }
 
@@ -665,8 +678,8 @@ mod tests {
             "Φ = prim_stars() ∪ one δ-star per def"
         );
         assert_eq!(
-            prims, 11,
-            "prim_stars() = Push + i/t/f/s/c/b/cons/car/cdr/nil (KG3b slice 1)"
+            prims, 13,
+            "prim_stars() = Push + i/t/f/s/c/b/cons/car/cdr/nil + isnil×2 (KG3b/c)"
         );
 
         // Spot-check the smallest-body def's δ-star shape (head = its :N
