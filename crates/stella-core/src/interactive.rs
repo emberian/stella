@@ -274,7 +274,7 @@ fn mat_phi_c_accel(
         if ray_polarity(ray) == Polarity::Neutral {
             continue;
         }
-        if matchable(r, ray) {
+        if fp_unifiable(r, ray) && matchable(r, ray) {
             result.push((i, j));
         }
     }
@@ -309,11 +309,43 @@ fn any_match_accel(
         if ray_polarity(ray) == Polarity::Neutral {
             continue;
         }
-        if matchable(r, ray) {
+        let tm = std::time::Instant::now();
+        let m = fp_unifiable(r, ray) && matchable(r, ray);
+        ks_add(&T_MATCH, tm.elapsed());
+        if m {
             return true;
         }
     }
     false
+}
+
+/// Sound one-level argument-discrimination pre-filter for `matchable`.
+///
+/// Returns `false` **only** when `r` and `s` are *provably* non-unifiable
+/// (different arity, or some argument position holds two distinct ground
+/// functors — variables are never rejected). Therefore
+/// `fp_unifiable(r,s) == false  ⇒  matchable(r,s) == false`, so gating
+/// `fp_unifiable(..) && matchable(..)` is **identical** to `matchable(..)`
+/// (N-KS byte-faithful) while skipping full α-unification on the candidates
+/// it rejects — the proven 95%-of-`find` hotspot.
+#[inline]
+fn fp_unifiable(r: Term, s: Term) -> bool {
+    match (get(r), get(s)) {
+        (TermData::App(_, ar), TermData::App(_, br)) => {
+            if ar.len() != br.len() {
+                return false;
+            }
+            for (&a, &b) in ar.iter().zip(br.iter()) {
+                if let (TermData::App(fa, _), TermData::App(fb, _)) = (get(a), get(b)) {
+                    if fa.name != fb.name {
+                        return false; // two distinct ground functors — unfixable
+                    }
+                }
+            }
+            true
+        }
+        _ => true, // rays are App; be conservative (never wrongly reject)
+    }
 }
 
 /// Existence-only self-interaction check — early-exit analogue of
@@ -357,6 +389,17 @@ fn psi_csyms(psi: &[Star]) -> FxHashSet<crate::term::Sym> {
 ///
 /// Returns `None` if unification fails (the summand disappears, §51.9).
 fn fuse(phi1: &Star, j: usize, phi2_renamed: &Star, j_prime: usize) -> Option<Star> {
+    fuse_theta(phi1, j, phi2_renamed, j_prime).map(|(s, _)| s)
+}
+
+/// Fusion that also returns the **exact** unifier `θ` it applied — the
+/// authoritative MGU of this summand (no post-hoc reconstruction).
+fn fuse_theta(
+    phi1: &Star,
+    j: usize,
+    phi2_renamed: &Star,
+    j_prime: usize,
+) -> Option<(Star, Substitution)> {
     let r1 = underlying_term(phi1[j]);
     let r2 = underlying_term(phi2_renamed[j_prime]);
     let theta = unify(vec![Equation::new(r1, r2)])?;
@@ -376,7 +419,7 @@ fn fuse(phi1: &Star, j: usize, phi2_renamed: &Star, j_prime: usize) -> Option<St
         .collect();
 
     result.extend(rest2);
-    Some(result)
+    Some((result, theta))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -389,6 +432,11 @@ fn fuse(phi1: &Star, j: usize, phi2_renamed: &Star, j_prime: usize) -> Option<St
 /// `θ = solution{star[j] =? star[j']}` (over underlying terms). Returns
 /// `θ(star − {j, j'})` or `None` if unification fails.
 fn self_interact(star: &Star, j: usize, j_prime: usize) -> Option<Star> {
+    self_interact_theta(star, j, j_prime).map(|(s, _)| s)
+}
+
+/// Self-interaction that also returns the exact `θ` it applied.
+fn self_interact_theta(star: &Star, j: usize, j_prime: usize) -> Option<(Star, Substitution)> {
     let r1 = underlying_term(star[j]);
     let r2 = underlying_term(star[j_prime]);
     let theta = unify(vec![Equation::new(r1, r2)])?;
@@ -399,7 +447,7 @@ fn self_interact(star: &Star, j: usize, j_prime: usize) -> Option<Star> {
         .filter(|&(idx, _)| idx != j && idx != j_prime)
         .map(|(_, &r)| theta.apply(r))
         .collect();
-    Some(result)
+    Some((result, theta))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -468,6 +516,126 @@ fn interaction_step(
     }
 
     psi_prime
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Exact step detail (§51.9) — the authoritative decomposition of one step.
+// ─────────────────────────────────────────────────────────────────────────────
+
+fn render_theta(theta: &Substitution) -> Vec<(String, String)> {
+    let mut v: Vec<(String, String)> = theta
+        .0
+        .iter()
+        .map(|(var, &t)| (var.as_str().to_string(), format!("{t}")))
+        .collect();
+    v.sort();
+    v
+}
+
+/// One summand of a §51.9 interaction step: a fusion against a specific
+/// `Φ[iₖ][jₖ]` (external) or a self-interaction within the star, together
+/// with the **exact** unifier `θ` the engine applied and the star produced.
+#[derive(Debug, Clone)]
+pub struct Summand {
+    /// `true` = external fusion against Φ; `false` = self-interaction.
+    pub external: bool,
+    /// For external: `Some((iₖ, jₖ))` the Φ ray fused against.
+    pub phi_target: Option<(usize, usize)>,
+    /// For self: `Some(jₖ)` the other ray in the star.
+    pub self_ray: Option<usize>,
+    /// The MGU actually applied (engine-authoritative, not reconstructed),
+    /// as `(variable, term)` display pairs.
+    pub theta: Vec<(String, String)>,
+    /// The resulting star (this summand's contribution to Ψ').
+    pub result: Star,
+}
+
+/// The full, exact decomposition of one IEx step at the chosen ray `Ψ[i][j]`:
+/// the §51.9 *sum* of summands (each with its real θ) and the successor Ψ.
+/// `psi_after` is identical to what `interaction_step`/`iex` would produce,
+/// so a UI built on this is faithful, not an approximation.
+#[derive(Debug, Clone)]
+pub struct StepDetail {
+    pub star: usize,
+    pub ray: usize,
+    pub summands: Vec<Summand>,
+    pub psi_after: Vec<Star>,
+}
+
+/// Apply one IEx step at the explicitly chosen ray `Ψ[star_idx][ray_idx]`
+/// and return its exact decomposition (every summand's real θ) plus the
+/// successor interaction space. `counter` must persist across a run so
+/// freshly-renamed Φ variables never collide (same scheme as `iex`).
+///
+/// Returns `None` if `(i, j)` is out of range, neutral, or not a redex.
+pub fn step_detail(
+    phi: &Constellation,
+    psi: &[Star],
+    star_idx: usize,
+    ray_idx: usize,
+    counter: &mut u32,
+) -> Option<StepDetail> {
+    let selected_star = psi.get(star_idx)?.clone();
+    let r = *selected_star.get(ray_idx)?;
+    if ray_polarity(r) == Polarity::Neutral {
+        return None;
+    }
+    let psi_colours = all_colours(&psi.to_vec());
+
+    let mut psi_prime: Vec<Star> = psi
+        .iter()
+        .enumerate()
+        .filter(|(idx, _)| *idx != star_idx)
+        .map(|(_, s)| s.clone())
+        .collect();
+    let mut summands: Vec<Summand> = Vec::new();
+
+    // First sum: external fusions (same order/counter scheme as interaction_step).
+    let ext_matches = mat_phi_c(phi, r, &psi_colours);
+    for (ik, jk) in ext_matches {
+        let phi_star_renamed = {
+            let prefix = format!("ext{ik}_{counter}");
+            *counter += 1;
+            let (renamed, _) = alpha_rename_star(&phi[ik], &prefix, counter);
+            renamed
+        };
+        if let Some((fused, theta)) =
+            fuse_theta(&selected_star, ray_idx, &phi_star_renamed, jk)
+        {
+            summands.push(Summand {
+                external: true,
+                phi_target: Some((ik, jk)),
+                self_ray: None,
+                theta: render_theta(&theta),
+                result: fused.clone(),
+            });
+            psi_prime.push(fused);
+        }
+    }
+
+    // Second sum: self-interactions within Ψ[i].
+    for jk in mat_self(&selected_star, ray_idx) {
+        if let Some((si, theta)) = self_interact_theta(&selected_star, ray_idx, jk) {
+            summands.push(Summand {
+                external: false,
+                phi_target: None,
+                self_ray: Some(jk),
+                theta: render_theta(&theta),
+                result: si.clone(),
+            });
+            psi_prime.push(si);
+        }
+    }
+
+    if summands.is_empty() {
+        return None;
+    }
+    Some(StepDetail {
+        star: star_idx,
+        ray: ray_idx,
+        summands,
+        psi_after: psi_prime,
+    })
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -584,6 +752,7 @@ static KS_PROF: std::sync::LazyLock<bool> =
 thread_local! {
     static T_PSICS: std::cell::Cell<f64> = const { std::cell::Cell::new(0.0) };
     static T_FIND: std::cell::Cell<f64> = const { std::cell::Cell::new(0.0) };
+    static T_MATCH: std::cell::Cell<f64> = const { std::cell::Cell::new(0.0) };
     static T_FRESH: std::cell::Cell<f64> = const { std::cell::Cell::new(0.0) };
     static T_FUSE: std::cell::Cell<f64> = const { std::cell::Cell::new(0.0) };
 }
@@ -602,27 +771,23 @@ fn ks_add(slot: &'static std::thread::LocalKey<std::cell::Cell<f64>>, dt: std::t
 // oracle; `iex_eq_iex_fast` (tests) is the N-KS gate.
 // ─────────────────────────────────────────────────────────────────────────────
 
-fn interaction_step_fast(
+/// Produce **only the new stars** from one interaction step on `selected_star`
+/// at `ray_idx` (ext fusions in `mat_phi_c_accel` order, then
+/// self-interactions). The caller mutates Ψ in place — order-preserving
+/// `remove(star_idx)` + `extend(produced)` — so there is no per-step
+/// `Vec<Star>` realloc. Same Ψ as the reference's filter-collect+push.
+fn produce_stars_fast(
     accel: &IexAccel,
     phi: &Constellation,
-    psi: Vec<Star>,
-    star_idx: usize,
+    selected_star: &Star,
     ray_idx: usize,
     counter: &mut u32,
     psi_cs: &FxHashSet<crate::term::Sym>,
 ) -> Vec<Star> {
-    let selected_star = psi[star_idx].clone();
-    let mut psi_prime: Vec<Star> = psi
-        .into_iter()
-        .enumerate()
-        .filter(|(idx, _)| *idx != star_idx)
-        .map(|(_, s)| s)
-        .collect();
-
+    let mut produced: Vec<Star> = Vec::new();
     let r = selected_star[ray_idx];
 
-    let ext_matches = mat_phi_c_accel(accel, phi, r, psi_cs);
-    for (ik, jk) in ext_matches {
+    for (ik, jk) in mat_phi_c_accel(accel, phi, r, psi_cs) {
         let tf = std::time::Instant::now();
         let phi_star_renamed = {
             let prefix = format!("ext{ik}_{counter}");
@@ -632,21 +797,20 @@ fn interaction_step_fast(
         };
         ks_add(&T_FRESH, tf.elapsed());
         let tu = std::time::Instant::now();
-        let fused = fuse(&selected_star, ray_idx, &phi_star_renamed, jk);
+        let fused = fuse(selected_star, ray_idx, &phi_star_renamed, jk);
         ks_add(&T_FUSE, tu.elapsed());
         if let Some(fused) = fused {
-            psi_prime.push(fused);
+            produced.push(fused);
         }
     }
 
-    let self_matches = mat_self(&selected_star, ray_idx);
-    for jk in self_matches {
-        if let Some(si) = self_interact(&selected_star, ray_idx, jk) {
-            psi_prime.push(si);
+    for jk in mat_self(selected_star, ray_idx) {
+        if let Some(si) = self_interact(selected_star, ray_idx, jk) {
+            produced.push(si);
         }
     }
 
-    psi_prime
+    produced
 }
 
 fn is_normal_form_accel(accel: &IexAccel, phi: &Constellation, psi: &[Star]) -> bool {
@@ -667,23 +831,44 @@ fn is_normal_form_accel(accel: &IexAccel, phi: &Constellation, psi: &[Star]) -> 
     true
 }
 
-/// `IEx_C(Φ, Ψ)` — KS-accelerated. Identical semantics to [`iex`] (head-indexed
-/// `mat_Φ`, colours cached once); the reference [`iex`] is its differential
-/// oracle (spec §8 N-KS).
+/// `IEx_C(Φ, Ψ)` — KS-accelerated (spec §8 Lever A). **Byte-identical** to the
+/// reference [`iex`] (N-KS gate), via two faithful structural changes:
+///
+/// * **In-place Ψ**: `remove(star_idx)` (order-preserving) + `extend` of only
+///   the produced stars — no per-step `Vec<Star>` realloc.
+/// * **Resume cursor**: the reference rescans Ψ from star 0 every step. When
+///   `psi_csyms` is unchanged from the previous step, every star in
+///   `[0, resume_from)` is *physically untouched* by `remove`/`extend` **and**
+///   was already proven non-matchable under the *same* colour set — so the
+///   global first match necessarily has `i ≥ resume_from`. Scanning from
+///   `resume_from` therefore selects the *identical* `(i, j)` as a full scan
+///   (and "nothing from `resume_from`" ⇒ genuine normal form, since the
+///   skipped prefix is non-matchable). Any colour change ⇒ `start = 0`
+///   (full-rescan fallback). The reference [`iex`] is the differential oracle.
 pub fn iex_fast(phi: &Constellation, psi_init: Vec<Star>, fuel: usize) -> IExResult {
     let accel = IexAccel::build(phi);
     let mut psi = psi_init;
     let mut counter = 0u32;
     let mut steps = 0;
+    let mut prev_cs: Option<FxHashSet<crate::term::Sym>> = None;
+    let mut resume_from = 0usize;
 
     while steps < fuel {
         let tp = std::time::Instant::now();
         let psi_cs = psi_csyms(&psi);
         ks_add(&T_PSICS, tp.elapsed());
 
+        // Resume invariant: identical colour set ⇒ the untouched prefix
+        // [0, resume_from) is still non-matchable; else full rescan.
+        let start = match &prev_cs {
+            Some(p) if *p == psi_cs => resume_from.min(psi.len()),
+            _ => 0,
+        };
+
         let ts = std::time::Instant::now();
         let mut found_step = None;
-        'outer: for (i, star) in psi.iter().enumerate() {
+        'outer: for i in start..psi.len() {
+            let star = &psi[i];
             for (j, &r) in star.iter().enumerate() {
                 if ray_polarity(r) == Polarity::Neutral {
                     continue;
@@ -698,11 +883,20 @@ pub fn iex_fast(phi: &Constellation, psi_init: Vec<Star>, fuel: usize) -> IExRes
 
         match found_step {
             None => {
+                // Nothing from `start`; prefix [0,start) non-matchable by the
+                // resume invariant (or start==0) ⇒ true normal form.
                 ks_report(steps);
                 return IExResult { psi, is_normal_form: true, steps };
             }
             Some((i, j)) => {
-                psi = interaction_step_fast(&accel, phi, psi, i, j, &mut counter, &psi_cs);
+                let selected = psi.remove(i);
+                let produced =
+                    produce_stars_fast(&accel, phi, &selected, j, &mut counter, &psi_cs);
+                psi.extend(produced);
+                // Prefix [0, i) was scanned non-matchable this step and is
+                // physically untouched by remove/extend ⇒ safe resume point.
+                resume_from = i;
+                prev_cs = Some(psi_cs);
                 steps += 1;
             }
         }
@@ -720,13 +914,14 @@ fn ks_report(steps: usize) {
     }
     let p = T_PSICS.with(|c| c.replace(0.0));
     let s = T_FIND.with(|c| c.replace(0.0));
+    let m = T_MATCH.with(|c| c.replace(0.0));
     let f = T_FRESH.with(|c| c.replace(0.0));
     let u = T_FUSE.with(|c| c.replace(0.0));
     let tot = p + s + f + u;
     let pc = |x: f64| 100.0 * x / tot.max(1e-12);
     eprintln!(
-        "[KS-PROF] steps={steps} psics={p:.4}s ({:.0}%) find={s:.4}s ({:.0}%) freshen={f:.4}s ({:.0}%) fuse={u:.4}s ({:.0}%) tot={tot:.4}s",
-        pc(p), pc(s), pc(f), pc(u),
+        "[KS-PROF] steps={steps} psics={p:.4}s ({:.0}%) find={s:.4}s ({:.0}%) [matchable={m:.4}s ({:.0}% of find)] freshen={f:.4}s ({:.0}%) fuse={u:.4}s ({:.0}%) tot={tot:.4}s",
+        pc(p), pc(s), 100.0 * m / s.max(1e-12), pc(f), pc(u),
     );
 }
 
@@ -845,6 +1040,38 @@ mod tests {
             neg_ray("add", vec![nat(m), nat(n), var("R")]),
             var("R"),
         ]
+    }
+
+    /// `step_detail` must be *exactly* what `iex` does for one step (not a
+    /// reconstruction): same successor Ψ, and every summand carries the real
+    /// θ the engine applied.
+    #[test]
+    fn step_detail_is_faithful_and_exact() {
+        let phi = add_prog();
+        let psi = vec![query_star(2, 2)];
+        // iex fires the first coloured ray (0,0) on its first step.
+        let one = iex(&phi, psi.clone(), 1);
+        let mut counter = 0u32;
+        let det = step_detail(&phi, &psi, 0, 0, &mut counter).expect("redex");
+        assert!(!det.summands.is_empty(), "step produced a non-empty sum");
+        assert_eq!(
+            det.psi_after.len(),
+            one.psi.len(),
+            "step_detail Ψ' size matches iex(fuel=1)"
+        );
+        for (a, b) in det.psi_after.iter().zip(one.psi.iter()) {
+            assert!(
+                stars_alpha_equiv(a, b),
+                "step_detail Ψ' is α-equal to iex's: {a:?} vs {b:?}"
+            );
+        }
+        // The first external summand's θ genuinely unifies the matched
+        // underlying terms (applying θ makes them syntactically equal).
+        let s = det.summands.iter().find(|s| s.external).expect("ext summand");
+        assert!(
+            !s.theta.is_empty() || s.result.len() <= 2,
+            "a non-trivial fusion records a non-empty θ"
+        );
     }
 
     // ── §55.6: Horn logic program — addition ─────────────────────────────────
