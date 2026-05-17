@@ -75,13 +75,14 @@
 //! `Trajectory::valence_gradient` returns an empty slice in this case. This rule is
 //! implemented as an explicit check and is tested.
 
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 
 use crate::ch9::ConstellationClass;
 use crate::constellation::{Constellation, Star};
-use crate::reafference::reafferent_closure;
+use crate::reafference::{reafferent_closure, closure_constituents};
 use crate::subjective::{
     blackhole_capture, productivity_measure, subjective_stream, AgentSet, StarId, Step,
+    Provenance,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -115,11 +116,24 @@ pub struct ViabilityScore {
     pub ch9_class: ConstellationClass,
 }
 
+/// **SUPERSEDED by `viability_internal` (§3.1, 2026-05-16).** Preserved for
+/// `docs/02`-era reproducibility; do not use in new experiments. The global proxy
+/// measures ambient constellation size, not the closure's own self-maintenance —
+/// the confound §3.1 identifies and replaces with the closure-internal metric.
+///
+/// See `viability_internal` for the canonical §3.1-op measure.
+pub fn viability_global_legacy(step: &Step, partition: &AgentSet) -> ViabilityScore {
+    viability(step, partition)
+}
+
 /// Compute viability off a single `Step` under agent-partition `P`.
 ///
 /// This is a *reading*, not a fitted model: the weights are fixed round numbers,
 /// the metrics are read directly off existing `Step` fields, and no per-case
 /// adjustment is made. See module-level documentation for the exact combining rule.
+///
+/// **NOTE:** This is the legacy global proxy, preserved for internal use by
+/// `trajectory_global_legacy`. New code should use `viability_internal`.
 pub fn viability(step: &Step, partition: &AgentSet) -> ViabilityScore {
     let psi_size = step.psi_size;
     let frontier_size = step.frontier_size;
@@ -392,6 +406,312 @@ pub fn trajectory(
         status,
         death_cause,
         witness_ceiling: max_steps,
+        viability_by_round,
+        valence_gradient,
+    }
+}
+
+/// **SUPERSEDED by `trajectory_internal` (§3.1, 2026-05-16).** Preserved for
+/// `docs/02`-era reproducibility. The global proxy (`viability` = psi_size /
+/// frontier_size weighting) is confounded by ambient star count; the §3.1
+/// closure-internal metric (`trajectory_internal`) is the canonical replacement.
+pub fn trajectory_global_legacy(
+    phi: &Constellation,
+    psi0: Vec<Star>,
+    partition: &AgentSet,
+    max_rounds: usize,
+) -> Trajectory {
+    trajectory(phi, psi0, partition, max_rounds)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// §3.1-op closure-internal viability
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// The per-round **closure-internal** viability score (§3.1-op, 2026-05-16).
+///
+/// This is the canonical viability measure; the global proxy (`viability`) is
+/// superseded and preserved only for `docs/02` reproducibility.
+///
+/// # Formula (verbatim §3.1-op)
+///
+/// `viability_r := re_closure_r · ρ_r`
+///
+/// where:
+/// - `re_closure_r ∈ {0,1}` = the §2.2 cycle is present at round r (binary).
+/// - `ρ_r = |self_reproduced ∩ C_{r+1}| / |C_{r+1}|` (0.0 if `C_{r+1}` empty).
+///   A star `s ∈ C_{r+1}` is **self-reproduced** iff there EXISTS an L1d provenance
+///   path from `s` back through `C_r` **AND** through the closure's own round-r
+///   `traced_env_star`.  The **non-triviality guard** requires the path to traverse
+///   the round-r `traced_env_star`, not merely some ancestor in `C_r`.
+///
+/// # Non-triviality guard
+///
+/// A path not through the closure's own round-r env-modification does NOT count,
+/// even if it passes through some member of `C_r`.  Objective/inert constellations
+/// have no `traced_env_star` ⇒ no qualifying path ⇒ `ρ ≡ 0` by construction.
+#[derive(Debug, Clone)]
+pub struct ViabilityInternal {
+    /// `re_closure_r ∈ {0,1}`: was the §2.2 cycle present at this round?
+    pub re_closure: u8,
+    /// `ρ_r ∈ [0,1]`: self-reproduction fraction (0.0 if `C_{r+1}` empty or
+    /// re_closure == 0).
+    pub rho: f64,
+    /// `viability_r = re_closure_r * ρ_r ∈ [0,1]`.
+    pub score: f64,
+    /// Size of `C_{r+1}` used in the ρ denominator (0 if not available).
+    pub c_next_size: usize,
+    /// Count of self-reproduced stars in `C_{r+1}`.
+    pub self_reproduced_count: usize,
+}
+
+/// Check if `descendant_id` provenance-traces through `ancestor_id` in `prov`.
+///
+/// Returns `true` iff the provenance DAG from `descendant_id` reaches
+/// `ancestor_id` (strictly — `descendant_id == ancestor_id` returns false).
+fn prov_reaches_id(prov: &crate::subjective::ProvenanceMap, descendant: StarId, target: StarId) -> bool {
+    if descendant == target { return false; }
+    let mut queue: VecDeque<StarId> = VecDeque::new();
+    let mut visited: HashSet<StarId> = HashSet::new();
+    queue.push_back(descendant);
+    visited.insert(descendant);
+    while let Some(cur) = queue.pop_front() {
+        match prov.get(&cur) {
+            None | Some(Provenance::Initial) => {}
+            Some(Provenance::Fused { parent_psi, parent_phi_id, .. }) => {
+                for &p in &[*parent_psi, *parent_phi_id] {
+                    if p == target { return true; }
+                    if visited.insert(p) { queue.push_back(p); }
+                }
+            }
+            Some(Provenance::SelfInteracted { parent, .. }) => {
+                let p = *parent;
+                if p == target { return true; }
+                if visited.insert(p) { queue.push_back(p); }
+            }
+        }
+    }
+    false
+}
+
+/// Check if `descendant_id` provenance-traces through ANY id in `set`.
+fn prov_reaches_any(prov: &crate::subjective::ProvenanceMap, descendant: StarId, set: &HashSet<StarId>) -> bool {
+    if set.is_empty() { return false; }
+    let mut queue: VecDeque<StarId> = VecDeque::new();
+    let mut visited: HashSet<StarId> = HashSet::new();
+    queue.push_back(descendant);
+    visited.insert(descendant);
+    while let Some(cur) = queue.pop_front() {
+        match prov.get(&cur) {
+            None | Some(Provenance::Initial) => {}
+            Some(Provenance::Fused { parent_psi, parent_phi_id, .. }) => {
+                for &p in &[*parent_psi, *parent_phi_id] {
+                    if set.contains(&p) { return true; }
+                    if visited.insert(p) { queue.push_back(p); }
+                }
+            }
+            Some(Provenance::SelfInteracted { parent, .. }) => {
+                let p = *parent;
+                if set.contains(&p) { return true; }
+                if visited.insert(p) { queue.push_back(p); }
+            }
+        }
+    }
+    false
+}
+
+/// Compute `ρ_r` (§3.1-op) given:
+/// - `c_r`: the constituent set at round r (agent-side stars on the §2.2 cycle at r)
+/// - `traced_env_star_r`: the env-modification StarId from round r (non-triviality guard anchor)
+/// - `c_r_plus_1`: the constituent set at round r+1
+/// - `prov`: the full provenance map at round r+1
+///
+/// A star `s ∈ C_{r+1}` is **self-reproduced** iff:
+///   1. There EXISTS a provenance path from `s` through ANY member of `C_r`, AND
+///   2. That same path (or any other from `s`) passes through `traced_env_star_r`
+///      (the non-triviality guard: must traverse the closure's own round-r env-mod).
+///
+/// Operationally: `s` is self-reproduced iff
+///   `prov_reaches_any(s, C_r) AND prov_reaches_id(s, traced_env_star_r)`.
+///
+/// Co-ancestral Φ-supply does not disqualify (existence of the self-causal path suffices).
+pub(crate) fn compute_rho(
+    c_r: &HashSet<StarId>,
+    traced_env_star_r: StarId,
+    c_r_plus_1: &HashSet<StarId>,
+    prov: &crate::subjective::ProvenanceMap,
+) -> f64 {
+    let denom = c_r_plus_1.len();
+    if denom == 0 { return 0.0; }
+    let mut self_reproduced = 0usize;
+    for &s in c_r_plus_1 {
+        // Non-triviality guard: path must go through traced_env_star_r.
+        let through_env_mod = prov_reaches_id(prov, s, traced_env_star_r);
+        // Also must trace through C_r (existence of the self-causal path).
+        let through_c_r = prov_reaches_any(prov, s, c_r);
+        if through_env_mod && through_c_r {
+            self_reproduced += 1;
+        }
+    }
+    self_reproduced as f64 / denom as f64
+}
+
+/// Compute per-round closure-internal viability (`viability_r = re_closure_r · ρ_r`)
+/// for rounds 0..=max_rounds under the canonical §3.1-op definition.
+///
+/// Returns a `Vec<(round, ViabilityInternal)>`.  If no §2.2 cycle is detected,
+/// all rounds have `re_closure=0, rho=0.0, score=0.0` (the invariant-control path,
+/// §3.1: objective reference ⇒ `ρ ≡ 0` by construction).
+///
+/// # Faithfulness notes (§3.1-op sub-choices)
+///
+/// 1. `C_r` is computed by `closure_constituents()` (L2a extension), which uses the
+///    first detected §2.2 witness per round.  Multiple simultaneous cycle witnesses
+///    per round are possible in principle; we use the first (earliest-found) as the
+///    spec does not define a canonical choice when multiple cycles close at the same
+///    round.  This is disclosed.
+///
+/// 2. `ρ_r` uses round-r+1 constituents and round-r env-mod.  When r+1 is beyond
+///    `max_rounds`, `ρ_r` is 0.0 (no C_{r+1} data available).  This is conservative.
+///
+/// 3. The non-triviality guard is structural: a star in C_{r+1} must provenance-trace
+///    through the closure's own `traced_env_star` for round r.  An objective star
+///    with no such path (because there is no §2.2 cycle and hence no traced_env_star)
+///    always scores `ρ=0` by construction.
+pub fn viability_internal_by_round(
+    phi: &Constellation,
+    psi0: Vec<Star>,
+    partition: &AgentSet,
+    max_rounds: usize,
+) -> Vec<(usize, ViabilityInternal)> {
+    // Step 1: get per-round C_r (indexed by r_prime = detection round) from L2a.
+    let maybe_constituents = closure_constituents(phi, psi0.clone(), partition, max_rounds);
+    let constituents: Vec<crate::reafference::ClosureConstituents> =
+        maybe_constituents.unwrap_or_default();
+
+    // Build lookup: detection_round → ClosureConstituents.
+    let cc_by_round: std::collections::HashMap<usize, &crate::reafference::ClosureConstituents> =
+        constituents.iter().map(|cc| (cc.round, cc)).collect();
+
+    // Step 2: collect per-round provenance maps in ONE stream pass (deterministic).
+    // We need prov at round r+1 to compute ρ_r for rounds where re_closure=1.
+    let max_steps = (max_rounds + 2) * 50;
+    let stream = subjective_stream(phi, psi0.clone()).take(max_steps);
+    let mut prov_by_round: std::collections::HashMap<usize, crate::subjective::ProvenanceMap> =
+        std::collections::HashMap::new();
+    for step in stream {
+        let r = step.round;
+        if r > max_rounds + 1 { break; }
+        // Keep the LAST (most accumulated) provenance snapshot per round.
+        prov_by_round.insert(r, step.provenance.clone());
+    }
+
+    // Step 3: compute per-round viability.
+    let mut result: Vec<(usize, ViabilityInternal)> = Vec::new();
+
+    for r in 0..=max_rounds {
+        let re_closure: u8 = if cc_by_round.contains_key(&r) { 1 } else { 0 };
+
+        if re_closure == 0 {
+            result.push((r, ViabilityInternal {
+                re_closure: 0,
+                rho: 0.0,
+                score: 0.0,
+                c_next_size: 0,
+                self_reproduced_count: 0,
+            }));
+            continue;
+        }
+
+        // re_closure == 1: compute ρ_r.
+        let cc_r = cc_by_round[&r];
+        let traced_env_star_r = cc_r.traced_env_star;
+        let c_r = &cc_r.stars;
+
+        // Get C_{r+1} and prov at r+1 if available.
+        let (rho, c_next_size, self_reproduced_count) =
+            if let Some(cc_r1) = cc_by_round.get(&(r + 1)) {
+                let c_r1 = &cc_r1.stars;
+                if let Some(prov) = prov_by_round.get(&(r + 1)) {
+                    let rho_val = compute_rho(c_r, traced_env_star_r, c_r1, prov);
+                    let denom = c_r1.len();
+                    // Recompute self_reproduced_count from rho_val and denom.
+                    let num = c_r1.iter().filter(|&&s| {
+                        let through_env = prov_reaches_id(prov, s, traced_env_star_r);
+                        let through_cr = prov_reaches_any(prov, s, c_r);
+                        through_env && through_cr
+                    }).count();
+                    (rho_val, denom, num)
+                } else {
+                    (0.0, 0, 0)
+                }
+            } else {
+                (0.0, 0, 0)
+            };
+
+        let score = re_closure as f64 * rho;
+        result.push((r, ViabilityInternal {
+            re_closure,
+            rho,
+            score,
+            c_next_size,
+            self_reproduced_count,
+        }));
+    }
+
+    result
+}
+
+/// Trajectory record using the closure-internal viability (§3.1-op).
+#[derive(Debug, Clone)]
+pub struct TrajectoryInternal {
+    /// `t_birth`: first round at which the §2.2 cycle closes (`re_closure=1`).
+    /// `None` if the cycle never closes (objective / ρ≡0 dead baseline).
+    pub t_birth: Option<usize>,
+    /// Per-round `(round, ViabilityInternal)`, sampled for all rounds 0..=max_rounds.
+    pub viability_by_round: Vec<(usize, ViabilityInternal)>,
+    /// Round-over-round change in `viability_r.score` across the live interval
+    /// (rounds where `re_closure=1`).  Empty if <2 live rounds.
+    pub valence_gradient: Vec<f64>,
+}
+
+/// Compute the closure-internal trajectory (§3.1-op).
+///
+/// This is the canonical §3.1-op measurement function.  The old global proxy is
+/// preserved as `trajectory_global_legacy` for `docs/02` reproducibility.
+///
+/// # Deathless/no-closure cases
+///
+/// If no §2.2 cycle is detected: `t_birth=None`, all `viability_by_round` scores
+/// are 0.0, `valence_gradient` is empty — invariant-control ρ≡0 path, §3.1.
+pub fn trajectory_internal(
+    phi: &Constellation,
+    psi0: Vec<Star>,
+    partition: &AgentSet,
+    max_rounds: usize,
+) -> TrajectoryInternal {
+    let viability_by_round = viability_internal_by_round(phi, psi0, partition, max_rounds);
+
+    let t_birth = viability_by_round
+        .iter()
+        .find(|(_, v)| v.re_closure == 1)
+        .map(|(r, _)| *r);
+
+    let valence_gradient: Vec<f64> = {
+        let live_scores: Vec<f64> = viability_by_round
+            .iter()
+            .filter(|(_, v)| v.re_closure == 1)
+            .map(|(_, v)| v.score)
+            .collect();
+        if live_scores.len() < 2 {
+            Vec::new()
+        } else {
+            live_scores.windows(2).map(|w| w[1] - w[0]).collect()
+        }
+    };
+
+    TrajectoryInternal {
+        t_birth,
         viability_by_round,
         valence_gradient,
     }
@@ -681,5 +1001,292 @@ mod tests {
             "viability must not exceed 1.0; got {}",
             v_live.score
         );
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // §3.1-op Tests: viability_internal / trajectory_internal
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // ── §3.1-op Test (a): genuine reafferent loop ⇒ ρ>0, viability nonzero ──────
+    //
+    // Uses the same positive loop constellation as Test 1 above.
+    // phi = [A: -sense(X) +act(X), E: -act(Y) +sense(f(Y))]
+    // psi0 = [+sense(zero)=star0(agent), +act(zero)=star1(env)]
+    // P = {0}
+    //
+    // Expected: at least one round has re_closure=1 and score>0 (ρ>0).
+    // This confirms the metric fires on a genuine reafferent loop.
+    // ──────────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn internal_positive_genuine_loop_rho_nonzero() {
+        let phi = loop_phi();
+        let psi0 = loop_psi0();
+        let p = agent_partition();
+        let max_rounds = 6;
+
+        let traj = trajectory_internal(&phi, psi0, &p, max_rounds);
+
+        // Must detect t_birth (cycle closes at some round).
+        assert!(
+            traj.t_birth.is_some(),
+            "§3.1-op POSITIVE FAIL: trajectory_internal must detect t_birth for genuine \
+             reafferent loop; got t_birth=None.\n\
+             This means closure_constituents found no §2.2 cycle."
+        );
+
+        // At least one live round must have score > 0 (ρ > 0).
+        let any_nonzero = traj.viability_by_round.iter().any(|(_, v)| v.score > 0.0);
+        assert!(
+            any_nonzero,
+            "§3.1-op POSITIVE FAIL: at least one round must have viability_internal score > 0 \
+             (ρ > 0) for a genuine reafferent loop; all rounds scored 0.0.\n\
+             Rounds: {:?}",
+            traj.viability_by_round.iter().map(|(r, v)| (r, v.score)).collect::<Vec<_>>()
+        );
+
+        // All scores must be in [0, 1].
+        for (r, v) in &traj.viability_by_round {
+            assert!(
+                (0.0..=1.0).contains(&v.score),
+                "§3.1-op: score at round {} = {} out of [0,1]", r, v.score
+            );
+        }
+    }
+
+    // ── §3.1-op Test (b): invariant control — objective/inert ⇒ re_closure≡0 ──
+    //
+    // Uses the Horn-addition objective constellation (same as Test 2/deathless test).
+    // This is an OBJECTIVE reference: no §2.2 cycle possible.
+    // Expected: ALL rounds have re_closure=0, ρ=0.0, score=0.0.
+    // This is the invariant-control test: confound-immune by construction.
+    // ──────────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn internal_invariant_control_objective_re_closure_zero() {
+        let phi: Constellation = vec![
+            vec![pos_ray("add", vec![
+                app("zero", vec![]),
+                var("Y"),
+                var("Y"),
+            ])],
+            vec![
+                neg_ray("add", vec![var("X"), var("Y"), var("Z")]),
+                pos_ray("add", vec![
+                    app("s", vec![var("X")]),
+                    var("Y"),
+                    app("s", vec![var("Z")]),
+                ]),
+            ],
+        ];
+        let psi0: Vec<Star> = vec![
+            vec![
+                neg_ray("add", vec![
+                    app("s", vec![app("zero", vec![])]),
+                    app("s", vec![app("zero", vec![])]),
+                    var("R"),
+                ]),
+                var("R"),
+            ],
+        ];
+        let mut p: AgentSet = HashSet::new();
+        p.insert(0usize);
+
+        let traj = trajectory_internal(&phi, psi0, &p, 8);
+
+        // t_birth must be None (no §2.2 cycle).
+        assert!(
+            traj.t_birth.is_none(),
+            "§3.1-op INVARIANT-CONTROL FAIL: objective constellation must have t_birth=None; \
+             got t_birth={:?}",
+            traj.t_birth
+        );
+
+        // ALL rounds must have re_closure=0, rho=0.0, score=0.0.
+        for (r, v) in &traj.viability_by_round {
+            assert_eq!(
+                v.re_closure, 0,
+                "§3.1-op INVARIANT-CONTROL FAIL: round {} has re_closure={} (expected 0 for \
+                 objective/inert reference)", r, v.re_closure
+            );
+            assert_eq!(
+                v.rho, 0.0,
+                "§3.1-op INVARIANT-CONTROL FAIL: round {} has rho={} (expected 0.0 for \
+                 objective/inert reference)", r, v.rho
+            );
+            assert_eq!(
+                v.score, 0.0,
+                "§3.1-op INVARIANT-CONTROL FAIL: round {} has score={} (expected 0.0 for \
+                 objective/inert reference)", r, v.score
+            );
+        }
+
+        // valence_gradient must be empty (flat, no closure, §3.1).
+        assert!(
+            traj.valence_gradient.is_empty(),
+            "§3.1-op INVARIANT-CONTROL FAIL: valence_gradient must be empty for objective \
+             reference; got {:?}", traj.valence_gradient
+        );
+    }
+
+    // ── §3.1-op Test (c): non-triviality guard — degenerate path not through ──
+    //    the closure's own round-r env-mod ⇒ ρ=0 (guard fires).
+    //
+    // Design:
+    //
+    //   We construct a constellation where stars in C_{r+1} provenance-trace through
+    //   members of C_r (co-ancestry) BUT NOT through the closure's own `traced_env_star`.
+    //
+    //   Strategy: the §2.2 cycle fires (env-mod exists) but the C_{r+1} stars derive
+    //   only from the initial psi0 via phi copies that do not route through the
+    //   traced_env_star.  Since the engine runs honestly, we need the C_{r+1} stars'
+    //   provenance to skip the env-mod path.
+    //
+    //   We use the SAME loop constellation but with an extra "inert" psi0 star that
+    //   can produce C_{r+1} constituents via phi independently (without going through
+    //   the env-mod).  The guard should still fire if we CHECK that the self-reproduced
+    //   count for that inert-origin constituent is 0 (it does not trace through the
+    //   traced_env_star).
+    //
+    //   More directly: we test a constellation where the ONLY stars in C_{r+1} are
+    //   initial (Provenance::Initial) — they have no provenance path at all (they are
+    //   DAG leaves).  Since Initial stars have no parents, prov_reaches_id returns
+    //   false for any target ⇒ self_reproduced_count = 0 ⇒ ρ = 0.
+    //
+    //   We arrange this by giving the agent an initial psi0 star that persists as
+    //   Provenance::Initial into round r+1 (no fusions on it), while also detecting
+    //   the §2.2 cycle on a different star.  The C_{r+1} for the agent will then
+    //   contain that Initial star with ρ=0 (guard fires).
+    //
+    //   The simplest way to test the guard in isolation: use viability_internal_by_round
+    //   with a case where re_closure=1 but all C_{r+1} stars are Initial (no path).
+    //   We verify ρ=0 for those rounds.
+    //
+    //   Faithfulness note: the guard is tested via the compute_rho function logic
+    //   directly — we confirm that stars with Provenance::Initial always yield ρ=0
+    //   because prov_reaches_id(Initial_star, any_target) = false.
+    // ──────────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn internal_non_triviality_guard_fires_for_initial_stars() {
+        use crate::subjective::{ProvenanceMap, Provenance, StarId};
+
+        // Build a minimal scenario: C_r = {StarId(0)}, traced_env_star = StarId(10),
+        // C_{r+1} = {StarId(1)} where StarId(1) has Provenance::Initial.
+        //
+        // Expected: ρ = 0.0 because StarId(1) is Initial — no provenance path,
+        // so it cannot trace through either C_r or traced_env_star.
+
+        let mut prov: ProvenanceMap = ProvenanceMap::new();
+        // StarId(0): initial agent root.
+        prov.insert(StarId(0), Provenance::Initial);
+        // StarId(10): the traced_env_star (a Fused product, not relevant for this test).
+        prov.insert(StarId(10), Provenance::Fused {
+            parent_psi: StarId(0),
+            parent_phi_id: StarId(99),
+            ray_j: 0,
+            ray_j_prime: 0,
+            round: 0,
+        });
+        prov.insert(StarId(99), Provenance::Initial);
+        // StarId(1): C_{r+1} member — Initial (no parents at all).
+        prov.insert(StarId(1), Provenance::Initial);
+
+        let c_r: HashSet<StarId> = std::iter::once(StarId(0)).collect();
+        let traced_env_star = StarId(10);
+        let c_r1: HashSet<StarId> = std::iter::once(StarId(1)).collect();
+
+        let rho = compute_rho(&c_r, traced_env_star, &c_r1, &prov);
+
+        assert_eq!(
+            rho, 0.0,
+            "§3.1-op NON-TRIVIALITY GUARD FAIL: ρ must be 0.0 when C_{{r+1}} stars are \
+             Provenance::Initial (no path through closure's own env-mod); got ρ={}",
+            rho
+        );
+
+        // Additional guard check: a star that traces through C_r but NOT through
+        // traced_env_star must also yield ρ=0.
+        //
+        // StarId(2) = Fused from StarId(0) (in C_r) directly, round 0, but NOT through
+        // StarId(10) (the env-mod).  It goes StarId(0) → StarId(2) skipping StarId(10).
+        prov.insert(StarId(2), Provenance::Fused {
+            parent_psi: StarId(0),
+            parent_phi_id: StarId(98),
+            ray_j: 0,
+            ray_j_prime: 0,
+            round: 0,
+        });
+        prov.insert(StarId(98), Provenance::Initial);
+
+        let c_r1_via_cr: HashSet<StarId> = std::iter::once(StarId(2)).collect();
+        let rho2 = compute_rho(&c_r, traced_env_star, &c_r1_via_cr, &prov);
+
+        assert_eq!(
+            rho2, 0.0,
+            "§3.1-op NON-TRIVIALITY GUARD FAIL: ρ must be 0.0 when C_{{r+1}} star traces \
+             through C_r but NOT through the closure's own env-mod (traced_env_star); \
+             got ρ={}.\nThis is the structural guard: 'through C_r' alone is not enough.",
+            rho2
+        );
+
+        // Positive check: a star that traces through BOTH C_r AND traced_env_star
+        // MUST yield ρ=1.0 (guard passes, self-reproduction confirmed).
+        // StarId(3) = Fused from StarId(10) (the env-mod), which itself traces through
+        // StarId(0) ∈ C_r.  Path: StarId(3) → StarId(10) → StarId(0).
+        prov.insert(StarId(3), Provenance::Fused {
+            parent_psi: StarId(10),
+            parent_phi_id: StarId(97),
+            ray_j: 0,
+            ray_j_prime: 0,
+            round: 1,
+        });
+        prov.insert(StarId(97), Provenance::Initial);
+
+        let c_r1_positive: HashSet<StarId> = std::iter::once(StarId(3)).collect();
+        let rho3 = compute_rho(&c_r, traced_env_star, &c_r1_positive, &prov);
+
+        assert!(
+            rho3 > 0.0,
+            "§3.1-op POSITIVE CHECK FAIL: ρ must be > 0 when C_{{r+1}} star traces through \
+             both C_r AND the closure's own env-mod (traced_env_star); got ρ={}",
+            rho3
+        );
+    }
+
+    // ── §3.1-op: legacy functions preserved and produce results ──────────────
+    //
+    // Verify that trajectory_global_legacy and viability_global_legacy still work
+    // on the positive loop (they call the preserved legacy proxy).
+    // ──────────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn legacy_proxy_preserved_and_runs() {
+        let phi = loop_phi();
+        let psi0 = loop_psi0();
+        let p = agent_partition();
+
+        let traj = trajectory_global_legacy(&phi, psi0.clone(), &p, 6);
+        // Legacy: t_birth should still be Some (reafferent_closure is unchanged).
+        assert!(
+            traj.t_birth.is_some(),
+            "LEGACY PROXY FAIL: trajectory_global_legacy must still detect t_birth; got None"
+        );
+        assert!(
+            !traj.viability_by_round.is_empty(),
+            "LEGACY PROXY FAIL: viability_by_round must be non-empty"
+        );
+
+        // viability_global_legacy on a dead step must return 0.0.
+        use crate::dep_graph::DepGraph;
+        let dead_step = Step {
+            index: 0, round: 0,
+            psi: vec![], dep_graph: DepGraph::from_constellation(&vec![]),
+            psi_size: 0, frontier_size: 0,
+            ch9_class: ConstellationClass::Terminating,
+            is_normal_form: true, psi_ids: vec![], provenance: Default::default(),
+        };
+        let v = viability_global_legacy(&dead_step, &p);
+        assert_eq!(v.score, 0.0, "LEGACY PROXY FAIL: viability_global_legacy dead step must be 0.0");
     }
 }
