@@ -21,12 +21,13 @@ fn main(){
    t = if take_head { h } else { tl };
  }
  println!("img0 head={:?}", match term::get(t){TermData::App(s,a)=>format!("{}/{}",s.name.as_str(),a.len()),_=>"var".into()});
- for &mf in &[1usize,2,4,8,16,32,64,128,256,512,1024,4096,16384,65536]{
+ for &mf in &[1usize,2,4,8,12,16,20,24,28,32,40,48,56,64,80,96,128,192,256]{
    let t0=std::time::Instant::now();
    let f=eval_forced(&phi,t,8_000_000,mf);
    let rb=readback_ray(f.final_ray.unwrap_or(f.value));
    println!("mf={mf:6} steps={:8} arith={:5} forc={:5} fullyRed={} secs={:.2} dec={}",
      f.steps,f.arith_ops,f.forcings,f.fully_reduced,t0.elapsed().as_secs_f64(),pretty(&decode(rb)));
-   if t0.elapsed().as_secs_f64()>30.0 {println!("(wall>30s at mf={mf} — stop)");break;}
+   if f.fully_reduced {println!("*** fully_reduced=true at mf={mf} — data[0] image TERMINATES (depth bound found) ***");break;}
+   if t0.elapsed().as_secs_f64()>50.0 {println!("(wall>50s at mf={mf} — divergent/too-deep; stop)");break;}
  }
 }
