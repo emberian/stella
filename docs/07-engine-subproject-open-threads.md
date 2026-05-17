@@ -653,3 +653,35 @@ strict isnil alone makes it terminate; measure the next wall). (4)
 Revise docs/16 (the decision record) to record the falsified premise
 and the re-aimed plan. docs/14/17 Σ(Φ) work is unaffected (it was
 always the per-step companion, never the crosser) and stays shipped.
+
+## CORRECTION — the above "unimplemented strict isnil" is WRONG
+On the user's "deeper measurement first" call, reading `drive_strict`
+(galaxy.rs:746-763) refutes my own NEXT-(1): **constructor-strict
+`isnil` is already fully implemented and faithful.** `drive_strict`
+for `IsNil` calls `force_value(operands[0], fuel, budget)` — the
+recursive forcer (galaxy.rs:685-762) — and maps `Nil⇒t`, `Cons⇒f`,
+`Residual⇒None` (honest stop). The `galaxy_img_stuck` probe caught a
+`force_value` **`Residual` return at a `budget==0` boundary**
+(`budget = max_forcings − forcings − arith`), i.e. recursion-budget
+exhaustion *mid* a deeply-nested forcing — NOT an absent rule. The
+"steps grow with the `max_forcings` budget while outer `forcings`≡1"
+pattern is exactly this: the OUTER eval_forced sees one top-level
+isnil; resolving it **recurses** through `force_value→eval_forced`
+whose depth/total-steps is bounded by `budget`. So the prior commit's
+"§58/§60 unimplemented isnil ⇒ docs/16 §1 falsified" claim is itself
+**premature and retracted**. What is genuinely measured & true: (a)
+the OUTER reduction is short (~200 lazy steps to the first isnil); (b)
+the cost+(non)termination of `data[0]` lives in the **nested
+`force_value` recursion**, invisible to a probe that only reads the
+outer `final_ray`. The real, still-open question (docs/16 §1
+re-opened, NOT closed): **does the nested isnil/force_value recursion
+for `data[0]` terminate-but-deep, or is it genuinely Θ(unbounded)?**
+— to be measured by (i) budget-laddering `max_forcings` on `img0`
+across a wide range (does `fully_reduced` ever flip / do steps plateau
+vs grow unboundedly), and (ii) a per-`force_value`-layer trace hook
+(docs/08 Stage-1 instrumentation — the §3.1 AEx-layer trace the
+discriminator never captured because it only saw the outer ray) fed
+to `accel_detect::detect_recurrence`. This correction IS the
+measure-don't-guess discipline working: a wrong conclusion caught by
+the next measurement before it drove a build. docs/16 unrevised until
+(i)+(ii) land.
