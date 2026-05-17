@@ -16,17 +16,17 @@
 
   <nav class="site-nav">
     <a class="site-nav__brand" href="index.html">
-      <span class="mark"><img src="assets/stella/glyphs/grove.svg" alt="" /></span>
+      <span class="mark"><img src="assets/stella/glyphs/star.svg" alt="" /></span>
       <span>
-        <span class="site-nav__name">Stella</span>
-        <span class="site-nav__sub">The engine</span>
+        <span class="site-nav__name">Stellar resolution</span>
+        <span class="site-nav__sub">a computational model · after Eng</span>
       </span>
     </a>
     <div class="site-nav__links">
-      <a class="site-nav__link" href="index.html">The grove</a>
-      <a class="site-nav__link" href="reader.html?p=thesis">Field reports</a>
-      <a class="site-nav__link" href="reader.html?p=eng-ch8">The exegesis</a>
+      <a class="site-nav__link" href="index.html">The model</a>
+      <a class="site-nav__link" href="r/eng-ch8.html">The exegesis</a>
       <a class="site-nav__link is-active" href="explore.html">Explore</a>
+      <a class="site-nav__link" href="cmi/index.html">Implementation</a>
     </div>
   </nav>
 
@@ -39,11 +39,11 @@
       <p>
         A constellation does not step through instructions; it <em>interacts</em> — rays
         unify across stars, concurrently, until no interaction remains and the
-        constellation is in normal form. Below, <code>stella-core</code> — the same Rust
-        engine the project's experiments run on — is compiled to WebAssembly and running
-        entirely in your browser. No server. Choose a constellation, then walk the
+        constellation is in normal form. Below, <code>stella-core</code>, a small Rust
+        implementation of the operational semantics, is compiled to WebAssembly and runs
+        entirely in your browser — no server. Choose a constellation, then walk the
         interactive-execution trace step by step. Use <code>←</code> / <code>→</code> once
-        the engine has focus.
+        the engine has focus. This is a tool; the reading on the model stands without it.
       </p>
     </div>
 
@@ -58,9 +58,10 @@
 
   <footer class="site-foot wrap">
     <div class="row">
-      <span>Stella — the Stellar Resolution Implementation Project.</span>
-      <span>Substrate after Boris Eng, <em>An Exegesis of Transcendental Syntax</em>.</span>
-      <a href="https://github.com/emberian/stella">Source on GitHub</a>
+      <span>A reading of stellar resolution, after Boris Eng,
+        <em>An Exegesis of Transcendental Syntax</em>.</span>
+      <a href="cmi/index.html">The implementation project ›</a>
+      <a href="https://github.com/emberian/stella">Source</a>
     </div>
   </footer>
 

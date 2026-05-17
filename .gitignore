@@ -13,6 +13,7 @@ index/
 target/
 hol/.hol
 
-# Static site: generated artifacts (hand-authored HTML/CSS/JS is tracked)
-site/content/
+# Static site: generated artifacts (hand-authored HTML/CSS/JS + build.py tracked)
+site/r/
 site/pkg/
+site/content/
