@@ -596,6 +596,25 @@ figure.stx-figure figcaption .num {
     --mushroom:  #d4685c;
     --moonlight: #9fb1bd;
   }
+  /* The "soft" accent fills are mixed toward parchment; with a dark
+     parchment they go near-black, and the canopy text on them vanishes.
+     Deepen the fills against a fixed night base and relight the text. */
+  :root {
+    --accent-soft: color-mix(in oklab, var(--moss) 30%, #141d18);
+    --warm-soft:   color-mix(in oklab, var(--lantern) 26%, #141d18);
+    --danger-soft: color-mix(in oklab, var(--mushroom) 26%, #141d18);
+    --cool-soft:   color-mix(in oklab, var(--moonlight) 22%, #141d18);
+  }
+  code, kbd, samp, .mono,
+  .prose-col code, .fj-prose code, .pillar code,
+  .stx-mgu__lab code, .stx-desc code, .stx-syntax code, .stx-chip code,
+  .st-badge, .fj-source strong,
+  .fj-toc__item.is-active, .stx-viewbtn.is-active,
+  .st-tab.is-active, .st-menu__item.is-active,
+  .stx-bind .t { color: var(--fern); }
+  .stx-bind .v { color: var(--mushroom); }
+  /* Genuinely-dark surfaces whose text was the (now dark) parchment. */
+  pre, .fj-prose pre, pre code, .fj-prose pre code { color: var(--ink); }
   body, .stella-paper, body.stella-paper { background-image: none; }
   .site-nav, .fj-prose pre, .stx-bar { background: #14201a; }
   /* The nav/hero were authored light-on-dark; in dark mode their
