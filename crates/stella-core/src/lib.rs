@@ -19,6 +19,7 @@ pub mod interactive;
 pub mod parse;
 pub mod pda;
 pub mod polarised;
+pub mod prim;
 pub mod subst;
 pub mod subjective;
 pub mod reafference;
