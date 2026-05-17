@@ -139,15 +139,40 @@ rasterisable first frame.
   `(flag,newState,data)`, not a rendered frame; real rendering needs
   that protocol layer (Track below).
 
-**REMAINING TRACKS (user: do all three, this dep-order):**
-1. ✅ KG4 architectural unification.  2. Decoder: readback-based
-`decode_forced(phi,&Forced)`; recursive readback-aware `decode`; delete
-`best_list_subterm`/`list_score` (review Agent C — the heuristic is what
-produced the spurious `[0,[]]`); swap local `dsint`→`sbinarith::dsint`.
-3. Protocol/render: `interact` loop + `multipledraw` (+ modulate/
-demodulate as the offline galaxy needs) ⇒ end-to-end first frame.
-(Old decoder-priority note retained below; decoder BUILT 490168f, now
-being reworked onto readback.)
+**ALL THREE TRACKS DONE (user: do all three):**
+1. ✅ KG4 (f735d20) architectural unification + D1/D2/D3/D6/D7.
+2. ✅ KG4c (81b1b6a) decoder onto KAM readback: `decode` readback-aware,
+   `decode_ray`, `decode_forced(phi,&Forced,fuel,maxf)` recursive
+   force+readback, deleted `best_list_subterm`/`list_score`,
+   `dsint`/`sint`→`sbinarith` (nested-neg/neg-zero correct). Tests
+   migrated (the old test asserted the deleted heuristic's lie).
+3. ✅ KG5 (cb96158) harvested modulation codec (modulate/demodulate,
+   9 tests; agent corrected my Int(1) spec typo). ✅ KG6 (ee8a0e8)
+   `interact.rs`: encode (Opaque⇒None), GValue↔MVal, modem=demod∘mod,
+   parse_triple, multipledraw, interact loop, galaxy_first_frame; 4
+   tests.
+
+**MEASURED END-TO-END (KG6, honest, not faked):** galaxy's first
+interaction now reaches the **protocol triple `(flag=0, newState,
+data)`** via galaxy→eval_forced→decode_forced→interact. The pipeline is
+correct and refuses to fabricate: `data`'s image-list elements are still
+unforced (`Opaque "unforced:…"`) so `multipledraw` honestly returns
+`None` (0.9 s — a clean early stop, NOT slow/explosive). So the engine +
+protocol + decoder + codec are all wired and faithful; ONE gap remains
+to a rasterised frame.
+
+**NEXT THREAD = deep-force the image-data payload.** `decode_forced`'s
+`deep_decode` calls `eval_forced` per cons field but the `data` list
+elements don't reduce to cons/nil/num under the current bound (depth
+4096 / budget 50k) — they read back to a non-cons `a/2` (galaxy_dump
+earlier: `data[0]` = an `isnil`-guarded `c/b/s` expr). Post-KG4 the
+Push-form `isnil` IS handled by `strict_redex_on_pi`, so the residual is
+either deeper structure or a decode_forced bound/shape issue — same
+investigate-don't-guess discipline, now with the trustworthy
+readback/decoder as the oracle and the protocol layer ready to consume a
+real frame the moment the data forces. (Perf of deep payload forcing =
+the KS-throughput thread D.) TOP FAITHFULNESS DEBT still: genuinely-
+stellar signed arithmetic (kill sbinarith i128 round-trip/ceiling).
 
 (Pre-KG3e text, retained for the measured arc:)
 Measured arc: blocked@5 → KG3b lazy prims → 371-step "NF" → KG3e found
@@ -276,15 +301,17 @@ conclusion (F). (Was deferred "to next checkpoint" — still owed.)
 ## NEXT ACTIONS (priority order)
 1. ~~Harvest both A agents~~ DONE (490168f galaxy_decode, 308189f
    IexAccel). Thread A CLOSED.
-2. ~~Diagnose/drive galaxy~~ DONE: KG3e–h drove it to flag=0; KG4
-   (f735d20) unified the evaluator + fixed faithfulness D1/D2/D3/D6/D7;
-   KG4b (fb67b92) honest-marked sbinarith. **(NOW TOP)** Decoder rework
-   (review Agent C): `decode_forced(phi,&Forced)` = `final_ray` →
-   `readback_ray` → recursive readback-aware `decode`; delete
-   `best_list_subterm`/`list_score`; `dsint`→`sbinarith::dsint`. Then
-   protocol/render: `interact` loop + `multipledraw`. Then top
-   faithfulness debt: genuinely-stellar signed arithmetic (kill the
-   sbinarith i128 round-trip/ceiling).
+2. ~~Diagnose/drive/unify/decoder/protocol~~ DONE: KG3e–h drove galaxy
+   to flag=0; KG4 unified the evaluator (+D1/D2/D3/D6/D7); KG4b
+   honest-marked sbinarith; KG4c decoder→readback; KG5 modulation codec;
+   KG6 interact/multipledraw wired end-to-end. **Measured: galaxy
+   reaches the (flag=0,newState,data) triple; data images still unforced
+   ⇒ no rasterised frame yet (honest stop).**
+   **(NOW TOP)** Deep-force the image-data payload (investigate why the
+   `data` list elements don't reduce to cons/nil/num in `deep_decode` —
+   bound vs deeper structure; the readback/decoder is the oracle).
+   Then top faithfulness debt: genuinely-stellar signed arithmetic
+   (kill the sbinarith i128 round-trip/ceiling).
 3. Fold this into `docs/05` §10 (J) — include the KG3d shallow-NF
    finding (decoder faithful; galaxy NF clean-but-shallow, not Opaque).
 4. Then: KA1 cheap-key+cross-run table (D, valence) → rayon (D) → KA2
