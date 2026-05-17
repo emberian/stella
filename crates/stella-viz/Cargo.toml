@@ -23,6 +23,7 @@ wasm = ["wasm-bindgen", "console_error_panic_hook"]
 
 [dependencies]
 stella-core = { path = "../stella-core" }
+rustc-hash = "=1.1.0"
 
 # WASM-only deps — only pulled in when the `wasm` feature is enabled.
 wasm-bindgen     = { version = "0.2", optional = true }

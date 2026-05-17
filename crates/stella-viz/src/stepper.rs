@@ -22,12 +22,35 @@
 //!   this lets the UI animate how the active stars evolve
 //! - `is_final`: true if this snapshot is a normal form or the last captured step
 
+use rustc_hash::FxHashMap;
 use stella_core::constellation::Constellation;
 use stella_core::constellation::Star;
 use stella_core::dep_graph::DepGraph;
 use stella_core::interactive::{iex, mat_phi};
-use stella_core::polarised::{ray_polarity, Polarity};
+use stella_core::polarised::{matchable, ray_polarity, underlying_term, Polarity};
+use stella_core::subst::{fresh_var, Renaming};
+use stella_core::term::Var;
+use stella_core::unify::{unify, Equation};
 use stella_core::viz::dep_graph_dot;
+
+/// One ray in Ψ that can interact at this step (a redex). Stellar resolution
+/// is concurrent — at any state there may be several; IEx fires the first
+/// (left-to-right). The UI uses this to show *all* the choices.
+#[derive(Debug, Clone)]
+pub struct Fireable {
+    /// Index of the star in Ψ.
+    pub star: usize,
+    /// Index of the ray within that star.
+    pub ray: usize,
+    /// The ray, rendered.
+    pub ray_str: String,
+    /// `"phi"` (matches a star in the reference Φ) or `"self"` (self-interaction).
+    pub kind: String,
+    /// Human-readable description of what it matches (Φ[i][j] / ray[k]).
+    pub targets: Vec<String>,
+    /// True for the redex IEx will actually fire next (the first one).
+    pub is_next: bool,
+}
 
 /// A single step snapshot.
 #[derive(Debug, Clone)]
@@ -42,6 +65,11 @@ pub struct StepSnapshot {
     pub dot: String,
     /// True if this is a normal form (no more interactions possible).
     pub is_final: bool,
+    /// Every redex available at this state (concurrency made visible).
+    pub fireable: Vec<Fireable>,
+    /// The most general unifier of the redex IEx fires next, as
+    /// `(variable, term)` display pairs. Empty at the final step.
+    pub mgu: Vec<(String, String)>,
 }
 
 /// Capture step snapshots for a preset by fuel-replay.
@@ -94,16 +122,132 @@ pub fn capture_steps(
 
         let is_final = result.is_normal_form || k == total_steps;
 
+        let fireable = if k < total_steps {
+            enumerate_fireable(phi, psi)
+        } else {
+            Vec::new()
+        };
+        let mgu = fireable
+            .iter()
+            .find(|f| f.is_next)
+            .map(|f| mgu_of(phi, psi, f))
+            .unwrap_or_default();
+
         snapshots.push(StepSnapshot {
             step: k,
             psi_stars,
             active_ray,
             dot,
             is_final,
+            fireable,
+            mgu,
         });
     }
 
     snapshots
+}
+
+/// Rename every variable in a star to a fresh name (consistently across its
+/// rays), so it is variable-disjoint from Ψ — mirrors what fusion does before
+/// unifying, so the MGU we display is the one IEx actually computes.
+fn freshen_star_consistent(star: &Star, prefix: &str, counter: &mut u32) -> Star {
+    let mut map: FxHashMap<Var, Var> = FxHashMap::default();
+    for &r in star {
+        for v in r.vars() {
+            map.entry(v).or_insert_with(|| fresh_var(prefix, counter));
+        }
+    }
+    if map.is_empty() {
+        return star.clone();
+    }
+    let ren = Renaming::from_map(map);
+    star.iter().map(|&r| ren.apply(r)).collect()
+}
+
+fn render_mgu(sigma: &stella_core::subst::Substitution) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = sigma
+        .0
+        .iter()
+        .map(|(v, &t)| (v.as_str().to_string(), format!("{t}")))
+        .collect();
+    out.sort();
+    out
+}
+
+/// The MGU IEx computes for a given redex (faithful to `fuse`: Φ-star is
+/// freshened apart, then underlying terms are unified).
+fn mgu_of(phi: &Constellation, psi: &[Star], f: &Fireable) -> Vec<(String, String)> {
+    let r = psi[f.star][f.ray];
+    if f.kind == "self" {
+        for (jk, &rk) in psi[f.star].iter().enumerate() {
+            if jk != f.ray && matchable(r, rk) {
+                if let Some(s) = unify(vec![Equation::new(
+                    underlying_term(r),
+                    underlying_term(rk),
+                )]) {
+                    return render_mgu(&s);
+                }
+            }
+        }
+        return Vec::new();
+    }
+    // External: first matching Φ[si][ji], freshened apart.
+    if let Some(&(si, ji)) = mat_phi(phi, r).first() {
+        let mut counter = 0u32;
+        let renamed = freshen_star_consistent(&phi[si], "Φ_", &mut counter);
+        if let Some(s) = unify(vec![Equation::new(
+            underlying_term(r),
+            underlying_term(renamed[ji]),
+        )]) {
+            return render_mgu(&s);
+        }
+    }
+    Vec::new()
+}
+
+/// Enumerate every redex available at this state. The first in IEx's
+/// left-to-right scan is flagged `is_next`.
+fn enumerate_fireable(phi: &Constellation, psi: &[Star]) -> Vec<Fireable> {
+    let mut out: Vec<Fireable> = Vec::new();
+    for (i, star) in psi.iter().enumerate() {
+        for (j, &r) in star.iter().enumerate() {
+            if ray_polarity(r) == Polarity::Neutral {
+                continue;
+            }
+            let ext = mat_phi(phi, r);
+            if !ext.is_empty() {
+                out.push(Fireable {
+                    star: i,
+                    ray: j,
+                    ray_str: format!("{r}"),
+                    kind: "phi".to_string(),
+                    targets: ext.iter().map(|(si, ji)| format!("Φ[{si}][{ji}]")).collect(),
+                    is_next: false,
+                });
+                continue;
+            }
+            let mut self_targets: Vec<String> = Vec::new();
+            for (jk, &rk) in star.iter().enumerate() {
+                if jk != j && matchable(r, rk) {
+                    self_targets.push(format!("ray[{jk}] {rk}"));
+                }
+            }
+            if !self_targets.is_empty() {
+                out.push(Fireable {
+                    star: i,
+                    ray: j,
+                    ray_str: format!("{r}"),
+                    kind: "self".to_string(),
+                    targets: self_targets,
+                    is_next: false,
+                });
+            }
+        }
+    }
+    if let Some(first) = out.first_mut() {
+        first.is_next = true;
+    }
+    out
 }
 
 /// Find the first matchable ray in Ψ (the one IEx will fire on next).

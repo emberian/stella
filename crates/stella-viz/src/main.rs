@@ -46,6 +46,10 @@ fn main() {
                 }
             }
             "--headless" => { headless = true; }
+            "--steps" => {
+                run_steps_json();
+                std::process::exit(0);
+            }
             "--help" | "-h" => {
                 println!("stella-viz — stellar resolution visualizer");
                 println!("Usage:");
@@ -54,6 +58,7 @@ fn main() {
                 println!("Options:");
                 println!("  --port PORT    TCP port to serve on (default: 7878)");
                 println!("  --headless     Print preset DOT strings to stdout and exit");
+                println!("  --steps        Print full per-step JSON (build-time figures) and exit");
                 println!("  --help         Show this help");
                 std::process::exit(0);
             }
@@ -73,6 +78,64 @@ fn main() {
             std::process::exit(1);
         }
     }
+}
+
+fn jstr(s: &str) -> String {
+    let mut o = String::with_capacity(s.len() + 2);
+    o.push('"');
+    for c in s.chars() {
+        match c {
+            '"' => o.push_str("\\\""),
+            '\\' => o.push_str("\\\\"),
+            '\n' => o.push_str("\\n"),
+            '\r' => o.push_str("\\r"),
+            '\t' => o.push_str("\\t"),
+            c if (c as u32) < 0x20 => o.push_str(&format!("\\u{:04x}", c as u32)),
+            c => o.push(c),
+        }
+    }
+    o.push('"');
+    o
+}
+
+/// `--steps`: emit the full per-step trace for every preset as JSON, so the
+/// site build can prebake static figures (no browser, no JS) from the same
+/// engine the explorer runs.
+fn run_steps_json() {
+    let data = all_step_data();
+    let presets: Vec<String> = data
+        .iter()
+        .map(|sd| {
+            let steps: Vec<String> = sd
+                .steps
+                .iter()
+                .map(|s| {
+                    let psi: Vec<String> = s.psi_stars.iter().map(|x| jstr(x)).collect();
+                    let mgu: Vec<String> = s
+                        .mgu
+                        .iter()
+                        .map(|(v, t)| format!("[{},{}]", jstr(v), jstr(t)))
+                        .collect();
+                    format!(
+                        "{{\"step\":{},\"psi_stars\":[{}],\"active_ray\":{},\"dot\":{},\"is_final\":{},\"mgu\":[{}]}}",
+                        s.step,
+                        psi.join(","),
+                        jstr(&s.active_ray),
+                        jstr(&s.dot),
+                        s.is_final,
+                        mgu.join(",")
+                    )
+                })
+                .collect();
+            format!(
+                "{{\"name\":{},\"description\":{},\"steps\":[{}]}}",
+                jstr(&sd.name),
+                jstr(&sd.description),
+                steps.join(",")
+            )
+        })
+        .collect();
+    println!("[{}]", presets.join(","));
 }
 
 /// Headless mode: load all presets and step data, print their DOT strings, and exit.

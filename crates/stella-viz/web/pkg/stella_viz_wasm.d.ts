@@ -31,6 +31,13 @@ export function list_presets(): string;
  */
 export function preset_count(): number;
 
+/**
+ * Parse and run a user-supplied constellation. `phi_src` is the reference
+ * constellation Φ; `psi_src` is the initial interaction space Ψ. Returns
+ * `{"ok":true,"steps":[…]}` or `{"ok":false,"error":"…","pos":N}`.
+ */
+export function run_source(phi_src: string, psi_src: string): string;
+
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {
@@ -39,6 +46,7 @@ export interface InitOutput {
     readonly get_preset_steps: (a: number) => [number, number];
     readonly list_presets: () => [number, number];
     readonly preset_count: () => number;
+    readonly run_source: (a: number, b: number, c: number, d: number) => [number, number];
     readonly _start: () => void;
     readonly __wbindgen_free: (a: number, b: number, c: number) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
