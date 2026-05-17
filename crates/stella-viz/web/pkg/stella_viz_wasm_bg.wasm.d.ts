@@ -6,6 +6,8 @@ export const ex_run: (a: number, b: number, c: number, d: number, e: number, f: 
 export const get_preset_dot: (a: number) => [number, number];
 export const get_preset_steps: (a: number) => [number, number];
 export const lc_behaviour: (a: number, b: number) => [number, number];
+export const lc_compare: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
+export const lc_measures: (a: number, b: number, c: number, d: number) => [number, number];
 export const lc_ortho: (a: number, b: number, c: number, d: number) => [number, number];
 export const lc_proofnet: (a: number, b: number, c: number, d: number) => [number, number];
 export const list_presets: () => [number, number];
