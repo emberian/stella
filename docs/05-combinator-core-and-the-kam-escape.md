@@ -280,3 +280,85 @@ oracle) + full suite. Measurement infra is permanent (project no-fake-done).
 - **N-GAL:** even fast stellar cannot run galaxy at interactive rates ⇒ the
   measured frontier is the honest result; "fitness for purpose: not yet, here
   is exactly where and why" — not concealed, not a bespoke fast-reducer escape.
+
+---
+
+## 9. Axis-2 reborn: speculative trace acceleration (pre-registered, 2026-05-17)
+
+Strengthen-only. Origin: `~/dev/reu_unif` + `refs/originals/Cap_Matching.pdf`
+(work the user co-authored, 2015), read critically.
+
+**Cap verdict (closed, with a real argument).** Cap-*matching* / Cap-terms-as-
+tree-automata is **falsified as an engine/faithfulness lever**: the saturation
+closure of even §55 Horn `add` — `{add(sᵐz,sⁿz,sᵐ⁺ⁿz)}` — is **not a regular
+tree language** (a bottom-up TA reads the three sibling chains independently
+with finitely many summary states; cannot enforce `m+n=p`; the `{aᵐbⁿcᵐ⁺ⁿ}`
+pumping argument). Reuß–Seidl term-constrained TA ([10]) adds only structural-
+equality constraints, not value arithmetic ⇒ same ceiling. So Cap/TA captures
+only the *finite-state* fragment, which `automata.rs` already embodies; it is
+NOT the §51.13 fix. Discard: the algorithm, `reu_unif` as code, the closure-
+as-language idea.
+
+**The live kernel = cap-*unification*'s real idea, reincarnated as speculative
+trace acceleration.** Not "recognize an infinite language" but "finitely
+describe the *closure of a recursive rule* and solve a constraint against it
+without enumerating it" — i.e. **loop acceleration / widening** (WSTS /
+Presburger flat-loop theory; cap-unification is a special case). It works
+*precisely on the fragment (recursive Horn / numeral / list recursion) where
+Cap-matching died*, because it parameterizes the iteration count rather than
+recognizing the relation.
+
+**Unified mechanism (one subsystem, two settings).** de Bruijn canonical
+configs (`Var::Idx`, committed `1a3c259`) make "structurally-equivalent state
+seen before?" an O(1) check. Maintain a trace history of canonical machine
+configs `P(M ⋆ π)`. A recurrence witness = `S₍ₜ₊δ₎ = C[Sₜ]` for fixed context
+`C` + one parameter position, extracted by **anti-unification (lgg)** — the
+dual of the unifier the engine already has. Then:
+- `C` = identity ⇒ "already derived" ⇒ **tabling/subsumption** (insight #2):
+  soundness tiers — *variant-deletion* unconditionally sound (Ψ is a set up to
+  α); *instance-subsumption* gated (classical, differential-checked).
+- `C` = affine/structural context ⇒ synthesize closed form `Cᵏ` (k symbolic,
+  solved by unification) ⇒ **cycle acceleration**.
+
+**Soundness contract (pre-registered, the load-bearing part).** You cannot
+*decide* accelerability for the Turing-complete combinator core — and you do
+not need to. Speculate + **guard** (accelerated star fires only when the live
+config matches the recurrence invariant) + **fall back** (ordinary reduction
+otherwise; no speedup, no unsoundness) + **differential-certify** (reference
+`iex`, unrolled, is the oracle; accelerated ɟ-result must equal unrolled;
+divergence ⇒ discard, Goodhart-forbidden). `Cᵏ ≡ k` unrollings is a *schematic
+induction on k* for the affine/structural class — mechanically checkable, and
+later HOL4-checkable: **the accelerated star is a derived lemma, not an axiom**
+(verified-substrate thesis pays off). Soundness is local + empirical; the
+undecidable question ("does this program have accelerable loops") sits only on
+the *coverage/speedup* path, never the *soundness* path — exactly how PyPy/
+LuaJIT/HVM stay correct on Turing-complete input. This is Eng §62 size-change /
+§63 stellar-compression / §87.2 ([NGSKDS07]) **witnessed dynamically per-trace**
+(decidable to *check a witnessed recurrence*; undecidable only to *classify all
+programs* — only the former is needed).
+
+**Coverage claim (honest):** soundness extends to the full Turing core;
+*speedup* extends as far as traces show affine/structural recurrences = most
+structured computation (every primitive-recursive / fold / numeral loop). Non-
+structured residue runs normally — no risk, just no win.
+
+### Phases (KA = Axis-2 reborn)
+- **KA0 — recurrence detector**: de Bruijn canonical config trace history +
+  `lgg`/anti-unification recurrence extraction (shared substrate).
+- **KA1 — tabling**: variant-deletion fixpoint termination in `iex_fast`
+  (Tier-A sound now; converts fuel-truncation → true fixpoint).
+- **KA2 — acceleration**: synthesize+guard+differential-cert `Cᵏ` stars.
+- **Benchmark-zero (in-repo, pre-registered):** `binarith::tests::
+  deterministic_functional_read` `mul(13,9)` currently fails purely by fuel/
+  engine-cost (deep recursive binary `mul` — an affine recurrence). KA2 SUCCESS
+  CRITERION = it terminates fast and correctly via acceleration. Until then it
+  is `#[ignore]`-with-rationale (KS-cost class, like `mul_table_full_ks_gated`)
+  — honest tracked signal, never faked, never weakened.
+
+### Pre-registered nulls (extension)
+- **N-KA-sound:** any accelerated run whose ɟ-result diverges from the unrolled
+  reference `iex` ⇒ the synthesis/guard is unfaithful ⇒ reverted, not kept.
+- **N-KA-cover:** if essentially no real combinator/galaxy trace exhibits a
+  guard-passing affine recurrence ⇒ "structured computation has accelerable
+  cores" is false *here*; report as a first-class negative, do not retro-widen
+  the recurrence class to manufacture hits.
