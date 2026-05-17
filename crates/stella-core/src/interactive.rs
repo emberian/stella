@@ -462,8 +462,12 @@ fn fuse_theta(
 ) -> Option<(Star, Substitution)> {
     let r1 = underlying_term(phi1[j]);
     let r2 = underlying_term(phi2_renamed[j_prime]);
-    let theta = unify(vec![Equation::new(r1, r2)])?;
+    let tun = std::time::Instant::now();
+    let theta = unify(vec![Equation::new(r1, r2)]);
+    ks_add(&T_UNIFY, tun.elapsed());
+    let theta = theta?;
 
+    let tsb = std::time::Instant::now();
     let mut result: Star = phi1
         .iter()
         .enumerate()
@@ -479,6 +483,7 @@ fn fuse_theta(
         .collect();
 
     result.extend(rest2);
+    ks_add(&T_SUBST, tsb.elapsed());
     Some((result, theta))
 }
 
@@ -850,6 +855,9 @@ thread_local! {
     static T_MATCH: std::cell::Cell<f64> = const { std::cell::Cell::new(0.0) };
     static T_FRESH: std::cell::Cell<f64> = const { std::cell::Cell::new(0.0) };
     static T_FUSE: std::cell::Cell<f64> = const { std::cell::Cell::new(0.0) };
+    // Sub-split of T_FUSE to find the real per-fuse cost (unify vs subst).
+    static T_UNIFY: std::cell::Cell<f64> = const { std::cell::Cell::new(0.0) };
+    static T_SUBST: std::cell::Cell<f64> = const { std::cell::Cell::new(0.0) };
 }
 
 #[inline(always)]
@@ -1108,10 +1116,12 @@ fn ks_report(steps: usize) {
     let m = T_MATCH.with(|c| c.replace(0.0));
     let f = T_FRESH.with(|c| c.replace(0.0));
     let u = T_FUSE.with(|c| c.replace(0.0));
+    let un = T_UNIFY.with(|c| c.replace(0.0));
+    let sb = T_SUBST.with(|c| c.replace(0.0));
     let tot = p + s + f + u;
     let pc = |x: f64| 100.0 * x / tot.max(1e-12);
     eprintln!(
-        "[KS-PROF] steps={steps} psics={p:.4}s ({:.0}%) find={s:.4}s ({:.0}%) [matchable={m:.4}s ({:.0}% of find)] freshen={f:.4}s ({:.0}%) fuse={u:.4}s ({:.0}%) tot={tot:.4}s",
+        "[KS-PROF] steps={steps} psics={p:.4}s ({:.0}%) find={s:.4}s ({:.0}%) [matchable={m:.4}s ({:.0}% of find)] freshen={f:.4}s ({:.0}%) fuse={u:.4}s ({:.0}%) [unify={un:.4}s subst={sb:.4}s] tot={tot:.4}s",
         pc(p), pc(s), 100.0 * m / s.max(1e-12), pc(f), pc(u),
     );
 }
