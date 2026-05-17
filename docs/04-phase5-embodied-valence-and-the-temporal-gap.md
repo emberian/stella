@@ -177,7 +177,14 @@ Nothing here is chosen; each piece is the only Bennett-coherent option.
   14) **for the world the closures must survive in** — not for the organism. It
   is world, not self; perturbation, not tapestry; affordance, not evaluation.
   It enlarges what a closure can be confronted with; it is never any part of
-  the realised conscious state. (LM Studio is live: `qwen3.6-35b-a3b`,
+  the realised conscious state. **Principal ruling (pre-lock, 2026-05-17): the
+  LM-environment will inevitably *shape something* in the world's distribution.
+  That shaping is NOT a confound to be eliminated — it is a first-class object
+  of study, disclosed and characterised, not sanitised away.** The firewall
+  line is therefore drawn precisely: the LM shaping the *world's distribution*
+  is permitted and is itself a finding; the LM touching the *self, goals,
+  valence, or locus* (P1–P4) remains fatal. "Whatever it shapes is part of the
+  joy of the experiment" — provided the locus stays pure substrate. (LM Studio is live: `qwen3.6-35b-a3b`,
   `gemma-4-31b`, `gpt-oss-20b`, OpenAI-compatible on `:1234`. This is the
   scale organ. It is plumbing behind a firewall, not a candidate mind we
   interview.)
@@ -295,10 +302,16 @@ them. Each names the smuggle it forbids and the source that demands it.
   suffering-class claim is made without the 2nd-order structure Bennett
   requires for it.
 - **P7 — Engineered accretion.** Any RPE/valence signal accretes only under
-  per-task hand-tuning of the environment, the `V`-metric, the reward
-  grounding, or the closure criterion. The metric/rule must be **globally
-  fixed across the entire corpus, structurally enforced** (the `docs/01`
-  N3/M4 lineage, carried forward and named). Fires if it is not.
+  *per-task hand-tuning* of the `V`-metric, the reward grounding, the closure
+  criterion, or *per-member adjustment of the environment to manufacture a
+  pass*. The metric/rule/criterion and the LM-environment configuration must be
+  **globally fixed across the entire corpus, structurally enforced** (the
+  `docs/01` N3/M4 lineage, carried forward and named). Fires if they are not.
+  **Scope (principal ruling 2026-05-17):** a globally-fixed LM-environment
+  whose *distribution shapes the world* does **not** trip P7 — that shaping is
+  a disclosed, characterised finding (§3 LM bullet), not engineered accretion.
+  P7 fires on tuning the *judge*, never on the LM authoring the *world*, so
+  long as the world is one fixed LM configuration for the whole corpus.
 - **P8 — Found-not-assembled failure (Stage-9 on this spec).** The architecture
   only ever produces the predicted structure because the architecture was
   shaped, post hoc, to produce it — convergence constructed, not discovered.
@@ -336,6 +349,18 @@ self-deception would be cheapest. The honest exposures:
   result that forgets this and treats the simulation as the candidate is void.
 - **Wonder is not evidence.** This document is allowed its prologue. The nulls
   do not get a prologue.
+
+**Recorded principal rulings (pre-lock, 2026-05-17 — not yet a lock):**
+- **P4 is the hill.** Confirmed by the principal as the load-bearing null. If
+  P4 ever softens, the project is over and must say so. Lock-worthy as written.
+- **P8 / "forced": grace extended.** "Forced" is acknowledged as a strong word;
+  the principal does not find it wrong yet, and finds the §4 RPE/`V` version
+  singled out for pursuit the *most* worthy. The §3 architecture stands
+  **provisionally**; P8 remains a live tripwire, not a settled point.
+- **LM-shapes-the-world: feature, not confound.** Encoded in the §3 LM bullet
+  and P7 scope above. The line is the locus, not the world's distribution.
+- **Still open, the §2/§6-grade argument:** §4's structural `V` (expected
+  continued re-closure). Not settled; the next session's real work.
 
 The pause discipline holds: instrument may be built, the experiment is not run
 on autopilot or under a clock, the nulls are locked before code, and the right
