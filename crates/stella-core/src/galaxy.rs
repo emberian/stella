@@ -887,6 +887,14 @@ fn gtrace(args: std::fmt::Arguments) {
 /// for its host-i128 signed-layer boundary). No green is faked: a
 /// non-value operand, DivByZero (stuck by ICFP spec), or an sbinarith
 /// past `sub_fuel` all return `fully_reduced=false` honestly.
+/// The galaxy KAM initial process Ψ for a program term: `+P(st(prog, eps))`
+/// — the single source of truth shared with [`eval_forced`] (line below).
+/// Exposed so the Σ(Φ) `iex_spec` gate can drive the *real* δ/Push skeleton
+/// through `iex`/`iex_fast`/`iex_spec` with the faithful initial state.
+pub fn initial_psi(prog: TermId) -> Vec<Star> {
+    vec![vec![pp(st(prog, cst("eps")))]]
+}
+
 pub fn eval_forced(phi: &Constellation, prog: TermId, fuel: usize, max_forcings: usize) -> Forced {
     // Outermost call (not re-entered via force_value) ⇒ fresh memo: it is
     // valid only for THIS Φ/forcing tree (docs/11 Lever C scope).

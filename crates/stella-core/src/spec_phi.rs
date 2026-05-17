@@ -169,6 +169,54 @@ impl SpecPhi {
     }
 }
 
+/// Per-Φ-**star** specialisation (the in-loop `iex_spec` driver consults
+/// this once per matched Φ-star, precomputed in `IexAccel`): the index of
+/// the negative (pattern) ray + the closed [`Transition`], or `None` ⇒
+/// delegate to the generic fast path. **Exact same structural
+/// classification as [`SpecPhi::build`]** — this just additionally returns
+/// *which* ray is the pattern (the realiser must only fire when the Ψ focus
+/// matched that ray, i.e. the KAM `+Ψ`-vs-`-Φ-pattern` direction; a Ψ ray
+/// matching the Φ *contractum* ray delegates).
+pub fn spec_star(star: &Star) -> Option<(usize, Transition)> {
+    if star.len() != 2 {
+        return None;
+    }
+    let (mut neg, mut pos, mut neg_idx) = (None, None, 0usize);
+    for (k, &r) in star.iter().enumerate() {
+        match ray_polarity(r) {
+            Polarity::Neg => {
+                neg = Some(r);
+                neg_idx = k;
+            }
+            Polarity::Pos => pos = Some(r),
+            Polarity::Neutral => {}
+        }
+    }
+    let (mn, pin) = unwrap_st(neg?)?;
+    let (mp, pip) = unwrap_st(pos?)?;
+    match get(mn) {
+        TermData::App(s, args) if s.name.as_str() == "a" && args.len() == 2 => {
+            Some((neg_idx, Transition::Unwind))
+        }
+        TermData::App(s, args) if args.is_empty() => {
+            let _ = s;
+            let (params, ntail) = dot_params(pin)?;
+            let (TermData::Var(nv), TermData::Var(pv)) = (get(ntail), get(pip)) else {
+                return None;
+            };
+            if nv != pv {
+                return None;
+            }
+            if params.is_empty() {
+                Some((neg_idx, Transition::Delta(mp)))
+            } else {
+                Some((neg_idx, Transition::Splice { params, body: mp }))
+            }
+        }
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

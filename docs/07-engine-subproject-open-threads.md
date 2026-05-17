@@ -556,3 +556,37 @@ loop. That is the docs/17 "sibling tier reusing iex_fast_inner"
 intent; my prefix-loop shortcut was the error. Σ1 redo = in-loop
 specialisation, psi_compatible+step-identity gated. Deferred to a
 careful pass; Σ0 is the durable down-payment.
+
+## Σ1 RESOLVED — in-loop iex_spec, GREEN (the hypothesis confirmed)
+The redo landed exactly as the hypothesis dictated: a `spec:bool`
+sibling tier threaded through `iex_fast_inner`/`produce_stars_fast`
+(reference `iex` + the proven-byte-identical `iex_fast`/`iex_tabled`
+pass `spec=false`, untouched). At iex_fast's OWN chosen `(ik,jk)`, if
+Φ-star `ik` is specialisable AND the Ψ focus matched its negative
+pattern ray, `spec_realise` builds the resolvent from the closed
+`SpecTr` (δ/Push in Σ1; Splice/strict delegate) — no α-rename, no
+general unify, no whole-star θ-apply. `IexAccel` carries the per-Φ-index
+`Vec<Option<(neg_idx,SpecTr)>>` residual (`spec_phi::spec_star`), built
+once per fixed Φ. Provably structural-equal to the generic fuse on the
+δ/Push skeleton (linear fresh-equiv pattern ⇒ MGU = one-sided positional
+read; generic α-renames Φ ⇒ its θ is identity on the Ψ remainder ⇒
+those rays pass verbatim). Two gotchas fixed in the careful pass: (1)
+the ray head is the bare polarity sym `P`/`+P`/`-P` and `underlying_term`
+does NOT strip it — must descend `pol(st(M,π))` structurally
+(`split_pol_st`, mirroring `spec_phi::unwrap_st`); (2) **a real
+faithfulness finding**: on pure-KAM δ/Push corpora the ɟ-concealed
+*visible* answer is empty (the result lives inside the `+P(st …)`
+process scaffold `conceal` strips), so `psi_compatible` alone is
+near-vacuous THERE — the load-bearing Σ1 gate is per-step **α-equivalence
+of the actual Ψ states vs `iex_fast`** (`stars_alpha_equiv`, index-
+aligned), plus `SPEC_HITS` non-vacuity asserts (the realiser provably
+fires on combinator + galaxy), plus step-count==iex_fast, plus a
+corrupted-`SpecTr` negative the α-gate must reject. `iex_spec_result_eq_iex`
+green: combinator SKK (the prior failing corpus) + galaxy Φ=405 real
+skeleton both fire non-vacuously, step-identical, α-equal to iex_fast,
+decision-equal to reference iex; Horn/binarith delegate inertly; the
+`Delta(bogus)` negative trips. Σ0 + Σ1 now both shipped & proven. Next:
+Σ2 (un-delegate Splice) → Σ3 (wire `iex_spec` as the galaxy
+`eval_forced` tier + KS-PROF Φ=405 before/after: steps identical, wall
+↓ — the find+freshen+fuse+unify+apply envelope collapsing on the 392
+δ-heads).
