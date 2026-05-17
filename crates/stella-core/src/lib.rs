@@ -43,6 +43,7 @@ pub mod tm;
 pub mod transducer;
 pub mod unify;
 pub mod unify_fast;
+pub mod spec_phi;
 pub mod viz;
 pub mod omega_weight;
 
