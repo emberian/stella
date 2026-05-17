@@ -522,14 +522,49 @@ fn interaction_step(
 // Exact step detail (§51.9) — the authoritative decomposition of one step.
 // ─────────────────────────────────────────────────────────────────────────────
 
-fn render_theta(theta: &Substitution) -> Vec<(String, String)> {
+/// Render θ as `(variable, term)` pairs. When `alpha_inv` is given (the
+/// inverse of the α-renaming applied to the Φ star before fusion), the
+/// bindings are converted back into Φ's *own* variable names — so a
+/// logician sees `W ↦ cons(0,…)`, exactly as on paper, not the engine's
+/// internal `ext0_…W…` scaffolding. Still the same unifier, α-converted.
+fn render_theta(theta: &Substitution, alpha_inv: Option<&Substitution>) -> Vec<(String, String)> {
+    let key_name = |v: Var| -> String {
+        if let Some(inv) = alpha_inv {
+            if let Some(&t) = inv.0.get(&v) {
+                if let TermData::Var(orig) = get(t) {
+                    return orig.as_str().to_string();
+                }
+            }
+        }
+        v.as_str().to_string()
+    };
+    let val_str = |t: Term| -> String {
+        match alpha_inv {
+            Some(inv) => format!("{}", inv.apply(t)),
+            None => format!("{t}"),
+        }
+    };
     let mut v: Vec<(String, String)> = theta
         .0
         .iter()
-        .map(|(var, &t)| (var.as_str().to_string(), format!("{t}")))
+        .map(|(&var, &t)| (key_name(var), val_str(t)))
         .collect();
     v.sort();
     v
+}
+
+/// Invert an α-renaming `Substitution` (origVar → freshVar-term) into
+/// (freshVar → origVar-term), for converting θ back to readable names.
+fn invert_alpha(alpha: &Substitution) -> Substitution {
+    let pairs: Vec<(Var, Term)> = alpha
+        .0
+        .iter()
+        .filter_map(|(&orig, &t)| match get(t) {
+            TermData::Var(fresh) => Some((fresh, mk_var_interned(orig))),
+            _ => None,
+        })
+        .collect();
+    Substitution::from_var_pairs(pairs)
 }
 
 /// One summand of a §51.9 interaction step: a fusion against a specific
@@ -593,20 +628,20 @@ pub fn step_detail(
     // First sum: external fusions (same order/counter scheme as interaction_step).
     let ext_matches = mat_phi_c(phi, r, &psi_colours);
     for (ik, jk) in ext_matches {
-        let phi_star_renamed = {
+        let (phi_star_renamed, alpha) = {
             let prefix = format!("ext{ik}_{counter}");
             *counter += 1;
-            let (renamed, _) = alpha_rename_star(&phi[ik], &prefix, counter);
-            renamed
+            alpha_rename_star(&phi[ik], &prefix, counter)
         };
         if let Some((fused, theta)) =
             fuse_theta(&selected_star, ray_idx, &phi_star_renamed, jk)
         {
+            let alpha_inv = invert_alpha(&alpha);
             summands.push(Summand {
                 external: true,
                 phi_target: Some((ik, jk)),
                 self_ray: None,
-                theta: render_theta(&theta),
+                theta: render_theta(&theta, Some(&alpha_inv)),
                 result: fused.clone(),
             });
             psi_prime.push(fused);
@@ -620,7 +655,7 @@ pub fn step_detail(
                 external: false,
                 phi_target: None,
                 self_ray: Some(jk),
-                theta: render_theta(&theta),
+                theta: render_theta(&theta, None),
                 result: si.clone(),
             });
             psi_prime.push(si);

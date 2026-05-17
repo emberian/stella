@@ -397,20 +397,44 @@ export async function mountExplorer(root, opts = {}) {
 
     elCanvas.innerHTML = `<div class="stx-constellation${animateFrom != null ? " stx-anim" : ""}">${starsHtml}</div>`;
 
-    // ɟ(Ψ): the observable output — what Eng's criteria actually read.
+    // ɟ(Ψ): the engine's own observable output (conceal+noise filter,
+    // §49.44) — authoritative, computed in stella-core, not client-side.
     const elObs = $("obs");
     if (elObs) {
-      const obs = observableOf(snap.psi_stars);
+      const obs = snap.observable || [];
       const body = obs.length
         ? obs.map((s) => `<span class="stx-obs__s">${esc(s)}</span>`).join("")
         : `<span class="stx-obs__none">∅ — nothing observable yet</span>`;
       elObs.innerHTML =
-        `<span class="stx-obs__lab" title="conceal + noise filter (Eng §49.44): stars whose rays are all unpolarised">ɟ(Ψ)${isFinal ? " — the result" : ""}</span>${body}`;
+        `<span class="stx-obs__lab" title="ɟ = conceal ↨ + noise filter ♭ (Eng §49.44), computed by stella-core">ɟ(Ψ)${isFinal ? " — the result" : ""}</span>${body}`;
       elObs.classList.toggle("is-final", isFinal);
     }
 
-    // MGU readout + a plain-English account of what fires next.
-    if (snap.mgu && snap.mgu.length && nextRedex) {
+    // The EXACT §51.9 decomposition: one step fires a *sum* of summands,
+    // each with the real θ the engine applied (authoritative, not
+    // reconstructed). Fall back to the single-mgu phrasing only if the
+    // exact summands are absent (the primer's fuel-replay capture).
+    const sums = snap.summands || [];
+    if (sums.length && nextRedex) {
+      const plural = sums.length > 1;
+      const head =
+        `<div class="stx-mgu__lab">The ray <code>${esc(nextRedex.ray_str)}</code> fires a ` +
+        `${plural ? `<strong>sum of ${sums.length} summands</strong> (§51.9)` : "single interaction"} — ` +
+        `each with the exact unifier <code>stella-core</code> applied:</div>`;
+      const blocks = sums.map((s) => {
+        const binds = s.theta.length
+          ? s.theta.map(([v, t]) =>
+              `<span class="stx-bind"><span class="v">${esc(v)}</span>` +
+              `<span class="arr">↦</span><span class="t">${esc(t)}</span></span>`).join("")
+          : `<span class="stx-bind stx-bind--id">θ = identity</span>`;
+        const tgt = s.external
+          ? `fusion against <code>${esc(s.target)}</code>`
+          : `self-interaction (<code>${esc(s.target)}</code>)`;
+        return `<div class="stx-summand"><span class="stx-summand__t">${tgt}</span>` +
+               `<div class="stx-binds">${binds}</div></div>`;
+      }).join("");
+      elMgu.innerHTML = head + blocks;
+    } else if (snap.mgu && snap.mgu.length && nextRedex) {
       const binds = snap.mgu
         .map(([v, t]) => `<span class="stx-bind"><span class="v">${esc(v)}</span>
             <span class="arr">↦</span><span class="t">${esc(t)}</span></span>`)
@@ -418,11 +442,9 @@ export async function mountExplorer(root, opts = {}) {
       const how = nextRedex.kind === "self"
         ? `self-interacts (two rays of the same star unify)`
         : `unifies with <code>${esc(nextRedex.targets[0] || "Φ")}</code> in the reference Φ`;
-      const tail = snap.mgu.length
-        ? ` — the two stars fuse, the matched pair is consumed, and this unifier is applied to what remains.`
-        : ` — the stars fuse and the matched pair is consumed.`;
       elMgu.innerHTML =
-        `<div class="stx-mgu__lab">The ray <code>${esc(nextRedex.ray_str)}</code> ${how}${tail}</div>` +
+        `<div class="stx-mgu__lab">The ray <code>${esc(nextRedex.ray_str)}</code> ${how} — ` +
+        `the stars fuse, the matched pair is consumed, θ is applied to the rest.</div>` +
         `<div class="stx-binds">${binds}</div>`;
     } else if (isFinal) {
       elMgu.innerHTML =
@@ -516,6 +538,7 @@ export async function mountExplorer(root, opts = {}) {
     if (fk) fk.hidden = !sourceMode;
     const name = sourceMode ? "source" : (presets[presetIdx]?.name ?? "");
     elReadout.innerHTML =
+      `<span class="stx-strat" title="IEx with a left-to-right strategy; each successor Ψ is exact (the engine's own θ). The normal form is strategy-independent — choose any redex to verify.">IEx · exact</span> ` +
       `${esc(name)} — step ${idx} / ${steps.length - 1}` +
       (snap.is_final ? ' <span class="nf">· normal form</span>' : "");
   }
@@ -667,16 +690,8 @@ export async function mountExplorer(root, opts = {}) {
     return Number.isFinite(n) && n > 0 ? n : 0; // 0 → engine default
   }
 
-  // ɟ(Ψ): the observable output (Eng §49.44 conceal + noise filter) — keep
-  // only stars whose rays are all unpolarised, drop empties. Computed
-  // client-side from the rendered Ψ; this is the lens Eng's acceptance
-  // criteria use ("[accept] ∈ ɟIEx", the computed result, …).
-  function observableOf(psiStars) {
-    return psiStars.filter((st) => {
-      const rays = parseStar(st);
-      return rays.length > 0 && rays.every((r) => rayPolarity(r) === "neu");
-    });
-  }
+  // ɟ(Ψ) is now computed authoritatively by stella-core (snap.observable);
+  // the old client-side polarity filter was removed for exactness.
 
   // Plain-text dump of the whole trace, for sharing / lecture notes.
   function traceText() {

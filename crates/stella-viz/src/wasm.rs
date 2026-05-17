@@ -162,15 +162,35 @@ fn snapshot_json(s: &StepSnapshot) -> String {
         .iter()
         .map(|(v, t)| format!("[{},{}]", json_str(v), json_str(t)))
         .collect();
+    let summands: Vec<String> = s
+        .summands
+        .iter()
+        .map(|sm| {
+            let th: Vec<String> = sm
+                .theta
+                .iter()
+                .map(|(v, t)| format!("[{},{}]", json_str(v), json_str(t)))
+                .collect();
+            format!(
+                "{{\"external\":{},\"target\":{},\"theta\":[{}]}}",
+                sm.external,
+                json_str(&sm.target),
+                th.join(",")
+            )
+        })
+        .collect();
+    let obs: Vec<String> = s.observable.iter().map(|x| json_str(x)).collect();
     format!(
-        "{{\"step\":{},\"psi_stars\":[{}],\"active_ray\":{},\"dot\":{},\"is_final\":{},\"fireable\":[{}],\"mgu\":[{}]}}",
+        "{{\"step\":{},\"psi_stars\":[{}],\"active_ray\":{},\"dot\":{},\"is_final\":{},\"fireable\":[{}],\"mgu\":[{}],\"summands\":[{}],\"observable\":[{}]}}",
         s.step,
         psi.join(","),
         json_str(&s.active_ray),
         json_str(&s.dot),
         s.is_final,
         fire.join(","),
-        mgu.join(",")
+        mgu.join(","),
+        summands.join(","),
+        obs.join(",")
     )
 }
 
