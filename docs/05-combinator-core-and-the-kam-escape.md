@@ -362,3 +362,87 @@ structured residue runs normally — no risk, just no win.
   guard-passing affine recurrence ⇒ "structured computation has accelerable
   cores" is false *here*; report as a first-class negative, do not retro-widen
   the recurrence class to manufacture hits.
+
+## 10. Post-spec evolution — strengthen-only fold (2026-05-17 checkpoint)
+
+§1–9 are LOCKED. This folds in what the live arc established since, with two
+framings explicitly *corrected* (they had over-rotated). Live state is
+tracked in `docs/07`; deep designs in `docs/08` (§49.50) and `docs/09`
+(unifier rework). Bridge, not a rewrite.
+
+**10.1 Galaxy: from "does it run" to "executes faithfully; throughput-gated."**
+The ICFP-2020 galaxy executes its interaction protocol end-to-end. KG3e–h
+diagnosed the real stall (the KAM Push rule uncurries strict operators onto
+π; detectors scanning only the curried form produced false normal forms),
+KG4 unified the forced evaluator (one `strict_redex_on_pi` + one
+`force_value` + one `drive_strict`, replacing 8 per-prim detectors and 2
+duplicated branches; review defects D1/D2/D3/D6/D7 fixed at the root),
+KG5/KG6 added the modulation codec + `interact`/`multipledraw`. KG6c
+separated the concerns by measurement: the protocol **spine** forces
+faithfully and cheaply (`(flag=0,newState,data,img0)` reached,
+`fully_reduced=true`, tiny step counts once each lazy `cons` field is
+demanded); the decoder/readback/`interact` are correct and *honestly refuse
+to fabricate a frame*. **Correctness is done.** The one remaining gap to a
+rasterised frame is **engine throughput** on the image-data payload — not a
+correctness bug, an honest measured limit (the KS frontier).
+
+**10.2 CORRECTED framing — arithmetic is an intrinsic, not debt.** The
+native signed-integer kernel (`sbinarith`'s host-i128 layer) behind the
+differential oracle is a legitimate **intrinsic (jet)** — the
+GraalVM/verified-speculative-runtime model (`docs/07` §H): reference
+interpreter = spec/oracle, intrinsics = optimizing tier. NOT a
+"smuggling"/"violation"/moral-debt (an adversarial-review over-rotation,
+recalibrated). Kept: the **honest-marking** (the i128 ceiling is disclosed
+so nobody mistakes it for unbounded/stellar). Genuinely-stellar
+fully-general signed arithmetic is a *planned KS-stream generalization*,
+not a correctness blocker. Memory-pinned so it is not re-litigated.
+
+**10.3 CORRECTED framing — no valence search exists.** It is a long-term
+thesis goal only. Engine/galaxy/oracle/detector work is justified on its
+own engineering merit. "The valence search drives this millions of times"
+is NOT a present justification. Valence is load-bearing only in the §49.50
+track, where Eng's thesis itself *defines* §49.50 as the locus of the
+"charge" — and even there a future, staged, falsifiable Stage-3 bet. The
+§3/§7 pre-registration regime is now *lighter* for routine engine work
+(differential oracle + measurement + honest negatives, mostly mechanized;
+pre-registered-null prose dropped for routine engine work) and stays heavy
+ONLY for the valence/agency thesis claims.
+
+**10.4 Engine-foundation deliverables (the §6 decomposition, advanced).**
+- `evaluate()` + a **live differential oracle** (KG7, `evaluate.rs`): the
+  evaluation contract + the Goodhart guard, with a test that *proves* it
+  catches a deliberately-unfaithful fast path — §4 faithfulness made a
+  runtime instrument.
+- Kruskal-whistle **recurrence detector + sound generalizer** (KG8,
+  `accel_detect.rs`) on the KA0 substrate — the foundation §9's KA2
+  consumes (soundness = one-directional α-subsumption, not embedding — a
+  corrected math error, verified).
+- §49.50 forcing-polarity **design** (KG9, `docs/08`): forcing = demand
+  pole, value = supply pole, fusion = annihilation; the falsifiable
+  proposition *idempotence-loss ⟺ whistle*; trace/partial-commutation-monoid
+  model; staged Stage 0→4 with per-stage falsifiers.
+
+**10.5 N-KS reframed (the §4 differential discipline, evolved).** The
+byte-identical `iex_eq_iex_fast` gate is being replaced by a **proven
+multiset result-equivalence** gate (`docs/09`): reference `unify`/`iex`
+stays the untouched spec oracle; a near-linear union-find unifier powers
+only the accelerated tier; faithfulness is decided by a *separate,
+decision-only, bootstrap-proven* validator (`psi_compatible` =
+`conceal_and_filter` → α-`canonical` → multiset compare; no witness
+retained). The verified-speculative-runtime model — consistent with the §1
+ambition and §H. (Open, resolved at `docs/09` Stage 0: the §G.4 explicit
+nod that trading byte-identity for a proven live validator is the right Eng
+faithfulness story; the §G.5 multiset-vs-set interaction with KA1's
+α-variant dropping.) Reframed N-KS: not step-identity, but proven
+observational-equivalence under the reference oracle — the §7 honest-negative
+discipline, mechanized.
+
+**10.6 Theory-modulo + Z3 (the §9 frontier, sharpened).** Engine is modulo
+α + associativity/one-unit of the `a`/`dot` spine constructors (rigid AU,
+one-unital only — AU-modulo-≥2-units is NULLARY, cautioned in
+`antiunify.rs`) + linear arithmetic via Z3 in the KA2 summarizer (Z3 does
+Presburger/affine — not hand-rolled) + trace/partial-commutation monoid for
+the §49.50 frontier. Z3 is an approved KA2 affordance (solve-for-k + guard
+discharge + lemma validator, oracle/validator OUTSIDE the trusted core); the
+`z3` crate is a parent-owned `Cargo.toml` change when KA2 starts. NOT finite
+words/strings (that over-fit a prompt seed; string tooling skipped).
