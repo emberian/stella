@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Explore the engine — Stella</title>
+  <meta name="description" content="stella-core compiled to WebAssembly — step through interactive execution of stellar-resolution constellations in your browser." />
+  <link rel="icon" href="assets/stella/logo/stella-mark.svg" />
+  <link rel="stylesheet" href="assets/stella/colors_and_type.css" />
+  <link rel="stylesheet" href="assets/stella/stella.css" />
+  <link rel="stylesheet" href="assets/stella/journal.css" />
+  <link rel="stylesheet" href="assets/site.css" />
+</head>
+<body class="stella-paper">
+  <a class="skip-link" href="#explorer">Skip to the engine</a>
+
+  <nav class="site-nav">
+    <a class="site-nav__brand" href="index.html">
+      <span class="mark"><img src="assets/stella/glyphs/grove.svg" alt="" /></span>
+      <span>
+        <span class="site-nav__name">Stella</span>
+        <span class="site-nav__sub">The engine</span>
+      </span>
+    </a>
+    <div class="site-nav__links">
+      <a class="site-nav__link" href="index.html">The grove</a>
+      <a class="site-nav__link" href="reader.html?p=thesis">Field reports</a>
+      <a class="site-nav__link" href="reader.html?p=eng-ch8">The exegesis</a>
+      <a class="site-nav__link is-active" href="explore.html">Explore</a>
+    </div>
+  </nav>
+
+  <main class="wrap" style="padding-top:56px;padding-bottom:96px">
+    <div class="section__eyebrow"><img src="assets/stella/glyphs/star.svg" alt="" /> Interactive · the live engine</div>
+    <h2 style="font-family:var(--font-display);font-weight:500;font-size:clamp(30px,4vw,44px);line-height:1.12;letter-spacing:-0.01em;margin:0 0 16px;color:var(--ink);max-width:22ch;text-wrap:balance">
+      Watch a constellation resolve.
+    </h2>
+    <div class="prose-col" style="margin-bottom:28px">
+      <p>
+        A constellation does not step through instructions; it <em>interacts</em> — rays
+        unify across stars, concurrently, until no interaction remains and the
+        constellation is in normal form. Below, <code>stella-core</code> — the same Rust
+        engine the project's experiments run on — is compiled to WebAssembly and running
+        entirely in your browser. No server. Choose a constellation, then walk the
+        interactive-execution trace step by step. Use <code>←</code> / <code>→</code> once
+        the engine has focus.
+      </p>
+    </div>
+
+    <div id="explorer"></div>
+
+    <p class="caption" style="margin-top:18px">
+      The curated set spans the automata classes — NFA, NPDA, tree automata — and Horn
+      logic, a representative cross-section of interactive execution. Dependency graphs are
+      rendered with Graphviz; if the CDN is unreachable the raw DOT is shown instead.
+    </p>
+  </main>
+
+  <footer class="site-foot wrap">
+    <div class="row">
+      <span>Stella — the Stellar Resolution Implementation Project.</span>
+      <span>Substrate after Boris Eng, <em>An Exegesis of Transcendental Syntax</em>.</span>
+      <a href="https://github.com/emberian/stella">Source on GitHub</a>
+    </div>
+  </footer>
+
+  <script type="module">
+    import { mountExplorer } from "./assets/explorer.js";
+    mountExplorer(document.getElementById("explorer"), { compact: false }).catch((e) => {
+      document.getElementById("explorer").innerHTML =
+        `<div class="reader-status error" style="padding:32px">The live engine could not start: ${e.message}<br>` +
+        `It needs to be served over http with the WebAssembly bundle present.</div>`;
+    });
+  </script>
+</body>
+</html>
