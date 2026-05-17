@@ -227,6 +227,7 @@ const TEMPLATE_IDE = `
     <button class="stx-iconbtn" data-role="wsimport" title="Import workspaces JSON">import</button>
     <input type="file" data-role="wsfile" accept="application/json" hidden />
     <button class="stx-iconbtn" data-role="construct" title="Build a constellation from a machine / proof spec">＋ build</button>
+    <button class="stx-iconbtn" data-role="logic" title="Orthogonality, behaviours, proof-net correctness">⊥ logic</button>
     <button class="stx-iconbtn" data-role="copytrace" title="Copy the whole step-by-step trace">⧉ trace</button>
     <a class="stx-permalink" data-role="permalink" href="#" title="Copy a sharable link">↪ share</a>
   </div>
@@ -257,6 +258,30 @@ const TEMPLATE_IDE = `
         <span class="stx-bar__spacer"></span>
         <span class="stx-syntax">The encoder is Eng-faithful; the result is editable source.</span>
       </div>
+    </div>
+  </div>
+
+  <div class="stx-modal" data-role="lpanel" hidden>
+    <div class="stx-modal__box">
+      <div class="stx-modal__head">
+        <span>Logic workbench</span>
+        <select class="stx-select stx-select--light" data-role="lclass" aria-label="Tool">
+          <option value="ortho">Orthogonality — Φ₁ ⊥ Φ₂</option>
+          <option value="proofnet">Proof net — correctness + Φ_comp</option>
+          <option value="behaviour">Behaviour / type — A^⊥⊥</option>
+        </select>
+        <span class="stx-bar__spacer"></span>
+        <button class="stx-iconbtn" data-role="lclose">✕</button>
+      </div>
+      <textarea class="stx-ta" data-role="lspec" spellcheck="false" wrap="off" rows="9"></textarea>
+      <div class="stx-modal__row">
+        <button class="st-btn st-btn--sm" data-role="lrun">Run</button>
+        <button class="st-btn st-btn--secondary st-btn--sm" data-role="lload" hidden>Φ_comp → editor</button>
+        <span class="stx-error" data-role="lerr"></span>
+        <span class="stx-bar__spacer"></span>
+        <span class="stx-syntax">A type is a behaviour; membership is orthogonality; proofs validated by the stellar/DR/Girard criterion.</span>
+      </div>
+      <div class="stx-lout" data-role="lout"></div>
     </div>
   </div>
 
@@ -433,6 +458,25 @@ const CSPEC = {
     {"kind":"ax","left":2,"right":3},
     {"kind":"cut","left":1,"right":2}
   ]
+}`,
+};
+
+// Worked templates for the Logic workbench.
+const LSPEC = {
+  ortho: `{
+  "phi1": "[+a(X)]",
+  "phi2": "[-a(X), R]"
+}`,
+  proofnet: `{
+  "kind": "mll",
+  "links": [
+    {"kind":"ax","left":0,"right":1}
+  ]
+}`,
+  behaviour: `{
+  "members": ["[+a(X)]"],
+  "universe": ["[+a(X)]", "[-a(X), R]"],
+  "orth": "roots"
 }`,
 };
 
@@ -944,6 +988,80 @@ export async function mountExplorer(root, opts = {}) {
       cpanel.hidden = true;
       choicePath = [];
       loadIntoEditor(res.phi, res.psi || "");
+    });
+
+    // ── Logic workbench ────────────────────────────────────────────────────
+    const lpanel = $("lpanel"), lclass = $("lclass"), lspec = $("lspec"),
+      lerr = $("lerr"), lout = $("lout"), lload = $("lload");
+    let lastPhiComp = "";
+    const setLSpec = () => { lspec.value = LSPEC[lclass.value] || "{}"; lerr.textContent = ""; lout.innerHTML = ""; lload.hidden = true; };
+    $("logic").addEventListener("click", () => {
+      if (!lspec.value.trim()) setLSpec();
+      lpanel.hidden = false;
+    });
+    $("lclose").addEventListener("click", () => { lpanel.hidden = true; });
+    lpanel.addEventListener("click", (e) => { if (e.target === lpanel) lpanel.hidden = true; });
+    lclass.addEventListener("change", setLSpec);
+    setLSpec();
+    const yesno = (b) => b ? '<span class="stx-ex__ok">yes</span>' : '<span class="stx-ex__no">no</span>';
+    lload.addEventListener("click", () => {
+      if (!lastPhiComp) return;
+      lpanel.hidden = true; choicePath = []; loadIntoEditor(lastPhiComp, "");
+    });
+    $("lrun").addEventListener("click", () => {
+      lerr.textContent = ""; lout.innerHTML = ""; lload.hidden = true;
+      let spec;
+      try { spec = JSON.parse(lspec.value); }
+      catch (e) { lerr.textContent = "spec JSON: " + e.message; return; }
+      let res;
+      try {
+        if (lclass.value === "ortho") {
+          res = JSON.parse(mod.lc_ortho(spec.phi1 || "", spec.phi2 || ""));
+        } else if (lclass.value === "proofnet") {
+          res = JSON.parse(mod.lc_proofnet(spec.kind || "mll",
+            JSON.stringify({ links: spec.links || [] })));
+        } else {
+          res = JSON.parse(mod.lc_behaviour(lspec.value));
+        }
+      } catch (e) { lerr.textContent = "engine error: " + e.message; return; }
+      if (!res.ok) { lerr.textContent = res.error || "failed"; return; }
+
+      if (lclass.value === "ortho") {
+        lout.innerHTML =
+          `<div class="stx-ex__grp"><span class="stx-obs__lab">Φ₁ ⊥ Φ₂ — the three relations</span>` +
+          `<div class="stx-ex__set">` +
+          `<span class="stx-obs__s">⊥<sup>fin</sup> ${yesno(res.fin)}</span>` +
+          `<span class="stx-obs__s">⊥<sup>1</sup> ${yesno(res.one)}</span>` +
+          `<span class="stx-obs__s">⊥<sup>R</sup> ${yesno(res.roots)}</span></div></div>`;
+      } else if (lclass.value === "proofnet") {
+        lastPhiComp = res.phi || "";
+        lload.hidden = !lastPhiComp;
+        const v = res.verdict === true ? '<span class="stx-ex__ok">correct</span>'
+          : res.verdict === false ? '<span class="stx-ex__no">not correct</span>'
+          : '<span class="stx-obs__none">N/A</span>';
+        const dg = (res.diagrams || []).map((d, i) =>
+          `<span class="stx-obs__s">δ${i}: ${d.vertices}v/${d.edges}e ` +
+          `${d.connected ? "conn" : "disc"} · ${d.correct ? "correct" : "incorrect"}` +
+          `${d.actualised ? " · ↓" + esc(d.actualised) : ""}</span>`).join("");
+        lout.innerHTML =
+          `<div class="stx-ex__row"><span class="stx-ex__ok" style="background:none;border:none;padding:0">${esc(res.verdict_name)} criterion:</span> ${v}</div>` +
+          `<p class="stx-ex__note">${esc(res.verdict_note)}</p>` +
+          `<div class="stx-ex__grp"><span class="stx-obs__lab">Φ_comp (editable, runnable)</span>` +
+          `<div class="stx-ex__set"><span class="stx-obs__s">${esc(res.phi)}</span></div></div>` +
+          `<div class="stx-ex__grp"><span class="stx-obs__lab">saturated diagrams</span>` +
+          `<div class="stx-ex__set">${dg || '<span class="stx-obs__none">—</span>'}</div>` +
+          `<p class="stx-ex__note">${esc(res.diag_note)}</p></div>`;
+      } else {
+        lout.innerHTML =
+          `<div class="stx-ex__grp"><span class="stx-obs__lab">behaviour over a finite universe (⊥<sup>${esc(res.orth)}</sup>)</span>` +
+          `<div class="stx-ex__set">` +
+          `<span class="stx-obs__s">|A| = ${res.a}</span>` +
+          `<span class="stx-obs__s">|A<sup>⊥</sup>| = ${res.a_perp}</span>` +
+          `<span class="stx-obs__s">|A<sup>⊥⊥</sup>| = ${res.a_biperp}</span>` +
+          `<span class="stx-obs__s">A = A<sup>⊥⊥</sup> (is a behaviour) ${yesno(res.is_behaviour)}</span>` +
+          `</div></div>` +
+          `<p class="stx-ex__note">A type, in transcendental syntax, is exactly a behaviour: a set fixed by bi-orthogonal closure. Membership of a Φ is orthogonality to every test.</p>`;
+      }
     });
 
     const ct = $("copytrace");

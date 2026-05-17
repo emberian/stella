@@ -101,6 +101,73 @@ export function get_preset_steps(idx) {
 }
 
 /**
+ * Behaviour / type bench — A^⊥, A^⊥⊥, is-behaviour over a small universe.
+ * @param {string} json
+ * @returns {string}
+ */
+export function lc_behaviour(json) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.lc_behaviour(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * Logic workbench — orthogonality `Φ₁ ⊥ Φ₂` (the three relations).
+ * @param {string} phi1
+ * @param {string} phi2
+ * @returns {string}
+ */
+export function lc_ortho(phi1, phi2) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(phi1, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(phi2, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.lc_ortho(ptr0, len0, ptr1, len1);
+        deferred3_0 = ret[0];
+        deferred3_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * Proof-net correctness (DR / Girard) + Φ_comp source + guarded diagrams.
+ * `kind` ∈ {mll, mll2i}.
+ * @param {string} kind
+ * @param {string} json
+ * @returns {string}
+ */
+export function lc_proofnet(kind, json) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(kind, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.lc_proofnet(ptr0, len0, ptr1, len1);
+        deferred3_0 = ret[0];
+        deferred3_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
  * Return all presets as a JSON array:
  * `[{"id": 0, "name": "…", "description": "…"}, …]`
  * @returns {string}
