@@ -171,6 +171,70 @@ fn main() {
         println!("    [{i}] {f}");
     }
 
+    // If the head is a strict op, the first frames ARE its operands — dump
+    // them so we can see WHY they don't force to numerals.
+    if let TermData::App(hs, ha) = term::get(m) {
+        if ha.is_empty()
+            && matches!(hs.name.as_str(), "add" | "mul" | "eq" | "lt" | "neg")
+        {
+            let arity = if hs.name.as_str() == "neg" { 1 } else { 2 };
+            println!("\n── operands of `{}` (the stalled strict op) ──", hs.name.as_str());
+            let mut cur = pi;
+            for k in 0..arity {
+                let TermData::App(d, da) = term::get(cur) else { break };
+                if d.name.as_str() != "dot" || da.len() != 2 {
+                    break;
+                }
+                let opnd = da[0];
+                let mut b = 200_000i64;
+                let n = count(opnd, &mut b);
+                let (sh, sn) = {
+                    // local spine-head
+                    let mut t = opnd;
+                    let mut na = 0;
+                    loop {
+                        match term::get(t) {
+                            TermData::App(s, a) if s.name.as_str() == "a" && a.len() == 2 => {
+                                na += 1;
+                                t = a[0];
+                            }
+                            TermData::App(s, a) if a.is_empty() => break (Some(s.name.as_str().to_string()), na),
+                            _ => break (None, na),
+                        }
+                    }
+                };
+                println!(
+                    "  operand[{k}]: nodes≈{n}  head={}  spine_head={:?}/{}  decoded={}",
+                    tag(opnd),
+                    sh,
+                    sn,
+                    stella_core::galaxy_decode::pretty(&stella_core::galaxy_decode::decode(opnd))
+                );
+                let mut so = String::new();
+                tree(opnd, 0, 4, &mut so);
+                print!("{so}");
+                // Force THIS operand alone via the full forced evaluator and
+                // report exactly where it stalls.
+                let fo = galaxy::eval_forced(&phi, opnd, 500_000, 5000);
+                let mut b2 = 200_000i64;
+                println!(
+                    "    └ eval_forced(operand[{k}]): value_head={} value_nodes≈{} arith_ops={} fully_reduced={} decoded={}",
+                    tag(fo.value),
+                    count(fo.value, &mut b2),
+                    fo.arith_ops,
+                    fo.fully_reduced,
+                    stella_core::galaxy_decode::pretty(&stella_core::galaxy_decode::decode(fo.value))
+                );
+                let mut sv = String::new();
+                tree(fo.value, 0, 4, &mut sv);
+                for l in sv.lines() {
+                    println!("      {l}");
+                }
+                cur = da[1];
+            }
+        }
+    }
+
     println!("\n── verdict inputs ──");
     println!(
         "  M is value? {}   π empty (eps)? {}   π depth {}",
