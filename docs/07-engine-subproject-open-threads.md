@@ -326,17 +326,33 @@ oracle is accumulating (CCLemma / directed-lemma-synthesis); Z3-validated
 KA2 lemmas feed it. Defer-and-accumulate is the literature-endorsed strategy.
 
 ## H. STRATEGIC FRAME (load-bearing for next session)
-- Engine is BOTH (1) a first-class artifact — world's only/foremost stellar
-  resolution engine; GraalVM-caliber ambition; **Eng is in a Signal group
-  chat with the user** ⇒ external/publishable; faithfulness-as-feature is
-  what makes it credible to Eng — AND (2) valence-thesis-CRITICAL: the
-  valence experiment = LOTS of execution + search + EVOLUTION over symbolic
-  forms ⇒ engine speed/throughput/faithfulness is prerequisite. Earlier
-  "side-quest vs critical path" framing is RESOLVED: it is both.
-- Two co-equal driving workloads: **galaxy** (maturity/credibility; deep
-  single run) + **valence-evo** (thesis; millions of small executions under
-  mutation; faithfulness-under-adversarial-search). They stress the engine
-  differently and BOTH drive the roadmap.
+**⚠ VALENCE FRAMING DISCIPLINE (recalibrated — read first):** there is
+NO running valence search/evolution; it does not exist. It is a
+LONG-TERM THESIS GOAL ONLY. Do NOT use "the valence search drives this
+millions of times" as the operative justification for concrete engine or
+galaxy work — that is phantom justification (it confused the user). The
+engine, galaxy execution, the differential oracle, and the
+recurrence/embedding detector all stand on their OWN engineering merit
+(heavy execution, not-fooling-ourselves, termination analysis, the
+galaxy demo). Valence is load-bearing ONLY in the §49.50 track, where
+Eng's thesis itself *defines* §49.50 as the locus of the "charge" — and
+even there it is a future, staged, falsifiable Stage-3 bet, never a
+present driver. The valence-tagged engine items below (D/§253-281) are
+phrased as "valence loop" for HISTORICAL continuity; read them as
+"high-throughput-search workload generally" — their merit is engine
+throughput, not a running valence experiment.
+
+- Engine is a first-class artifact — world's only/foremost stellar
+  resolution engine; GraalVM-caliber ambition; **Eng is in a Signal
+  group chat with the user** ⇒ external/publishable; faithfulness-as-
+  feature is what makes it credible to Eng. (Secondary, FUTURE: if/when
+  a valence experiment is built it would be a heavy-execution consumer —
+  but that is not a present workload and does not justify present work.)
+- Driving workload NOW: **galaxy** (maturity/credibility; deep single
+  run, end-to-end). A future high-throughput-search workload would
+  stress the engine differently (millions of small mutated executions,
+  faithfulness-under-adversarial-search) — relevant to roadmap *shape*,
+  not a present justification.
 - GraalVM/Truffle map: ref `iex`="interpreter is spec"/oracle; `iex_fast`=
   optimizing tier; KA1/KA2=self-opt/OSR; verified-jet+differential+deopt =
   Graal speculation/deopt BUT we additionally *validate* ⇒ a **verified
