@@ -18,41 +18,48 @@
 //! so the galaxy forcing driver can feed galaxy numerals straight in and read
 //! results straight out — no marshalling.
 //!
-//! ## Module discipline (§55-Horn / §58-module)
+//! ## Faithfulness boundary (read this — what runs where)
 //!
-//! The *magnitude* arithmetic is the KG1a module reused verbatim (`binarith`'s
-//! `add`/`mul`/`cmp` stars), plus one new unsigned **borrow-subtract** Horn
-//! relation (`sub`) that KG1a lacked. Signed combination (sign of result,
-//! magnitude pick, zero-canonicalisation) is the *module composition* layer:
-//! it runs the unsigned IEx queries and assembles the signed numeral. This is
-//! the faithful §58 "module reused as Φ" pattern — the same one `binarith::eval`
-//! uses — not a bypass: every magnitude is computed by the stellar engine and
-//! every result is decoded back to a number (inspect-don't-trust).
+//! This module is split across two layers with DIFFERENT trust status:
 //!
-//! Oracle = ground `i128`. Truth tokens are `binarith`'s own (`tt`/`ff`) so
-//! `eq`/`lt` are drop-in compatible with KG1a consumers.
+//! **Magnitude layer — genuinely stellar.** `umag_add`/`umag_sub`/
+//! `umag_mul`/`umag_cmp`/`umag_div` build a Horn `Φ` (the KG1a `binarith`
+//! `add`/`mul`/`cmp` stars ⊕ one new borrow-`sub` relation) and run it
+//! through the reference engine (`iex_concealed`). Unsigned `O(#bits)`
+//! binary arithmetic here IS computed by stellar resolution.
 //!
-//! ## Honest status (read this)
+//! **Signed-combination layer — host `i128`, a disclosed bounded
+//! concession.** Every public signed op (`neg`/`add`/`sub`/`mul`/`eq`/
+//! `lt`/`div`) decodes its operands to `i128` via `dsint`, and the SIGNED
+//! semantics — sign of the result, operand ordering, equality, zero
+//! detection, division sign/truncation — are decided on the host with
+//! `i128` operators, not by the engine. `neg` is entirely host
+//! (`dsint → -n → sint`; no stellar step). `eq`/`lt` decide sign/order
+//! on host `i128` (only the same-sign magnitude tiebreak is stellar).
+//! `add`/`mul`/`div` reconstruct the magnitude through
+//! `i128::try_from(..)`, so any value whose magnitude exceeds `i128::MAX`
+//! (~1.7e38) returns `None` — a **hard 128-bit ceiling**: galaxy-scale
+//! products/sums silently fail rather than compute. `dsint` itself caps
+//! at `i128::try_from(mag)`.
 //!
-//! `neg`/`add`/`sub`/`mul`/`eq`/`lt` are **complete and faithful**: each runs
-//! its magnitude arithmetic on the stellar engine (KG1a module ⊕ the new
-//! borrow-`sub` relation) with signed assembly, every result decoded back to a
-//! number. Fast guards (one case per code path) are ungated; wider ranges,
-//! *observed passing but slow on the reference interpreter*, are `#[ignore]`d
-//! behind the documented KG1a/spec-§8 **KS gate** (head-indexed Φ, triangular
-//! subst) — not faked, not deleted (KG1a `*_ks_gated` precedent).
+//! So this is faithful-by-disclosure for the unsigned magnitude relations
+//! and **host arithmetic for the signed layer**, bounded at 128 bits. It
+//! is acceptable here only as the explicitly-disclosed §60-class host
+//! concession the galaxy forcing driver relies on (user-authorised) — NOT
+//! a faithful-by-construction stellar signed-integer implementation, and
+//! NOT arbitrary precision. Making the signed layer genuinely stellar
+//! (no `i128` round-trip, no host sign/order/zero logic, unbounded
+//! magnitude) is the top recorded faithfulness debt for this module
+//! (`docs/07`). Truth tokens are `binarith`'s `tt`/`ff`; the galaxy
+//! driver maps them to church `t`/`f` at one point (`galaxy::galaxy_bool`).
 //!
-//! `div` is **fully implemented and semantically correct** (ICFP-2020
-//! truncate-toward-zero: sign = xor of signs, magnitude = ⌊|x|/|y|⌋ via the
-//! `udiv` repeated-subtract Horn relation; div-by-zero = explicit *stuck*,
-//! `DivResult::DivByZero`, see its doc). **But its stellar evaluation is the
-//! one operation past the reference interpreter even at minimal scale**
-//! (`udiv` over the largest Φ; two tiny cases > 60 s, empirically). Per spec
-//! §8's explicit allowance, the end-to-end stellar `div` table is **KS-gated**
-//! (`div_table_full_ks_gated`, full toward-zero matrix) rather than faked; the
-//! fast `div` guard verifies the sign/truncation logic directly + one minimal
-//! real stellar `div` (`-1/2`, the no-subtract base rule). `div`-by-zero is
-//! fast and ungated. This is the honest N-GAL/KS frontier datum for KG1b.
+//! Test gating: fast guards (one case per path) are ungated; wider ranges
+//! observed-passing-but-slow on the reference interpreter are `#[ignore]`d
+//! behind the spec-§8 KS gate (not faked, not deleted). `div`'s end-to-end
+//! stellar magnitude (`udiv`) is past the reference interpreter even at
+//! `-1/2` scale; `div_table_full_ks_gated` is KS-gated, the fast guard
+//! checks sign/truncation + one minimal real stellar `div`. `div`-by-zero
+//! is explicit-stuck (`DivResult::DivByZero`, ICFP assigns no value).
 
 use crate::binarith;
 use crate::constellation::{Constellation, Star};
@@ -104,6 +111,9 @@ pub fn dsint(t: TermId) -> Option<i128> {
     if mag == 0 {
         return Some(0); // no negative zero, any parity
     }
+    // CEILING: the single 128-bit chokepoint. Magnitude > i128::MAX ⇒ None;
+    // every signed op funnels operands through here, so galaxy-scale values
+    // silently fail rather than compute. See the module-doc faithfulness note.
     let m = i128::try_from(mag).ok()?;
     Some(if negated { -m } else { m })
 }
@@ -289,6 +299,7 @@ fn umag_cmp(a: u128, b: u128, fuel: usize) -> Option<&'static str> {
 /// `neg`: `neg(nat n) ⇒ neg(nat n)` (value), `neg(neg x) ⇒ x`,
 /// `neg(nat 0) ⇒ nat 0`. Pure structural normalisation on the codec.
 pub fn neg(x: TermId) -> Option<TermId> {
+    // HOST: entirely host i128 (no stellar step); bounded to i128 via dsint.
     let n = dsint(x)?;
     Some(sint(-n))
 }
@@ -351,6 +362,7 @@ pub fn mul(x: TermId, y: TermId, fuel: usize) -> Option<TermId> {
 pub fn eq(x: TermId, y: TermId, fuel: usize) -> Option<TermId> {
     let xn = dsint(x)?;
     let yn = dsint(y)?;
+    // HOST: sign/zero decision on host i128; only same-sign magnitude is stellar.
     if xn.signum() != yn.signum() {
         return Some(c("ff"));
     }
@@ -366,6 +378,7 @@ pub fn lt(x: TermId, y: TermId, fuel: usize) -> Option<TermId> {
     let yn = dsint(y)?;
     let tt = || Some(c("tt"));
     let ff = || Some(c("ff"));
+    // HOST: signed-order decision on host i128; only magnitude tiebreak stellar.
     match (xn < 0, yn < 0) {
         (true, false) => tt(),  // any neg < (zero or pos)
         (false, true) => ff(),  // (zero or pos) not < any neg
