@@ -211,17 +211,25 @@ unforced (`Opaque "unforced:…"`) so `multipledraw` honestly returns
 protocol + decoder + codec are all wired and faithful; ONE gap remains
 to a rasterised frame.
 
-**NEXT THREAD = deep-force the image-data payload.** `decode_forced`'s
-`deep_decode` calls `eval_forced` per cons field but the `data` list
-elements don't reduce to cons/nil/num under the current bound (depth
-4096 / budget 50k) — they read back to a non-cons `a/2` (galaxy_dump
-earlier: `data[0]` = an `isnil`-guarded `c/b/s` expr). Post-KG4 the
-Push-form `isnil` IS handled by `strict_redex_on_pi`, so the residual is
-either deeper structure or a decode_forced bound/shape issue — same
-investigate-don't-guess discipline, now with the trustworthy
-readback/decoder as the oracle and the protocol layer ready to consume a
-real frame the moment the data forces. (Perf of deep payload forcing =
-the KS-throughput thread D.) Planned generalization (NOT a blocker):
+**RESOLVED → KG6c (commit 3b50949): it is a THROUGHPUT gap, not a
+correctness one.** `galaxy_data_probe` (guided forced descent — force
+each lazy spine field once, linear, no recursion explosion) measured:
+the ICFP protocol SPINE forces faithfully and cheaply end-to-end —
+`force(entry)`→`cons(flag=0,_)` (4311 steps), `force(tail)`→
+`cons(newState,_)` (14), →`cons(data,nil)` (6), →`cons(img0,rest)`
+(19), all `fully_reduced=true`. The earlier "data won't force" was the
+lazy-tail artifact (cons is a 2-applied VALUE; its fields are thunks
+until demanded — NOT a bug). **Correctness is DONE: galaxy executes
+the protocol; decoder/readback/interact are right (they honestly
+refused to fake a frame).** The ONE remaining gap to a rasterised
+frame: forcing a single image element `data[0]` does NOT terminate in
+150s @ fuel=2M/maxf=100k — no panic, no dead-end, just past current
+engine speed. So the blocker is **engine throughput on the image-data
+payload = the KS frontier (thread D) + the recurrent-reduction shape
+the KG8 whistle detector / KG9 §49.50 design target**. Concrete
+engine-merit driver for the acceleration work: the engine must get
+faster on this payload for galaxy to render — no valence framing
+needed. (Perf of deep payload forcing = the KS-throughput thread D.) Planned generalization (NOT a blocker):
 genuinely-stellar fully-general signed arithmetic = the KS stream;
 the native intrinsic is legitimate and disclosed (see §B KG4b framing).
 
