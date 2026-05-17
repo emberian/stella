@@ -27,7 +27,7 @@
 //! `parse_sym_str` reads the prefix ONCE at construction.
 
 use std::fmt;
-use std::sync::{LazyLock, Mutex};
+use std::sync::{Arc, LazyLock, RwLock};
 
 use lasso::{Key, ThreadedRodeo};
 use rustc_hash::FxHashMap;
@@ -170,7 +170,12 @@ pub enum TermData {
     /// A variable `X ∈ V` (§B.1.4).
     Var(Var),
     /// A function application `f(t₁, …, tₙ)` (§B.1.4).
-    App(Sym, Box<[TermId]>),
+    ///
+    /// Args are `Arc<[TermId]>` (not `Box`): the append-only store is
+    /// immutable per `TermId`, so `get` clones in `O(1)` (refcount bump, **no
+    /// heap alloc**) instead of deep-copying a boxed slice on every node visit.
+    /// `Arc<[_]>` hashes/eqs by content ⇒ hash-consing/interning unchanged.
+    App(Sym, std::sync::Arc<[TermId]>),
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -219,7 +224,7 @@ impl TermStore {
     }
 }
 
-static TERM_STORE: LazyLock<Mutex<TermStore>> = LazyLock::new(|| Mutex::new(TermStore::new()));
+static TERM_STORE: LazyLock<RwLock<TermStore>> = LazyLock::new(|| RwLock::new(TermStore::new()));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Public API
@@ -227,12 +232,22 @@ static TERM_STORE: LazyLock<Mutex<TermStore>> = LazyLock::new(|| Mutex::new(Term
 
 /// Intern a `TermData` into the global store and return its `TermId`.
 pub fn mk(data: TermData) -> TermId {
-    TERM_STORE.lock().unwrap().intern(data)
+    // Fast path: shared read lock for the common already-interned case
+    // (no writer contention among the read-heavy engine hot loops).
+    if let TermData::App(..) | TermData::Var(..) = data {
+        if let Some(&id) = TERM_STORE.read().unwrap().map.get(&data) {
+            return id;
+        }
+    }
+    TERM_STORE.write().unwrap().intern(data)
 }
 
 /// Retrieve the `TermData` for a `TermId`.
+///
+/// Shared read lock + `O(1)` clone (App args are `Arc` — refcount bump, no
+/// heap alloc). The store is append-only so the entry is immutable.
 pub fn get(id: TermId) -> TermData {
-    TERM_STORE.lock().unwrap().get(id).clone()
+    TERM_STORE.read().unwrap().get(id).clone()
 }
 
 /// Construct a variable term.
@@ -247,7 +262,7 @@ pub fn mk_var_interned(v: Var) -> TermId {
 
 /// Construct a function application term.
 pub fn mk_app(sym: Sym, args: Vec<TermId>) -> TermId {
-    mk(TermData::App(sym, args.into_boxed_slice()))
+    mk(TermData::App(sym, Arc::from(args)))
 }
 
 /// Convenience: a zero-arity (constant) application with a parsed symbol name.
@@ -263,7 +278,7 @@ pub fn mk_app_str(head: &str, args: Vec<TermId>) -> TermId {
 
 /// Construct from an already-interned `Sym` and args (used by `subst.rs` apply).
 pub fn mk_app_interned(sym: Sym, args: Vec<TermId>) -> TermId {
-    mk(TermData::App(sym, args.into_boxed_slice()))
+    mk(TermData::App(sym, Arc::from(args)))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
