@@ -47,6 +47,7 @@ function loadViz() {
   return vizReady;
 }
 
+
 const esc = (s) =>
   String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
@@ -1050,8 +1051,31 @@ export async function mountExplorer(root, opts = {}) {
           host.appendChild(DGM.field((v.gates || []).map((g) =>
             `[${g.label}(${(g.inputs || []).join(",")})${g.is_output ? ", out" : ""}]`).join(" + "),
             { title: `${(v.gates || []).length} gates` }));
+        } else if (kind === "nfa" || kind === "npda" || kind === "ntm" ||
+                   kind === "atm" || kind === "nfst") {
+          // a real laid-out state graph via the vendored Graphviz; the
+          // async render is sequence-guarded so rapid edits never race.
+          const seq = (host.__seq = (host.__seq || 0) + 1);
+          const cap = document.createElement("div");
+          cap.className = "sf-preview__lab";
+          cap.textContent = "rendering state graph…";
+          host.appendChild(cap);
+          const dot = DGM.automatonDot(kind, v);
+          loadViz().then((viz) => {
+            if (host.__seq !== seq) return;
+            if (!viz) { cap.textContent = "graph renderer unavailable"; return; }
+            // viz-standalone's renderSVGElement may return the element
+            // synchronously or as a promise — normalise with Promise.resolve.
+            return Promise.resolve(viz.renderSVGElement(dot)).then((sv) => {
+              if (host.__seq !== seq) return;
+              styleSvg(sv);
+              sv.classList.add("sf-prev-graph");
+              cap.textContent = "automaton — Φ encodes this machine";
+              host.appendChild(sv);
+            });
+          }).catch(() => { cap.textContent = "graph unavailable"; });
         } else {
-          // automata / tiles — a compact structural snapshot
+          // tiles — a compact structural snapshot
           const box = document.createElement("div");
           box.className = "dgm-tiles";
           const tile = (label, val) => {
@@ -1062,18 +1086,10 @@ export async function mountExplorer(root, opts = {}) {
               { className: "dgm-tile__k", textContent: label }));
             box.appendChild(d);
           };
-          if (v.states) tile("states", v.states.length);
-          if (v.transitions) tile("δ rows", v.transitions.length);
-          if (v.delta) tile("δ rows", v.delta.length);
-          if (v.tile_types) tile("tiles", v.tile_types.length);
-          if (v.word) tile("|word|", v.word.length);
-          if (v.input) tile("|input|", v.input.length);
+          if (v.tile_types) tile("tile types", v.tile_types.length);
+          if (v.positions) tile("positions", v.positions.length);
+          if (v.tau != null && v.tau !== "") tile("τ", v.tau);
           host.appendChild(box);
-          if (v.states && v.states.length) {
-            const f = document.createElement("div"); f.className = "sf-preview__lab";
-            f.textContent = "states: " + v.states.join(" · ");
-            host.appendChild(f);
-          }
         }
       } catch (_) { /* preview is best-effort; never block editing */ }
     }
