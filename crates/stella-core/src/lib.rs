@@ -1,5 +1,6 @@
 pub mod alpha;
 pub mod antiunify;
+pub mod accel_detect;
 pub mod arith;
 pub mod atm;
 pub mod automata;
