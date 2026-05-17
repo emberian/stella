@@ -21,6 +21,31 @@ Measured KS speedups (release, faithful, vs original reference): binarith/Horn
 `iex_eq_iex_fast` byte-identical, `iex_tabled_result_eq_iex` result-equiv,
 20k `matchable_fast` fuzz, antiunify 6/6).
 
+## A0. IN FLIGHT — wider-workstreams coordinated write-swarm (2 agents)
+User opened Fronts 0+1 concurrently (coordinated write-swarm; one-writer
+per file, disjoint NEW files, stable base = HEAD d112520, parent
+forensic-verifies + harvests — never trust self-report, the 2 stale-base
+burns this session are why). Both branched from the clean post-KG6 base.
+- **Front 0** `ad405b51f7c6a8ed8` → NEW `crates/stella-core/src/evaluate.rs`:
+  `evaluate()`/`evaluate_many` + `EvalReport`/`ViabilityReadout` + LIVE
+  differential oracle (`OracleMode`/`OracleStatus`) = the contract the
+  valence search drives millions of times + the Goodhart guard
+  (experiment-validity-critical, §D). Verify: `evaluate::` green incl.
+  the deliberately-unfaithful-fast-path "Divergent" catch test; reads
+  valence/reafference/subjective read-only to align the readout; must
+  NOT modify the engine.
+- **Front 1** `a7e84901442d90098` → NEW
+  `crates/stella-core/src/accel_detect.rs`: Kruskal-whistle recurrence
+  detector + generalizer over a trace (`detect_recurrence`,
+  `is_sound_generalization`, `detect_in_window`, `Whistle`) on the
+  EXISTING `antiunify` KA0 substrate. Foundation for KA2 speculative
+  accel (NOT built here). Verify: `accel_detect::` green incl.
+  positive/negative whistle + soundness + one-unital-NULLARY caution.
+Harvest recipe: read report → `cp` the ONE new file (disjoint ⇒ safe,
+no shared-file stale-base hazard) → add its `pub mod` line to lib.rs
+(parent) → forensic-verify in main tree → clean worktree+branch+prune
+→ commit. Both disjoint ⇒ order-independent.
+
 ## A. BOTH subagents HARVESTED — thread A CLOSED
 - **galaxy_decode** → `490168f` (KG3d). Forensic-verified in main tree.
   Result fed thread B (below).
