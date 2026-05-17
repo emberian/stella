@@ -91,10 +91,22 @@ to numeral `0`; the other resolves **13 nested strict ops** then stalls
 on a *deeper* Push-form `lt`. Residual = arithmetic DEPTH (and/or the
 known `div` frontier), an honest measured stop — NOT a dead end, NOT
 faked. `div` still NOT auto-forced (KG1b: stellar div past KS frontier).
-**Next B = drive the depth:** chase the recursive `lt`/`div` residual
-(deeper budget/fuel, instrument the deepest stall op, decide div policy),
-decoder as the gating oracle, until the first interaction yields a real
-`(flag,newState,data)`. Old decoder-priority note retained below for
+**KG3g (commit 3b5551b) — galaxy's first interaction FULLY EXECUTES.**
+User decisions applied: host-force `div` (disclosed) + drive to first
+render. Root causes (found via env-gated `STELLA_GALAXY_TRACE`): (1)
+`div` excluded everywhere; (2) curried arith branch used non-recursive
+`force_whnf`; (3) THE stall — curried branch spliced raw sbinarith
+`tt`/`ff` into the galaxy term (galaxy consumes booleans as church
+`t`/`f`, no `tt`/`ff` rule ⇒ false NF). All fixed; `sub_fuel` 20k→2M;
+`Forced` gained `final_ray` (result is on π); KAM readback added
+(`st(M,a·b·…)` ≡ `a(a(M,a),b)…`). Measured: `steps=5227 arith_ops=16
+fully_reduced=TRUE`, `decode(readback) = [0 | <a/2>]` ⇒ **protocol
+FLAG = 0** (valid result head). Gates green (galaxy 7 / decode 9 /
+interactive 14 / sbinarith 11). New examples: `galaxy_drive` (driver +
+readback), `galaxy_chase` (operand-tree diag). **Next B = deep
+recursive readback/force of the `<a/2>` tail** = the `(newState,data)`
+payload still in Push/lazy form ⇒ full `(0,newState,[images])` =
+rasterisable first frame. Old decoder-priority note retained below for
 context but the decoder is BUILT (490168f) and is now the oracle.
 
 (Pre-KG3e text, retained for the measured arc:)
