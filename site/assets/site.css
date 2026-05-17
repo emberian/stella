@@ -547,8 +547,33 @@ a:hover { color: var(--accent-hover); }
 }
 .stx-editor textarea:focus { outline: none; border-color: var(--moss); box-shadow: var(--ring), var(--inner-1); }
 .stx-editor__row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.stx-error { font-family: var(--font-mono); font-size: 12.5px; color: var(--mushroom); }
+.stx-validity {
+  font-family: var(--font-mono); font-size: 12px; padding: 4px 10px;
+  border-radius: 999px; white-space: nowrap;
+}
+.stx-validity.is-ok {
+  color: color-mix(in oklab, var(--moss) 80%, var(--ink));
+  background: var(--accent-soft);
+}
+.stx-validity.is-err {
+  color: color-mix(in oklab, var(--mushroom) 82%, var(--ink));
+  background: var(--danger-soft);
+}
+.stx-kbd {
+  font-family: var(--font-mono); font-size: 10px; margin-left: 8px;
+  padding: 1px 5px; border-radius: var(--r-1);
+  background: color-mix(in oklab, var(--parchment) 22%, transparent);
+}
+.stx-frame {
+  font-family: var(--font-mono); font-size: 12.5px; line-height: 1.45;
+  background: var(--canopy); color: var(--parchment);
+  border: 1px solid color-mix(in oklab, var(--mushroom) 45%, transparent);
+  border-radius: var(--r-2); padding: 10px 12px; margin: 0;
+  white-space: pre; overflow-x: auto;
+}
+.stx-frame[hidden] { display: none; }
 .stx-syntax { font-family: var(--font-body); font-size: 12.5px; color: var(--fg-3); margin: 0; }
+.stx-syntax a { color: var(--moss); }
 
 .stx-controls {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;

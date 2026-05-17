@@ -4,6 +4,7 @@ export const memory: WebAssembly.Memory;
 export const get_preset_dot: (a: number) => [number, number];
 export const get_preset_steps: (a: number) => [number, number];
 export const list_presets: () => [number, number];
+export const parse_check: (a: number, b: number, c: number, d: number) => [number, number];
 export const preset_count: () => number;
 export const run_path: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
 export const run_source: (a: number, b: number, c: number, d: number) => [number, number];
