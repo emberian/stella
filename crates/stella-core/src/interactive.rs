@@ -282,6 +282,49 @@ fn mat_phi_c_accel(
     result
 }
 
+/// Existence-only variant of [`mat_phi_c_accel`]: returns `true` iff the match
+/// list would be non-empty. Early-exits on the first matchable candidate — no
+/// `Vec` allocation, no sort. Faithful: `any_match_accel(..)` ≡
+/// `!mat_phi_c_accel(..).is_empty()` by construction (same colour gate, same
+/// candidate set, same `matchable` test). Used by the per-step *selection*
+/// scan (which only needs existence); full enumeration stays in
+/// [`mat_phi_c_accel`] for the chosen redex.
+fn any_match_accel(
+    accel: &IexAccel,
+    phi: &Constellation,
+    r: Term,
+    psi_csyms: &FxHashSet<crate::term::Sym>,
+) -> bool {
+    if let Some(s) = ray_csym(r) {
+        if !accel.phi_csyms.contains(&s) && !psi_csyms.contains(&s) {
+            return false;
+        }
+    }
+    let (name, pol) = match get(r) {
+        TermData::App(sym, _) => (sym.name, sym.pol),
+        _ => return false,
+    };
+    for &(i, j) in accel.idx.candidates(name, pol) {
+        let ray = phi[i][j];
+        if ray_polarity(ray) == Polarity::Neutral {
+            continue;
+        }
+        if matchable(r, ray) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Existence-only self-interaction check — early-exit analogue of
+/// `!mat_self(star, j).is_empty()` (no `Vec`).
+fn any_self(star: &Star, j: usize) -> bool {
+    let r = star[j];
+    star.iter()
+        .enumerate()
+        .any(|(jk, &ray)| jk != j && matchable(r, ray))
+}
+
 /// Ψ colours as an interned-`Sym` set (allocation-free analogue of
 /// `all_colours(&psi)`), computed **once per step**.
 fn psi_csyms(psi: &[Star]) -> FxHashSet<crate::term::Sym> {
@@ -539,7 +582,8 @@ static KS_PROF: std::sync::LazyLock<bool> =
     std::sync::LazyLock::new(|| std::env::var("STELLA_KS_PROF").as_deref() == Ok("1"));
 
 thread_local! {
-    static T_SCAN: std::cell::Cell<f64> = const { std::cell::Cell::new(0.0) };
+    static T_PSICS: std::cell::Cell<f64> = const { std::cell::Cell::new(0.0) };
+    static T_FIND: std::cell::Cell<f64> = const { std::cell::Cell::new(0.0) };
     static T_FRESH: std::cell::Cell<f64> = const { std::cell::Cell::new(0.0) };
     static T_FUSE: std::cell::Cell<f64> = const { std::cell::Cell::new(0.0) };
 }
@@ -612,10 +656,10 @@ fn is_normal_form_accel(accel: &IexAccel, phi: &Constellation, psi: &[Star]) -> 
             if ray_polarity(r) == Polarity::Neutral {
                 continue;
             }
-            if !mat_phi_c_accel(accel, phi, r, &psi_cs).is_empty() {
+            if any_match_accel(accel, phi, r, &psi_cs) {
                 return false;
             }
-            if !mat_self(star, j).is_empty() {
+            if any_self(star, j) {
                 return false;
             }
         }
@@ -633,25 +677,28 @@ pub fn iex_fast(phi: &Constellation, psi_init: Vec<Star>, fuel: usize) -> IExRes
     let mut steps = 0;
 
     while steps < fuel {
+        let tp = std::time::Instant::now();
         let psi_cs = psi_csyms(&psi);
+        ks_add(&T_PSICS, tp.elapsed());
 
+        let ts = std::time::Instant::now();
         let mut found_step = None;
         'outer: for (i, star) in psi.iter().enumerate() {
             for (j, &r) in star.iter().enumerate() {
                 if ray_polarity(r) == Polarity::Neutral {
                     continue;
                 }
-                let has_ext = !mat_phi_c_accel(&accel, phi, r, &psi_cs).is_empty();
-                let has_self = !mat_self(star, j).is_empty();
-                if has_ext || has_self {
+                if any_match_accel(&accel, phi, r, &psi_cs) || any_self(star, j) {
                     found_step = Some((i, j));
                     break 'outer;
                 }
             }
         }
+        ks_add(&T_FIND, ts.elapsed());
 
         match found_step {
             None => {
+                ks_report(steps);
                 return IExResult { psi, is_normal_form: true, steps };
             }
             Some((i, j)) => {
@@ -662,7 +709,25 @@ pub fn iex_fast(phi: &Constellation, psi_init: Vec<Star>, fuel: usize) -> IExRes
     }
 
     let nf = is_normal_form_accel(&accel, phi, &psi);
+    ks_report(steps);
     IExResult { psi, is_normal_form: nf, steps }
+}
+
+/// Print + reset the env-gated phase profile (no-op unless `STELLA_KS_PROF=1`).
+fn ks_report(steps: usize) {
+    if !*KS_PROF {
+        return;
+    }
+    let p = T_PSICS.with(|c| c.replace(0.0));
+    let s = T_FIND.with(|c| c.replace(0.0));
+    let f = T_FRESH.with(|c| c.replace(0.0));
+    let u = T_FUSE.with(|c| c.replace(0.0));
+    let tot = p + s + f + u;
+    let pc = |x: f64| 100.0 * x / tot.max(1e-12);
+    eprintln!(
+        "[KS-PROF] steps={steps} psics={p:.4}s ({:.0}%) find={s:.4}s ({:.0}%) freshen={f:.4}s ({:.0}%) fuse={u:.4}s ({:.0}%) tot={tot:.4}s",
+        pc(p), pc(s), pc(f), pc(u),
+    );
 }
 
 /// Apply **one** resolution step at an explicitly chosen ray `Ψ[i][j]`

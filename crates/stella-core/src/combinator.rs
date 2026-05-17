@@ -56,7 +56,7 @@
 //! call-by-name is correct; sharing is excluded from the faithful core, spec §3).
 
 use crate::constellation::{Constellation, Star};
-use crate::interactive::iex;
+use crate::interactive::iex_fast as iex;
 use crate::term::{self, TermId};
 
 // ─────────────────────────────────────────────────────────────────────────────

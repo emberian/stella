@@ -34,7 +34,7 @@
 //!   `ℕ` only. `neg`/`div` deferred with the binary representation.
 
 use crate::constellation::{Constellation, Star};
-use crate::interactive::iex_concealed;
+use crate::interactive::iex_fast_concealed as iex_concealed;
 use crate::polarised::{neg_ray, pos_ray};
 use crate::term::{self, Term, TermId};
 
