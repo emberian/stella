@@ -394,20 +394,32 @@ reframed to proven multiset result-equivalence, theory-modulo+Z3. Thread
 closed. (Housekeeping also done: galaxy_drive dead code dropped + 4
 orphaned worktrees cleaned, commit 581eca2.)
 
-## J2. IN FLIGHT — Stage 0 validator (write-agent a621775a367abb4e5)
-`crates/stella-core/src/faithfulness.rs` (NEW disjoint, read-only on
-engine): `psi_compatible` decision-only validator (conceal→canonical→
-multiset) + Stage-0 bootstrap (B0a on byte-identical iex/iex_fast must
-pass; B0b Goodhart negatives must fail incl. the duplicate-answer
-multiset case) + `ObsRecord` (the obs-equivalence corpus artifact —
-docs/07 §G substrate, capture-not-discard; persistence opt-in/inert).
-Also resolves docs/09 §G.5 empirically (does conceal(iex) ever yield
-duplicate canonical stars on the corpora → multiset vs set). Harvest:
-forensic-verify HARD (it is THE faithfulness instrument — the bootstrap
-must actually prove it; never trust self-report) → wire `pub mod` →
-commit. Then parent does docs/09 Stages 1–3 (hot path, one-writer).
-Pending user nod: docs/09 §G.4 (byte-identity → proven-validator is the
-right Eng story; recorded as consistent w/ §H, awaiting explicit ok).
+## J2. ✅ DONE — Stage 0 validator (commit 259befa, FORENSIC-VERIFIED)
+`crates/stella-core/src/faithfulness.rs`: `psi_compatible` =
+conceal_and_filter → antiunify::canonical → **multiset** equality,
+decision-only, no witness. 5/5 tests, independently re-run in main tree
+(76.9s) AND bootstrap bodies READ (not trusted): B0a drives real
+iex/iex_fast on horn/skk/binarith/galaxy (must accept the byte-identical
+pair — no false negatives); B0b catches extra/missing/**duplicate**/
+structural-perturb, accepts α-rename, and *asserts the old set-test
+would have passed the duplicate* → the multiset strengthening is
+non-vacuous. `ObsRecord` delivered inert (obs-corpus now capturable,
+§G substrate). The unifier rework is now gated by a PROVEN instrument.
+- **§G.4 SETTLED (user-confirmed):** byte-identity → proven multiset
+  result-equivalence is the faithfulness story (verified-speculative-
+  runtime, §H). Closed; do not re-litigate.
+- **§G.5 RESOLVED (empirical):** NO duplicate canonical visible stars on
+  any standing corpus ⇒ multiset == set there ⇒ the multiset gate is
+  free for BOTH Fast and Tabled tiers; NO `psi_compatible_setwise`
+  fallback. (Caveat: bounded-fuel galaxy entry, not full Φ=405 — the
+  question was posed over the standing corpora.)
+Next = parent does docs/09 Stages 1–3 (hot path, one-writer): Stage 1
+`unify_fast.rs` (triangular UF, deferred occurs-check) behind the fast
+tier, gated by `psi_compatible` + the standing corpus harness; Stage 2
+delete byte-identity scaffolding (the `*counter+=1` parity hack);
+Stage 3 +varsig+size metadata. Each stage: KS-PROF galaxy Φ=405 before/
+after (unify% must drop from ≈53%) + a deliberately-wrong-unifier
+falsifier the validator must catch.
 
 ## NEXT ACTIONS (priority order)
 1. ~~Harvest both A agents~~ DONE (490168f galaxy_decode, 308189f
