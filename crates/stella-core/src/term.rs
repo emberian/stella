@@ -241,6 +241,13 @@ pub type Term = TermId;
 struct TermStore {
     map: FxHashMap<TermData, TermId>,
     vec: Vec<TermData>,
+    /// Per-node "is this term variable-free", computed once at intern time
+    /// (O(1): a `Var` is non-ground; an `App` is ground iff every arg is —
+    /// args are interned before their parent so their bit is already set).
+    /// Lets `Substitution::apply` return a ground subterm in O(1) instead of
+    /// re-walking it (galaxy's δ-bodies are huge ground terms). Behaviour-
+    /// identical: `θ` applied to a variable-free term is that same term.
+    ground: Vec<bool>,
 }
 
 impl TermStore {
@@ -248,6 +255,7 @@ impl TermStore {
         Self {
             map: FxHashMap::default(),
             vec: Vec::new(),
+            ground: Vec::new(),
         }
     }
 
@@ -256,7 +264,14 @@ impl TermStore {
             return id;
         }
         let id = TermId(self.vec.len() as u32);
+        let is_ground = match &data {
+            TermData::Var(_) => false,
+            TermData::App(_, args) => {
+                args.iter().all(|a| self.ground[a.0 as usize])
+            }
+        };
         self.vec.push(data.clone());
+        self.ground.push(is_ground);
         self.map.insert(data, id);
         id
     }
@@ -290,6 +305,13 @@ pub fn mk(data: TermData) -> TermId {
 /// heap alloc). The store is append-only so the entry is immutable.
 pub fn get(id: TermId) -> TermData {
     TERM_STORE.read().unwrap().get(id).clone()
+}
+
+/// `true` iff `id` is variable-free (cached per node at intern time, O(1)).
+/// A substitution applied to a ground term is the identity, so callers may
+/// short-circuit on this without changing any result.
+pub fn is_ground(id: TermId) -> bool {
+    TERM_STORE.read().unwrap().ground[id.0 as usize]
 }
 
 /// Construct a variable term.

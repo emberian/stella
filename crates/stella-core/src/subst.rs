@@ -45,6 +45,13 @@ impl Substitution {
 
     /// Apply `θ` to a term (§B.1.7).
     pub fn apply(&self, id: TermId) -> TermId {
+        // A variable-free term is unaffected by any θ — return it in O(1)
+        // instead of re-walking/​rebuilding it. Galaxy δ-bodies are huge
+        // ground terms fused on every step; this is the dominant `fuse`
+        // cost (KS-PROF: fuse ≈ 82% at Φ=405). Behaviour-identical.
+        if crate::term::is_ground(id) {
+            return id;
+        }
         match get(id) {
             TermData::Var(v) => self.0.get(&v).copied().unwrap_or(id),
             TermData::App(sym, args) => {
