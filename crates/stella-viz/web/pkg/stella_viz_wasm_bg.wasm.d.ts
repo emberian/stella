@@ -5,6 +5,7 @@ export const get_preset_dot: (a: number) => [number, number];
 export const get_preset_steps: (a: number) => [number, number];
 export const list_presets: () => [number, number];
 export const preset_count: () => number;
+export const run_source: (a: number, b: number, c: number, d: number) => [number, number];
 export const _start: () => void;
 export const __wbindgen_free: (a: number, b: number, c: number) => void;
 export const __wbindgen_malloc: (a: number, b: number) => number;

@@ -19,6 +19,8 @@
 use wasm_bindgen::prelude::*;
 
 use crate::presets::{all_presets, all_step_data};
+use crate::stepper::{capture_steps, StepSnapshot};
+use stella_core::parse::parse_constellation;
 
 // Install a human-readable panic hook so browser console shows Rust panics.
 #[wasm_bindgen(start)]
@@ -100,20 +102,77 @@ pub fn get_preset_steps(idx: usize) -> String {
         return "[]".to_string();
     }
     let sd = &step_data[idx];
-    let items: Vec<String> = sd.steps.iter().map(|s| {
-        let psi_arr: Vec<String> = s.psi_stars.iter()
-            .map(|star| json_str(star))
-            .collect();
-        format!(
-            "{{\"step\":{},\"psi_stars\":[{}],\"active_ray\":{},\"dot\":{},\"is_final\":{}}}",
-            s.step,
-            psi_arr.join(","),
-            json_str(&s.active_ray),
-            json_str(&s.dot),
-            s.is_final
-        )
-    }).collect();
+    steps_json(&sd.steps)
+}
+
+/// Serialize one snapshot, including the redex set and the next MGU.
+fn snapshot_json(s: &StepSnapshot) -> String {
+    let psi: Vec<String> = s.psi_stars.iter().map(|x| json_str(x)).collect();
+    let fire: Vec<String> = s
+        .fireable
+        .iter()
+        .map(|f| {
+            let tg: Vec<String> = f.targets.iter().map(|t| json_str(t)).collect();
+            format!(
+                "{{\"star\":{},\"ray\":{},\"ray_str\":{},\"kind\":{},\"targets\":[{}],\"is_next\":{}}}",
+                f.star,
+                f.ray,
+                json_str(&f.ray_str),
+                json_str(&f.kind),
+                tg.join(","),
+                f.is_next
+            )
+        })
+        .collect();
+    let mgu: Vec<String> = s
+        .mgu
+        .iter()
+        .map(|(v, t)| format!("[{},{}]", json_str(v), json_str(t)))
+        .collect();
+    format!(
+        "{{\"step\":{},\"psi_stars\":[{}],\"active_ray\":{},\"dot\":{},\"is_final\":{},\"fireable\":[{}],\"mgu\":[{}]}}",
+        s.step,
+        psi.join(","),
+        json_str(&s.active_ray),
+        json_str(&s.dot),
+        s.is_final,
+        fire.join(","),
+        mgu.join(",")
+    )
+}
+
+fn steps_json(steps: &[StepSnapshot]) -> String {
+    let items: Vec<String> = steps.iter().map(snapshot_json).collect();
     format!("[{}]", items.join(","))
+}
+
+/// Parse and run a user-supplied constellation. `phi_src` is the reference
+/// constellation Φ; `psi_src` is the initial interaction space Ψ. Returns
+/// `{"ok":true,"steps":[…]}` or `{"ok":false,"error":"…","pos":N}`.
+#[wasm_bindgen]
+pub fn run_source(phi_src: &str, psi_src: &str) -> String {
+    let phi = match parse_constellation(phi_src) {
+        Ok(p) => p,
+        Err(e) => {
+            return format!(
+                "{{\"ok\":false,\"where\":\"Φ\",\"error\":{},\"pos\":{}}}",
+                json_str(&e.msg),
+                e.pos
+            )
+        }
+    };
+    let psi = match parse_constellation(psi_src) {
+        Ok(p) => p,
+        Err(e) => {
+            return format!(
+                "{{\"ok\":false,\"where\":\"Ψ\",\"error\":{},\"pos\":{}}}",
+                json_str(&e.msg),
+                e.pos
+            )
+        }
+    };
+    let steps = capture_steps(&phi, psi, 300);
+    format!("{{\"ok\":true,\"steps\":{}}}", steps_json(&steps))
 }
 
 /// Return the number of available presets.

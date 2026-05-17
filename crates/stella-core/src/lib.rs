@@ -14,6 +14,7 @@ pub mod mll;
 pub mod mll2i;
 pub mod strategy;
 pub mod interactive;
+pub mod parse;
 pub mod pda;
 pub mod polarised;
 pub mod subst;

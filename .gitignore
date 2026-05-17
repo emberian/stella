@@ -17,3 +17,5 @@ hol/.hol
 site/r/
 site/pkg/
 site/content/
+site/sitemap.xml
+site/robots.txt

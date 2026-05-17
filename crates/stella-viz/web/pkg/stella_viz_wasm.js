@@ -73,6 +73,31 @@ export function preset_count() {
     const ret = wasm.preset_count();
     return ret >>> 0;
 }
+
+/**
+ * Parse and run a user-supplied constellation. `phi_src` is the reference
+ * constellation Φ; `psi_src` is the initial interaction space Ψ. Returns
+ * `{"ok":true,"steps":[…]}` or `{"ok":false,"error":"…","pos":N}`.
+ * @param {string} phi_src
+ * @param {string} psi_src
+ * @returns {string}
+ */
+export function run_source(phi_src, psi_src) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(phi_src, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(psi_src, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.run_source(ptr0, len0, ptr1, len1);
+        deferred3_0 = ret[0];
+        deferred3_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
 function __wbg_get_imports() {
     const import0 = {
         __proto__: null,
