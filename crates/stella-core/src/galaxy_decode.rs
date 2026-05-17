@@ -63,40 +63,25 @@ pub enum GValue {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Numeral decode (signed) — local; there is no `sbinarith` in this tree.
+// Numeral decode (signed) — delegate to the canonical sbinarith codec
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Decode a galaxy signed numeral. Tries [`crate::binarith::denat`]
-/// (non-negative `bz`/`o0`/`o1`) first; otherwise an `App("neg",[ <nat> ])`
-/// placeholder ⇒ `-nat`. Returns `None` if the term is not a numeral shape.
-///
-/// (The originating spec named this `sbinarith::dsint`; no such module exists
-/// in this tree — galaxy encodes non-negatives via `binarith::nat` and
-/// negatives via the `neg(_)` placeholder, so the signed decode is composed
-/// here from `binarith::denat`.)
+/// Decode a galaxy signed numeral. Delegates to [`crate::sbinarith::dsint`],
+/// the single canonical signed codec, so the decoder accepts exactly what the
+/// engine produces — including nested `neg(neg(..))` (parity-folded) and
+/// `neg(nat 0)` canonicalised to `0`. (A previous local copy only handled a
+/// single `neg` layer and so mis-decoded those as `Opaque`.) Shares the
+/// documented host-`i128` ceiling of `sbinarith` — see that module's
+/// faithfulness-boundary note.
 fn dsint(t: TermId) -> Option<i128> {
-    if let Some(n) = crate::binarith::denat(t) {
-        return i128::try_from(n).ok();
-    }
-    if let TermData::App(sym, args) = get(t) {
-        if sym.name.as_str() == "neg" && args.len() == 1 {
-            let mag = crate::binarith::denat(args[0])?;
-            let mag = i128::try_from(mag).ok()?;
-            return Some(-mag);
-        }
-    }
-    None
+    crate::sbinarith::dsint(t)
 }
 
-/// Encode a signed integer the way galaxy does — non-negative via
-/// [`crate::binarith::nat`], negative via the `neg(nat(mag))` placeholder.
-/// Test/round-trip helper (the spec's `sbinarith::sint`).
+/// Encode a signed integer the way galaxy does (the canonical
+/// [`crate::sbinarith::sint`]): non-negative → `binarith::nat`, negative →
+/// `neg(nat(mag))`. Test/round-trip helper.
 pub fn sint(n: i128) -> TermId {
-    if n >= 0 {
-        crate::binarith::nat(n as u128)
-    } else {
-        crate::term::mk_app_str("neg", vec![crate::binarith::nat((-n) as u128)])
-    }
+    crate::sbinarith::sint(n)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -148,12 +133,19 @@ fn head_tag(t: TermId) -> String {
 /// Decode one term, recursively and totally.
 ///
 /// Order matters (and is faithful):
+/// 0. **readback-aware**: if `t` is a Push-form process ray
+///    `+P(st(M,π))`, fold π back into applicative form first
+///    ([`crate::galaxy::readback_ray`]) — the KAM leaves results in
+///    Push-stack form and the cons recognisers below are applicative.
+///    Idempotent on a plain applicative term (readback returns it
+///    unchanged), so it is safe in the recursive head/tail calls too.
 /// 1. numeral (signed) — try first, so a `neg(nat n)` never looks like an atom;
 /// 2. `nil` atom → [`GValue::Nil`];
 /// 3. cons-cell shape → [`GValue::Cons`] of decoded head/tail;
 /// 4. any other 0-ary atom → [`GValue::Atom`];
 /// 5. anything else → [`GValue::Opaque`] (`head/arity` tag) — never coerced.
 pub fn decode(t: TermId) -> GValue {
+    let t = crate::galaxy::readback_ray(t);
     if let Some(n) = dsint(t) {
         return GValue::Num(n);
     }
@@ -188,124 +180,109 @@ fn unwrap_process_ray(r: TermId) -> Option<(TermId, TermId)> {
     Some((a2[0], a2[1]))
 }
 
-/// Score: size of the largest list-ish (nil / cons-cell) structure rooted at
-/// `t`, scanning *all* subterms. `nil` and a non-list leaf both score 0/…;
-/// a cons-cell scores `1 + max(child scores)` so the *outermost, deepest*
-/// list wins. Used purely to pick the best decode root — never asserts.
-fn list_score(t: TermId) -> usize {
-    // Iterative; galaxy continuations can nest very deep.
-    fn cell_depth(t: TermId) -> usize {
-        let mut best = 0usize;
-        let mut stack = vec![(t, 0usize)];
-        while let Some((cur, _d)) = stack.pop() {
-            if is_nil(cur) {
-                continue;
-            }
-            if let Some((h, tl)) = as_cons_cell(cur) {
-                best += 1; // count every reachable cons-cell on any path
-                stack.push((h, 0));
-                stack.push((tl, 0));
-            }
-        }
-        best
-    }
-    cell_depth(t)
+/// Decode a process ray directly: KAM-readback (`+P(st(M,π))` ≡ the term
+/// `M` applied to π's frames) then [`decode`]. This is the correct
+/// extraction now that the KAM leaves the result `(flag,newState,data)` in
+/// Push-stack form on π — it replaces the old "largest cons subtree"
+/// heuristic, which demonstrably selected a spurious tiny island
+/// (`[0,[]]`) inside the frozen continuation. No search, no guessing: the
+/// KAM denotation IS the readback.
+pub fn decode_ray(ray: TermId) -> GValue {
+    decode(crate::galaxy::readback_ray(ray))
 }
 
-/// Walk every subterm of `root`; return the subterm with the highest
-/// [`list_score`] (ties → the first encountered in pre-order, i.e. the
-/// outermost). Always returns *some* term (worst case `root` itself).
-fn best_list_subterm(root: TermId) -> TermId {
-    let mut best = root;
-    let mut best_score = 0usize;
-    let mut stack = vec![root];
-    let mut seen = std::collections::HashSet::new();
-    while let Some(t) = stack.pop() {
-        if !seen.insert(t) {
-            continue;
-        }
-        let sc = if is_nil(t) {
-            1 // a bare nil still beats a non-list root
-        } else if as_cons_cell(t).is_some() {
-            1 + list_score(t)
-        } else {
-            0
-        };
-        if sc > best_score {
-            best_score = sc;
-            best = t;
-        }
-        if let TermData::App(_, args) = get(t) {
-            for &a in args.iter() {
-                stack.push(a);
-            }
-        }
-    }
-    best
-}
-
-/// Decode the value produced by a finished process Ψ.
+/// Decode the value produced by a finished process Ψ. Locate the single
+/// process ray `+P(st(M,π))` ([`unwrap_process_ray`], polarity-agnostic on
+/// head name `P`, first in Ψ order; multi-ray stars tolerated), then
+/// [`decode_ray`] it. Total: no ray ⇒ `Opaque`.
 ///
-/// # Heuristic (documented precisely; the decode itself never lies)
-///
-/// 1. Find the single-ray star whose lone ray is `+P(st(M, π))`
-///    (via [`unwrap_process_ray`], polarity-agnostic on head name `P`,
-///    matching `combinator::read_value`). If several exist, the **first** in
-///    Ψ order is taken. If none exists, fall back to the first ray of the
-///    first star in Ψ (so the function is still total).
-/// 2. Prefer `M`: if `M` is itself list-ish (`nil` or a cons-cell), decode
-///    `M` directly — that is the clean, expected case.
-/// 3. Otherwise the answer is on the continuation: scan **the whole ray**
-///    (`App("P",[App("st",[M,π])])`, i.e. both `M` and `π` and everything
-///    nested) for the subterm with the largest reachable nil/cons-cell
-///    structure ([`best_list_subterm`] / [`list_score`]) and decode that.
-///    Ties resolve to the outermost (pre-order-first) subterm.
-/// 4. If no star matched at all in step 1, decode the chosen fallback ray
-///    whole via the same step-3 search.
-///
-/// This is a *best-effort legibility* heuristic, not a correctness oracle: it
-/// surfaces the biggest list-shaped thing the engine left behind so a human
-/// can judge whether the galaxy actually produced a sensible value.
+/// This is a *shallow* decode — it does NOT force lazy/Push-form
+/// sub-structure, so a lazily-unbuilt payload field shows as `Opaque`.
+/// For the fully-forced protocol triple use [`decode_forced`].
 pub fn decode_result(psi: &[crate::constellation::Star]) -> GValue {
-    // Step 1: locate the process ray.
-    let mut process: Option<(TermId, TermId, TermId)> = None; // (ray, M, π)
+    let mut ray: Option<TermId> = None;
     'find: for star in psi {
-        if star.len() != 1 {
-            continue;
-        }
-        if let Some((m, pi)) = unwrap_process_ray(star[0]) {
-            process = Some((star[0], m, pi));
-            break 'find;
+        if star.len() == 1 {
+            if let Some(_) = unwrap_process_ray(star[0]) {
+                ray = Some(star[0]);
+                break 'find;
+            }
         }
     }
-    // Also tolerate multi-ray stars containing a process ray (defensive).
-    if process.is_none() {
+    if ray.is_none() {
         'find2: for star in psi {
             for &r in star {
-                if let Some((m, pi)) = unwrap_process_ray(r) {
-                    process = Some((r, m, pi));
+                if unwrap_process_ray(r).is_some() {
+                    ray = Some(r);
                     break 'find2;
                 }
             }
         }
     }
+    match ray.or_else(|| psi.first().and_then(|s| s.first()).copied()) {
+        Some(r) => decode_ray(r),
+        None => GValue::Opaque("empty-psi".to_string()),
+    }
+}
 
-    match process {
-        Some((ray, m, _pi)) => {
-            // Step 2: M itself is a clean list value ⇒ decode it directly.
-            if is_nil(m) || as_cons_cell(m).is_some() {
-                return decode(m);
-            }
-            // Step 3: the value is on the continuation — search the whole ray.
-            decode(best_list_subterm(ray))
-        }
-        None => {
-            // Step 4: no process ray at all — be total: search the first ray.
-            match psi.first().and_then(|s| s.first()).copied() {
-                Some(r) => decode(best_list_subterm(r)),
-                None => GValue::Opaque("empty-psi".to_string()),
-            }
-        }
+/// Decode the FULLY-FORCED protocol result. The galaxy result spine is
+/// lazy: `eval_forced` yields only the outer WHNF cons; `newState`/`data`
+/// fields stay as unforced thunks (Push-form). This recursively forces +
+/// reads back each cons field to normal form before decoding — the
+/// trustworthy `(flag,newState,data)` oracle.
+///
+/// Honest bounds (never hangs, never lies): `depth` caps recursion and
+/// `*budget` caps total forced sub-evaluations; a field not resolvable
+/// within the bound (or a genuine non-value residual) decodes as
+/// `Opaque("unforced:…")` — an honest "not reached", never a fabricated
+/// value. Per-field forcing uses the disclosed §60 `eval_forced`
+/// (`fuel`/`max_forcings`), so the sbinarith host-i128 boundary applies.
+pub fn decode_forced(
+    phi: &crate::constellation::Constellation,
+    f: &crate::galaxy::Forced,
+    fuel: usize,
+    max_forcings: usize,
+) -> GValue {
+    let root = f.final_ray.unwrap_or(f.value);
+    let mut budget = 50_000usize;
+    deep_decode(phi, root, fuel, max_forcings, 4096, &mut budget)
+}
+
+/// One node of [`decode_forced`]: force `t` to NF, read it back, and if it
+/// is a cons cell recurse into head/tail (re-forcing each). Numerals / nil
+/// / atoms terminate; a non-value or budget/depth exhaustion ⇒
+/// `Opaque("unforced:…")` (honest, never coerced).
+fn deep_decode(
+    phi: &crate::constellation::Constellation,
+    t: TermId,
+    fuel: usize,
+    max_forcings: usize,
+    depth: usize,
+    budget: &mut usize,
+) -> GValue {
+    if *budget == 0 || depth == 0 {
+        return GValue::Opaque(format!("unforced:{}", head_tag(t)));
+    }
+    *budget -= 1;
+    let f = crate::galaxy::eval_forced(phi, t, fuel, max_forcings);
+    let rb = crate::galaxy::readback_ray(f.final_ray.unwrap_or(f.value));
+    if let Some(n) = dsint(rb) {
+        return GValue::Num(n);
+    }
+    if is_nil(rb) {
+        return GValue::Nil;
+    }
+    if let Some((h, tl)) = as_cons_cell(rb) {
+        return GValue::Cons(
+            Box::new(deep_decode(phi, h, fuel, max_forcings, depth - 1, budget)),
+            Box::new(deep_decode(phi, tl, fuel, max_forcings, depth - 1, budget)),
+        );
+    }
+    match get(rb) {
+        TermData::App(s, a) if a.is_empty() => GValue::Atom(s.name.as_str().to_string()),
+        // Honest "engine did not reduce this to a value", NOT a coerced
+        // Cons/Num — distinguished from a clean Opaque by the prefix.
+        _ => GValue::Opaque(format!("unforced:{}", head_tag(rb))),
     }
 }
 
@@ -480,18 +457,39 @@ mod tests {
     }
 
     #[test]
-    fn decode_result_finds_value_in_continuation() {
-        // Build a finished process whose M is NOT a list but π carries the
-        // real list — decode_result must find it on the continuation.
-        let list = cell(sint(9), cell(sint(8), nil_t())); // [9, 8]
-        let m = mk_app_str("garbage", vec![mk_app_str("x", vec![])]); // non-list M
+    fn decode_result_readback_pushform_cons() {
+        // The KAM leaves a cons RESULT in Push-stack form: head `cons`, its
+        // args on π. `+P(st(cons, 9 · [8] · eps))` denotes `cons 9 [8]` =
+        // the cons value `[9, 8]`. decode_result must KAM-read-back π (not
+        // dig a spurious island out of it — the deleted heuristic's bug).
         let eps = mk_app_str("eps", vec![]);
-        let pi = mk_app_str("dot", vec![list, eps]); // value parked on π
+        let pi = mk_app_str(
+            "dot",
+            vec![sint(9), mk_app_str("dot", vec![cell(sint(8), nil_t()), eps])],
+        );
+        let st = mk_app_str("st", vec![mk_app_str("cons", vec![]), pi]);
+        let ray = mk_app_str("+P", vec![st]);
+        let psi: Vec<crate::constellation::Star> = vec![vec![ray]];
+        assert_eq!(pretty(&decode_result(&psi)), "[9, 8]");
+    }
+
+    #[test]
+    fn decode_result_no_island_lie() {
+        // M is genuinely `garbage(x)` applied to a parked list. The OLD
+        // heuristic lied by surfacing the buried `[9,8]` as "the result";
+        // readback faithfully denotes `garbage(x) [9,8]` ⇒ NOT a clean
+        // list (Opaque), which is the honest answer.
+        let list = cell(sint(9), cell(sint(8), nil_t()));
+        let m = mk_app_str("garbage", vec![mk_app_str("x", vec![])]);
+        let eps = mk_app_str("eps", vec![]);
+        let pi = mk_app_str("dot", vec![list, eps]);
         let st = mk_app_str("st", vec![m, pi]);
         let ray = mk_app_str("+P", vec![st]);
         let psi: Vec<crate::constellation::Star> = vec![vec![ray]];
-        let d = decode_result(&psi);
-        assert_eq!(pretty(&d), "[9, 8]");
+        match decode_result(&psi) {
+            GValue::Opaque(_) => {}
+            other => panic!("readback must NOT fabricate a list; got {other:?}"),
+        }
     }
 
     #[test]
