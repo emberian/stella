@@ -1,6 +1,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
+export const build_machine: (a: number, b: number, c: number, d: number) => [number, number];
 export const get_preset_dot: (a: number) => [number, number];
 export const get_preset_steps: (a: number) => [number, number];
 export const list_presets: () => [number, number];

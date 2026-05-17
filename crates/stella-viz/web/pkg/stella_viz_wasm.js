@@ -5,6 +5,32 @@ export function _start() {
 }
 
 /**
+ * Construction lab: turn a structured machine/proof spec into editable
+ * surface source. `kind` ∈ {nfa,npda,ntm,atm,nfta,nfst,circuit,tiles,
+ * mll,mll2i}; `json` is the spec. Returns
+ * `{"ok":true,"phi":"…","psi":"…"}` or `{"ok":false,"error":"…"}`.
+ * @param {string} kind
+ * @param {string} json
+ * @returns {string}
+ */
+export function build_machine(kind, json) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(kind, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.build_machine(ptr0, len0, ptr1, len1);
+        deferred3_0 = ret[0];
+        deferred3_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
  * Return the dep-graph DOT + execution summary for preset `idx` as JSON:
  * `{"name": "…", "dep_graph_dot": "…", "execution_summary": "…"}`
  *

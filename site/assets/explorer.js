@@ -226,8 +226,38 @@ const TEMPLATE_IDE = `
     <button class="stx-iconbtn" data-role="wsexport" title="Export all workspaces as JSON">export</button>
     <button class="stx-iconbtn" data-role="wsimport" title="Import workspaces JSON">import</button>
     <input type="file" data-role="wsfile" accept="application/json" hidden />
+    <button class="stx-iconbtn" data-role="construct" title="Build a constellation from a machine / proof spec">＋ build</button>
     <button class="stx-iconbtn" data-role="copytrace" title="Copy the whole step-by-step trace">⧉ trace</button>
     <a class="stx-permalink" data-role="permalink" href="#" title="Copy a sharable link">↪ share</a>
+  </div>
+
+  <div class="stx-modal" data-role="cpanel" hidden>
+    <div class="stx-modal__box">
+      <div class="stx-modal__head">
+        <span>Construct a constellation</span>
+        <select class="stx-select stx-select--light" data-role="cclass" aria-label="Machine class">
+          <option value="nfa">NFA — finite automaton</option>
+          <option value="npda">NPDA — pushdown automaton</option>
+          <option value="ntm">NTM — Turing machine</option>
+          <option value="atm">ATM — alternating TM</option>
+          <option value="nfta">NFTA — tree automaton</option>
+          <option value="nfst">NFST — transducer</option>
+          <option value="circuit">Boolean circuit (Ex)</option>
+          <option value="tiles">Tile assembly (Ex)</option>
+          <option value="mll">MLL proof structure (Ex)</option>
+          <option value="mll2i">MLL2I proof structure (Ex)</option>
+        </select>
+        <span class="stx-bar__spacer"></span>
+        <button class="stx-iconbtn" data-role="cclose">✕</button>
+      </div>
+      <textarea class="stx-ta" data-role="cspec" spellcheck="false" wrap="off" rows="14"></textarea>
+      <div class="stx-modal__row">
+        <button class="st-btn st-btn--sm" data-role="cbuild">Build → editor</button>
+        <span class="stx-error" data-role="cerr"></span>
+        <span class="stx-bar__spacer"></span>
+        <span class="stx-syntax">The encoder is Eng-faithful; the result is editable source.</span>
+      </div>
+    </div>
   </div>
 
   <div class="stx-ide">
@@ -297,6 +327,101 @@ const TEMPLATE = (compact) => (compact ? TEMPLATE_INLINE : TEMPLATE_IDE);
 
 // The example library — the editable, pedagogical core. Each entry has a
 // note pointing at *what to watch for*.
+// Worked, valid spec templates for the construction lab (also documentation).
+const CSPEC = {
+  nfa: `{
+  "states": ["q0","q1","q2"],
+  "alphabet": ["0","1"],
+  "initial": ["q0"],
+  "finals": ["q2"],
+  "transitions": [
+    ["q0","0","q0"], ["q0","1","q0"],
+    ["q0","0","q1"], ["q1","0","q2"]
+  ],
+  "word": ["0","0","0"]
+}`,
+  npda: `{
+  "states": ["q0","q1"],
+  "alphabet": ["0","1"],
+  "stack_alphabet": ["Z","0"],
+  "initial": ["q0"],
+  "finals": ["q1"],
+  "transitions": [
+    ["q0","0",null,"q0","0"],
+    ["q0","1","0","q1",null],
+    ["q1","1","0","q1",null]
+  ],
+  "word": ["0","1"]
+}`,
+  ntm: `{
+  "states": ["q0","qa","qr"],
+  "gamma": ["0","1","blank"],
+  "delta": [["q0","blank","qa","blank","S"]],
+  "q0": "q0", "q_accept": "qa", "q_reject": "qr",
+  "input": []
+}`,
+  atm: `{
+  "states": ["q0","qa","qr"],
+  "gamma": ["0","1","blank"],
+  "delta": [["q0","blank","qa","blank","S"]],
+  "q0": "q0", "q_accept": "qa", "q_reject": "qr",
+  "class": { "q0": "E" },
+  "input": []
+}`,
+  nfta: `{
+  "states": ["q1","qb"],
+  "initial": ["q1"],
+  "rules": [
+    {"state":"q1","symbol":"or","successors":["q1","q1"]},
+    {"state":"q1","symbol":"not","successors":["q1"]}
+  ],
+  "leaf_states": ["q1"],
+  "terminal_pairs": [["q1","1"],["q1","0"]],
+  "tree": {"node":["or",[{"node":["not",[{"leaf":"1"}]]},{"leaf":"1"}]]}
+}`,
+  nfst: `{
+  "states": ["q0","q1"],
+  "alphabet": ["a","b"],
+  "output_alphabet": ["a","b"],
+  "initial": ["q0"],
+  "finals": ["q1"],
+  "transitions": [
+    ["q0","a","q0","a"],
+    ["q0","b","q1","b"]
+  ],
+  "word": ["a","b"]
+}`,
+  circuit: `{
+  "gates": [
+    {"label":"1","inputs":[],"outputs":["a"]},
+    {"label":"1","inputs":[],"outputs":["b"]},
+    {"label":"∧","inputs":["a","b"],"outputs":["c"]},
+    {"label":"c","inputs":["c"],"outputs":["z"],"is_output":true}
+  ]
+}`,
+  tiles: `{
+  "tile_types": [
+    {"label":"A","glue_w":"aw","glue_e":"ae","glue_s":"as","glue_n":"an","strengths":[1,1,1,1]}
+  ],
+  "tau": 1,
+  "positions": ["p0"]
+}`,
+  mll: `{
+  "links": [
+    {"kind":"ax","left":0,"right":1},
+    {"kind":"ax","left":2,"right":3},
+    {"kind":"cut","left":1,"right":2}
+  ]
+}`,
+  mll2i: `{
+  "links": [
+    {"kind":"ax","left":0,"right":1},
+    {"kind":"ax","left":2,"right":3},
+    {"kind":"cut","left":1,"right":2}
+  ]
+}`,
+};
+
 const LIBRARY = [
   { group: "Logic programming", items: [
     { name: "Addition — 2 + 2", note: "Peano addition; watch the request peel one s each step.",
@@ -746,6 +871,30 @@ export async function mountExplorer(root, opts = {}) {
     });
 
     $("run").addEventListener("click", runEditor);
+
+    // Construction lab: spec → Eng-faithful constellation → editable source.
+    const cpanel = $("cpanel"), cclass = $("cclass"), cspec = $("cspec"),
+      cerr = $("cerr");
+    const setSpec = () => { cspec.value = CSPEC[cclass.value] || "{}"; cerr.textContent = ""; };
+    $("construct").addEventListener("click", () => {
+      if (!cspec.value.trim()) setSpec();
+      cpanel.hidden = false;
+    });
+    $("cclose").addEventListener("click", () => { cpanel.hidden = true; });
+    cpanel.addEventListener("click", (e) => { if (e.target === cpanel) cpanel.hidden = true; });
+    cclass.addEventListener("change", setSpec);
+    setSpec();
+    $("cbuild").addEventListener("click", () => {
+      cerr.textContent = "";
+      let res;
+      try { res = JSON.parse(mod.build_machine(cclass.value, cspec.value)); }
+      catch (e) { cerr.textContent = "engine error: " + e.message; return; }
+      if (!res.ok) { cerr.textContent = res.error || "build failed"; return; }
+      cpanel.hidden = true;
+      choicePath = [];
+      loadIntoEditor(res.phi, res.psi || "");
+    });
+
     const ct = $("copytrace");
     if (ct) ct.addEventListener("click", () => {
       if (!steps.length) return;

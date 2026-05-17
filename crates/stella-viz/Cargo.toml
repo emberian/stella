@@ -24,6 +24,10 @@ wasm = ["wasm-bindgen", "console_error_panic_hook"]
 [dependencies]
 stella-core = { path = "../stella-core" }
 rustc-hash = "=1.1.0"
+# Construction lab: structured machine/proof specs → constellations. serde is
+# the right tool for ~10 nested schemas; stella-core stays serde-free.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 
 # WASM-only deps — only pulled in when the `wasm` feature is enabled.
 wasm-bindgen     = { version = "0.2", optional = true }

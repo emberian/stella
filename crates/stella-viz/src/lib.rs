@@ -4,6 +4,7 @@
 //! (via the `[[bin]]` target) and the WASM static-site build (via the `[lib]`
 //! cdylib target, gated with `--features wasm`).
 
+pub mod build;
 pub mod presets;
 pub mod stepper;
 

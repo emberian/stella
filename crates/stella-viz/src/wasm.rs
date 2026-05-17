@@ -18,6 +18,7 @@
 
 use wasm_bindgen::prelude::*;
 
+use crate::build::build as build_machine_impl;
 use crate::presets::{all_presets, all_step_data, preset_io};
 use crate::stepper::{capture_path, capture_steps, StepSnapshot};
 use stella_core::constellation::Constellation;
@@ -280,6 +281,22 @@ pub fn run_path(phi_src: &str, psi_src: &str, path: &str, fuel: usize) -> String
         .collect();
     let steps = capture_path(&phi, psi, &chosen, fuel_or(fuel));
     format!("{{\"ok\":true,\"steps\":{}}}", steps_json(&steps))
+}
+
+/// Construction lab: turn a structured machine/proof spec into editable
+/// surface source. `kind` ∈ {nfa,npda,ntm,atm,nfta,nfst,circuit,tiles,
+/// mll,mll2i}; `json` is the spec. Returns
+/// `{"ok":true,"phi":"…","psi":"…"}` or `{"ok":false,"error":"…"}`.
+#[wasm_bindgen]
+pub fn build_machine(kind: &str, json: &str) -> String {
+    match build_machine_impl(kind, json) {
+        Ok((phi, psi)) => format!(
+            "{{\"ok\":true,\"phi\":{},\"psi\":{}}}",
+            json_str(&phi),
+            json_str(&psi)
+        ),
+        Err(e) => format!("{{\"ok\":false,\"error\":{}}}", json_str(&e)),
+    }
 }
 
 /// Return the number of available presets.

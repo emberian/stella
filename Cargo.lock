@@ -790,6 +790,8 @@ version = "0.1.0"
 dependencies = [
  "console_error_panic_hook",
  "rustc-hash",
+ "serde",
+ "serde_json",
  "stella-core",
  "wasm-bindgen",
 ]
