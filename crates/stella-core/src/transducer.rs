@@ -43,7 +43,7 @@ use crate::term::Term;
 // ─────────────────────────────────────────────────────────────────────────────
 
 fn constant(name: &str) -> Term {
-    crate::term::mk_app_str(&name, vec![])
+    crate::term::mk_app_str(name, vec![])
 }
 
 fn pos(neutral: &str, args: Vec<Term>) -> Term {
@@ -110,19 +110,19 @@ fn build_transition_star(
 
     // Negative side: consume `c·W` or bare `W`.
     let input_neg = match c_opt {
-        None => w.clone(),
-        Some(c) => cons(constant(c), w.clone()),
+        None => w,
+        Some(c) => cons(constant(c), w),
     };
 
     // Positive output stack: prepend `c'` to `S` or leave `S` unchanged.
     let stack_pos = match c_prime_opt {
-        None => s.clone(),
-        Some(c_prime) => cons(constant(c_prime), s.clone()),
+        None => s,
+        Some(c_prime) => cons(constant(c_prime), s),
     };
 
     vec![
-        neg("f", vec![input_neg, constant(q), s.clone()]),
-        pos("f", vec![w.clone(), constant(q_prime), stack_pos]),
+        neg("f", vec![input_neg, constant(q), s]),
+        pos("f", vec![w, constant(q_prime), stack_pos]),
     ]
 }
 
@@ -136,8 +136,8 @@ pub fn encode_nfst(fst: &Nfst, n_copies: usize) -> Constellation {
     for q0 in &fst.initial {
         let w = var("W");
         c.push(vec![
-            neg("i", vec![w.clone()]),
-            pos("f", vec![w.clone(), constant(q0), constant("eps")]),
+            neg("i", vec![w]),
+            pos("f", vec![w, constant(q0), constant("eps")]),
         ]);
     }
 
@@ -145,8 +145,8 @@ pub fn encode_nfst(fst: &Nfst, n_copies: usize) -> Constellation {
     for qf in &fst.finals {
         let s = var("S");
         c.push(vec![
-            neg("f", vec![constant("eps"), constant(qf), s.clone()]),
-            s.clone(), // unpolarised output
+            neg("f", vec![constant("eps"), constant(qf), s]),
+            s, // unpolarised output
         ]);
     }
 

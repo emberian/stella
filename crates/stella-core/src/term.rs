@@ -34,7 +34,7 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, LazyLock, RwLock};
 
-use lasso::{Key, ThreadedRodeo};
+use lasso::ThreadedRodeo;
 use rustc_hash::{FxHashMap, FxHasher};
 
 // ─────────────────────────────────────────────────────────────────────────────

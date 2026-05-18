@@ -3676,7 +3676,7 @@ mod tests {
         // mll_one() = {∅}.
         let one = mll_one();
         assert_eq!(one.len(), 1, "1 := {{∅}} has exactly one element");
-        assert!(one.iter().next().map_or(false, |phi| phi.is_empty()),
+        assert!(one.iter().next().is_some_and(|phi| phi.is_empty()),
             "the sole element of 1 is the empty constellation ∅");
     }
 

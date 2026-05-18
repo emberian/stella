@@ -258,7 +258,7 @@ pub mod lm_studio {
 #[cfg(test)]
 mod firewall_tests {
     use super::*;
-    use stella_core::polarised::ray_polarity;
+    
     use stella_core::term::Polarity;
 
     /// A maximally hostile affordance: it *tries* to smuggle a self,

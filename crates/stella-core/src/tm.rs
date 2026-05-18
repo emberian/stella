@@ -127,7 +127,7 @@ pub struct Ntm {
 
 /// Build a zero-arity constant term.
 fn constant(name: &str) -> Term {
-    crate::term::mk_app_str(&name, vec![])
+    crate::term::mk_app_str(name, vec![])
 }
 
 /// Build `+sym(args)`.
@@ -153,7 +153,7 @@ fn rcons_chain(items: &[Term], base: Term) -> Term {
     items
         .iter()
         .rev()
-        .fold(base, |acc, c| crate::term::mk_app_str("rcons", vec![c.clone(), acc]))
+        .fold(base, |acc, c| crate::term::mk_app_str("rcons", vec![*c, acc]))
 }
 
 /// Build a left-associative `●` application (`lcons`):
@@ -239,7 +239,7 @@ pub fn encode_ntm(ntm: &Ntm) -> Constellation {
     {
         let c_var = var("C");
         let w_var = var("W");
-        let input = crate::term::mk_app_str("rcons", vec![c_var.clone(), w_var.clone()]);
+        let input = crate::term::mk_app_str("rcons", vec![c_var, w_var]);
         c.push(vec![
             neg("i", vec![input]),
             pos_m(
@@ -306,8 +306,8 @@ pub fn encode_ntm(ntm: &Ntm) -> Constellation {
                 let l = var("L");
                 let x = var("X");
                 let r = var("R");
-                let lx = lcons_app(l.clone(), x.clone()); // L ● X
-                let cpr = crate::term::mk_app_str("rcons", vec![cp, r.clone()]); // c' ○ R
+                let lx = lcons_app(l, x); // L ● X
+                let cpr = crate::term::mk_app_str("rcons", vec![cp, r]); // c' ○ R
                 vec![
                     neg_m(lx, state(from), c_sym, r),
                     pos_m(l, state(to), x, cpr),
@@ -318,8 +318,8 @@ pub fn encode_ntm(ntm: &Ntm) -> Constellation {
                 let l = var("L");
                 let x = var("X");
                 let r = var("R");
-                let xr = crate::term::mk_app_str("rcons", vec![x.clone(), r.clone()]); // X ○ R
-                let lcp = lcons_app(l.clone(), cp);                             // L ● c'
+                let xr = crate::term::mk_app_str("rcons", vec![x, r]); // X ○ R
+                let lcp = lcons_app(l, cp);                             // L ● c'
                 vec![
                     neg_m(l, state(from), c_sym, xr),
                     pos_m(lcp, state(to), x, r),
@@ -330,7 +330,7 @@ pub fn encode_ntm(ntm: &Ntm) -> Constellation {
                 let l = var("L");
                 let r = var("R");
                 vec![
-                    neg_m(l.clone(), state(from), c_sym, r.clone()),
+                    neg_m(l, state(from), c_sym, r),
                     pos_m(l, state(to), cp, r),
                 ]
             }
@@ -352,7 +352,7 @@ pub fn encode_ntm(ntm: &Ntm) -> Constellation {
         let lhs = constant(BLANK);                               // □
         let rhs = lcons_app(constant(BLANK), constant(BLANK));   // □ ● □
         c.push(vec![
-            neg_m(lhs, q.clone(), cv.clone(), r.clone()),
+            neg_m(lhs, q, cv, r),
             pos_m(rhs, q, cv, r),
         ]);
     }
@@ -365,7 +365,7 @@ pub fn encode_ntm(ntm: &Ntm) -> Constellation {
         let lhs = constant(BLANK);                                                   // □
         let rhs = crate::term::mk_app_str("rcons", vec![constant(BLANK), constant(BLANK)]); // □ ○ □
         c.push(vec![
-            neg_m(l.clone(), q.clone(), cv.clone(), lhs),
+            neg_m(l, q, cv, lhs),
             pos_m(l, q, cv, rhs),
         ]);
     }

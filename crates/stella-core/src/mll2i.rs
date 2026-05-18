@@ -1597,7 +1597,7 @@ pub fn has_epar_cut_cycle(ps: &ProofStructure) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::execution::{aex_seminaive_full, aex_with_copies};
+    use crate::execution::aex_with_copies;
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -1994,7 +1994,6 @@ mod tests {
 
     #[test]
     fn test_debug_epar_r_internal() {
-        use crate::term::get as tget;
         let mut ps = ProofStructure::new();
         ps.add_link(LinkKind::Ax { left: v(1), right: v(2) });
         ps.add_link(LinkKind::Dereliction { input: v(2), output: v(3) });

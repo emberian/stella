@@ -32,7 +32,7 @@ use crate::term::Term;
 // ─────────────────────────────────────────────────────────────────────────────
 
 fn constant(name: &str) -> Term {
-    crate::term::mk_app_str(&name, vec![])
+    crate::term::mk_app_str(name, vec![])
 }
 
 fn pos(neutral: &str, args: Vec<Term>) -> Term {
@@ -80,6 +80,9 @@ pub struct Npda {
     /// Accepting states F.
     pub finals: Vec<String>,
     /// Transition relation: `(from, input_sym_or_ε, stack_top_or_ε, to, stack_push_or_ε)`.
+    // The 5-tuple is kept inline so each slot carries its own doc comment
+    // (clearer here than a separate alias that would lose the per-slot notes).
+    #[allow(clippy::type_complexity)]
     pub transitions: Vec<(
         String,      // q
         Option<String>, // c (None = ε)
@@ -111,25 +114,25 @@ fn build_transition_star(
 
     // Stack pattern: the negative side matches `a·S` or `S`.
     let stack_neg = match a_opt {
-        None => s.clone(),
-        Some(a) => cons(constant(a), s.clone()),
+        None => s,
+        Some(a) => cons(constant(a), s),
     };
 
     // Stack output: the positive side emits `b·S` or `S`.
     let stack_pos = match b_opt {
-        None => s.clone(),
-        Some(b) => cons(constant(b), s.clone()),
+        None => s,
+        Some(b) => cons(constant(b), s),
     };
 
     // Input pattern: the negative side matches `c·W` or `W`.
     let input_neg = match c_opt {
-        None => w.clone(),
-        Some(c) => cons(constant(c), w.clone()),
+        None => w,
+        Some(c) => cons(constant(c), w),
     };
 
     vec![
         neg("p", vec![input_neg, constant(q), stack_neg]),
-        pos("p", vec![w.clone(), constant(q_prime), stack_pos]),
+        pos("p", vec![w, constant(q_prime), stack_pos]),
     ]
 }
 
@@ -144,8 +147,8 @@ pub fn encode_npda(pda: &Npda, n_copies: usize) -> Constellation {
     for q0 in &pda.initial {
         let w = var("W");
         c.push(vec![
-            neg("i", vec![w.clone()]),
-            pos("p", vec![w.clone(), constant(q0), constant("$")]),
+            neg("i", vec![w]),
+            pos("p", vec![w, constant(q0), constant("$")]),
         ]);
     }
 

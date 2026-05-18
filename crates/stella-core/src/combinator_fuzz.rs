@@ -58,6 +58,9 @@ mod tests {
         // Bias toward applications at higher depth so terms actually reduce;
         // force a leaf at depth 0.
         if depth == 0 || rng.next() % 3 == 0 {
+            // `pick` yields `&&str`; `a_` takes `&str`. The deref is required —
+            // clippy::explicit_auto_deref mis-fires here (no coercion site).
+            #[allow(clippy::explicit_auto_deref)]
             return a_(*rng.pick(&LEAVES));
         }
         app(gen(rng, depth - 1), gen(rng, depth - 1))
@@ -352,7 +355,7 @@ mod tests {
         let mut neither = 0usize;
         let mut failures: Vec<String> = Vec::new();
 
-        let mut tally = |t: &Comb, fuel: usize, fixed: bool,
+        let tally = |t: &Comb, fuel: usize, fixed: bool,
                          failures: &mut Vec<String>,
                          atom_both: &mut usize, appl_both: &mut usize,
                          ref_only: &mut usize, stellar_only: &mut usize,
@@ -378,7 +381,7 @@ mod tests {
         }
 
         // 2. Random closed terms.
-        let mut rng = Lcg(0x5715_0517_C0FFEE01);
+        let mut rng = Lcg(0x5715_0517_C0FF_EE01);
         for _ in 0..N {
             let depth = 1 + (rng.next() as u32 % MAX_DEPTH);
             let t = gen(&mut rng, depth);

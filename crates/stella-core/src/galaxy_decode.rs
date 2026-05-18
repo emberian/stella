@@ -202,11 +202,9 @@ pub fn decode_ray(ray: TermId) -> GValue {
 pub fn decode_result(psi: &[crate::constellation::Star]) -> GValue {
     let mut ray: Option<TermId> = None;
     'find: for star in psi {
-        if star.len() == 1 {
-            if let Some(_) = unwrap_process_ray(star[0]) {
-                ray = Some(star[0]);
-                break 'find;
-            }
+        if star.len() == 1 && unwrap_process_ray(star[0]).is_some() {
+            ray = Some(star[0]);
+            break 'find;
         }
     }
     if ray.is_none() {

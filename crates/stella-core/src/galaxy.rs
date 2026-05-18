@@ -51,7 +51,7 @@
 
 use crate::binarith;
 use crate::constellation::{Constellation, Star};
-use crate::term::{self, Term, TermData, TermId};
+use crate::term::{self, TermData, TermId};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // AST

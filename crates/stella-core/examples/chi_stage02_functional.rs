@@ -73,7 +73,7 @@ fn measure(phi: Constellation, psi0: Vec<Star>, step_cap: usize, psi_ceil: usize
         // grows monotonically — never pruned — so a coarse snapshot is
         // still a sound, deeper-is-better prefix DAG; cloning an
         // exploding map every step is what dominated the §49.61 wall).
-        if steps % 8 == 0 || nf_at.is_some() {
+        if steps.is_multiple_of(8) || nf_at.is_some() {
             prov = step.provenance.clone();
         }
         if step.psi_size <= 80 && trace.len() < 400 {

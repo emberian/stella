@@ -1428,7 +1428,7 @@ mod tests {
         let eps  = mk_app_str("eps",  vec![]);
         let ch0  = mk_app_str("0",    vec![]);
         let cons = |ch: Term, rest: Term| mk_app_str("cons", vec![ch, rest]);
-        let w00  = cons(ch0.clone(), cons(ch0.clone(), eps.clone()));
+        let w00  = cons(ch0, cons(ch0, eps));
 
         let word_star: Star = vec![pos_ray("i", vec![w00])];
 
@@ -1437,7 +1437,7 @@ mod tests {
             pos_ray("a",  vec![var("W"), mk_app_str("q0", vec![])]),
         ];
         let fin_: Star = vec![
-            neg_ray("a",  vec![eps.clone(), mk_app_str("q2", vec![])]),
+            neg_ray("a",  vec![eps, mk_app_str("q2", vec![])]),
             mk_app_str("accept", vec![]),
         ];
         let t1: Star = vec![
@@ -2047,7 +2047,6 @@ mod tests {
             let reaches = {
                 // Manual: Provenance::Initial has no parents → cannot reach anything.
                 !matches!(step0.provenance.get(&id_initial), Some(Provenance::Initial))
-                    || false
             };
             assert!(!reaches,
                 "initial star (Provenance::Initial) cannot trace through any ancestor; \
@@ -2267,10 +2266,6 @@ mod tests {
             vec![c("0"), app("·", vec![c("0"), app("·", vec![c("0"), c("ε")])])],
         );
         let phi: Constellation = vec![];
-        let psi0: Vec<Star> = vec![
-            vec![neg_ray("a", vec![zero_w]), pos_ray("a", vec![var("W")])],
-            vec![pos_ray("a", vec![base])],
-        ];
         // A third star on a DISJOINT colour `foo` — no rays matchable to the
         // `a`-stars, so it is its own dep-graph component (no consuming loop).
         let psi0: Vec<Star> = vec![

@@ -125,7 +125,7 @@ pub struct Atm {
 // ─────────────────────────────────────────────────────────────────────────────
 
 fn constant(name: &str) -> Term {
-    crate::term::mk_app_str(&name, vec![])
+    crate::term::mk_app_str(name, vec![])
 }
 
 fn pos(neutral: &str, args: Vec<Term>) -> Term {
@@ -242,7 +242,7 @@ pub fn encode_atm(atm: &Atm) -> Constellation {
     {
         let cv = var("C");
         let w = var("W");
-        let input = rcons(cv.clone(), w.clone());
+        let input = rcons(cv, w);
         c.push(vec![
             neg("i", vec![input]),
             pos_m(constant(BLANK), state(&atm.q0), cv, w),
@@ -297,8 +297,8 @@ pub fn encode_atm(atm: &Atm) -> Constellation {
                         let l = var("L");
                         let x = var("X");
                         let r = var("R");
-                        let lx = lcons_app(l.clone(), x.clone()); // L ● X
-                        let cpr = rcons(cp, r.clone());            // c' ○ R
+                        let lx = lcons_app(l, x); // L ● X
+                        let cpr = rcons(cp, r);            // c' ○ R
                         vec![
                             neg_m(lx, state(from), c_sym, r),
                             pos_m(l, state(to), x, cpr),
@@ -308,8 +308,8 @@ pub fn encode_atm(atm: &Atm) -> Constellation {
                         let l = var("L");
                         let x = var("X");
                         let r = var("R");
-                        let xr = rcons(x.clone(), r.clone()); // X ○ R
-                        let lcp = lcons_app(l.clone(), cp);   // L ● c'
+                        let xr = rcons(x, r); // X ○ R
+                        let lcp = lcons_app(l, cp);   // L ● c'
                         vec![
                             neg_m(l, state(from), c_sym, xr),
                             pos_m(lcp, state(to), x, r),
@@ -319,7 +319,7 @@ pub fn encode_atm(atm: &Atm) -> Constellation {
                         let l = var("L");
                         let r = var("R");
                         vec![
-                            neg_m(l.clone(), state(from), c_sym, r.clone()),
+                            neg_m(l, state(from), c_sym, r),
                             pos_m(l, state(to), cp, r),
                         ]
                     }
@@ -346,11 +346,11 @@ pub fn encode_atm(atm: &Atm) -> Constellation {
                         let l = var("L");
                         let x = var("X");
                         let r = var("R");
-                        let lx = lcons_app(l.clone(), x.clone());
-                        let mut rays = vec![neg_m(lx, state(from), c_sym, r.clone())];
+                        let lx = lcons_app(l, x);
+                        let mut rays = vec![neg_m(lx, state(from), c_sym, r)];
                         for (qi, ci) in branches {
-                            let cir = rcons(sym_term(ci), r.clone()); // cᵢ ○ R
-                            rays.push(pos_m(l.clone(), state(qi), x.clone(), cir));
+                            let cir = rcons(sym_term(ci), r); // cᵢ ○ R
+                            rays.push(pos_m(l, state(qi), x, cir));
                         }
                         rays
                     }
@@ -360,11 +360,11 @@ pub fn encode_atm(atm: &Atm) -> Constellation {
                         let l = var("L");
                         let x = var("X");
                         let r = var("R");
-                        let xr = rcons(x.clone(), r.clone());
-                        let mut rays = vec![neg_m(l.clone(), state(from), c_sym, xr)];
+                        let xr = rcons(x, r);
+                        let mut rays = vec![neg_m(l, state(from), c_sym, xr)];
                         for (qi, ci) in branches {
-                            let lci = lcons_app(l.clone(), sym_term(ci)); // L ● cᵢ
-                            rays.push(pos_m(lci, state(qi), x.clone(), r.clone()));
+                            let lci = lcons_app(l, sym_term(ci)); // L ● cᵢ
+                            rays.push(pos_m(lci, state(qi), x, r));
                         }
                         rays
                     }
@@ -373,9 +373,9 @@ pub fn encode_atm(atm: &Atm) -> Constellation {
                     Dir::S => {
                         let l = var("L");
                         let r = var("R");
-                        let mut rays = vec![neg_m(l.clone(), state(from), c_sym, r.clone())];
+                        let mut rays = vec![neg_m(l, state(from), c_sym, r)];
                         for (qi, ci) in branches {
-                            rays.push(pos_m(l.clone(), state(qi), sym_term(ci), r.clone()));
+                            rays.push(pos_m(l, state(qi), sym_term(ci), r));
                         }
                         rays
                     }
@@ -395,7 +395,7 @@ pub fn encode_atm(atm: &Atm) -> Constellation {
         let lhs = constant(BLANK);
         let rhs = lcons_app(constant(BLANK), constant(BLANK));
         c.push(vec![
-            neg_m(lhs, q.clone(), cv.clone(), r.clone()),
+            neg_m(lhs, q, cv, r),
             pos_m(rhs, q, cv, r),
         ]);
     }
@@ -408,7 +408,7 @@ pub fn encode_atm(atm: &Atm) -> Constellation {
         let lhs = constant(BLANK);
         let rhs = rcons(constant(BLANK), constant(BLANK));
         c.push(vec![
-            neg_m(l.clone(), q.clone(), cv.clone(), lhs),
+            neg_m(l, q, cv, lhs),
             pos_m(l, q, cv, rhs),
         ]);
     }

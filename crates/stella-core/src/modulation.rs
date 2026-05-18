@@ -207,7 +207,7 @@ fn parse(b: &[u8], pos: usize) -> Option<(MVal, usize)> {
 
             let val: i128 = if negative {
                 // -a: representable when a <= |i128::MIN|.
-                if a == (i128::MIN as i128 as u128).wrapping_neg() {
+                if a == (i128::MIN as u128).wrapping_neg() {
                     // a == 2^127 → i128::MIN
                     i128::MIN
                 } else {

@@ -573,7 +573,7 @@ mod tests {
             );
         }
         assert!(
-            sel.len() >= g.defs.len() + 1,
+            sel.len() > g.defs.len(),
             "galaxy: expected ≥ (#defs + Push) unconditional keys"
         );
     }

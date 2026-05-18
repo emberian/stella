@@ -137,8 +137,8 @@ pub fn encode_nfa(nfa: &Nfa) -> Constellation {
     for q0 in &nfa.initial {
         let w = var("W");
         c.push(vec![
-            neg("i", vec![w.clone()]),
-            pos("a", vec![w.clone(), constant(q0)]),
+            neg("i", vec![w]),
+            pos("a", vec![w, constant(q0)]),
         ]);
     }
 
@@ -165,8 +165,8 @@ fn build_transition_star(from: &str, sym_opt: Option<&str>, to: &str) -> Star {
             // ε-transition: [−a(W, q), +a(W, q')]
             let w = var("W");
             vec![
-                neg("a", vec![w.clone(), constant(from)]),
-                pos("a", vec![w.clone(), constant(to)]),
+                neg("a", vec![w, constant(from)]),
+                pos("a", vec![w, constant(to)]),
             ]
         }
         Some(c) => {
@@ -175,7 +175,7 @@ fn build_transition_star(from: &str, sym_opt: Option<&str>, to: &str) -> Star {
             let cw = crate::term::mk_app_str("cons", vec![constant(c), w]);
             vec![
                 neg("a", vec![cw, constant(from)]),
-                pos("a", vec![w.clone(), constant(to)]),
+                pos("a", vec![w, constant(to)]),
             ]
         }
     }
@@ -200,8 +200,8 @@ pub fn nfa_constellation(nfa: &Nfa, word: &[&str], extra_copies: usize) -> Const
     for q0 in &nfa.initial {
         let w = var("W");
         c.push(vec![
-            neg("i", vec![w.clone()]),
-            pos("a", vec![w.clone(), constant(q0)]),
+            neg("i", vec![w]),
+            pos("a", vec![w, constant(q0)]),
         ]);
     }
 

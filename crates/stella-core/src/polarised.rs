@@ -13,7 +13,7 @@ pub use crate::term::{Polarity, Sym, TermId};
 pub type Ray = TermId;
 
 use crate::alpha::alpha_unify_with;
-use crate::term::{get, mk_app, mk_app_str, mk_var, TermData};
+use crate::term::{get, mk_app, mk_app_str, TermData};
 use crate::unify::Compatible;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -257,7 +257,6 @@ fn mf_unify(sa: Side, a: TermId, sb: Side, b: TermId, env: &mut MfEnv) -> bool {
                 .zip(ga.iter())
                 .all(|(&x, &y)| mf_unify(sa, x, sb, y, env))
         }
-        _ => false,
     }
 }
 

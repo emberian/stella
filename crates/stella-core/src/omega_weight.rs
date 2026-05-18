@@ -139,7 +139,7 @@ pub fn constellation_weight(phi: &Constellation) -> i64 {
 /// Panics if `members` is empty (a behaviour has at least one member).
 pub fn behaviour_weight(members: &[Constellation]) -> i64 {
     assert!(!members.is_empty(), "behaviour must have at least one member constellation");
-    members.iter().map(|phi| constellation_weight(phi)).max().unwrap()
+    members.iter().map(constellation_weight).max().unwrap()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

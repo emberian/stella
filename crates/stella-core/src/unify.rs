@@ -21,7 +21,7 @@ use rustc_hash::FxHashSet;
 use std::collections::VecDeque;
 
 use crate::subst::Substitution;
-use crate::term::{get, mk_app_interned, mk_var_interned, Sym, TermData, TermId, Var};
+use crate::term::{get, Sym, TermData, TermId, Var};
 
 /// An equation `lhs =? rhs` in a unification problem (§B.1.9).
 #[derive(Debug, Clone, PartialEq, Eq)]

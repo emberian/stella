@@ -265,7 +265,7 @@ impl Nfta {
             let mut rule_star: Star = Vec::with_capacity(1 + n);
             rule_star.push(neg_ray("ta", vec![cst(&rule.state), pattern]));
             for (i, qi) in rule.successors.iter().enumerate() {
-                rule_star.push(pos_ray("ta", vec![cst(qi), child_vars[i].clone()]));
+                rule_star.push(pos_ray("ta", vec![cst(qi), child_vars[i]]));
             }
             stars.push(rule_star);
         }

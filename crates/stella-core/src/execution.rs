@@ -469,14 +469,13 @@ pub fn seminaive_saturated_diagrams(phi: &Constellation, dg: &DepGraph) -> Vec<D
             }
         }
 
-        if !any_extension_exists {
-            if b.is_connected() {
+        if !any_extension_exists
+            && b.is_connected() {
                 let sat_key = b.canonical_key(phi);
                 if saturated_keys.insert(sat_key) {
                     saturated.push(b.to_diagram());
                 }
             }
-        }
     }
 
     saturated
@@ -888,7 +887,7 @@ mod oracle_gate_tests {
         let ch0  = mk_app_str("0", vec![]);
         let eps  = mk_app_str("eps", vec![]);
         let cons = |ch: Term, rest: Term| mk_app_str("cons", vec![ch, rest]);
-        let w00  = cons(ch0.clone(), cons(ch0, eps.clone()));
+        let w00  = cons(ch0, cons(ch0, eps));
 
         // Small constellation; no animist copies → finishes in ms.
         let phi: Constellation = vec![
@@ -958,7 +957,7 @@ pub fn stars_alpha_equiv(s1: &Star, s2: &Star) -> bool {
         if k == 1 { result.push(arr.clone()); return; }
         for i in 0..k {
             permutations(arr, k - 1, result);
-            if k % 2 == 0 { arr.swap(i, k - 1); } else { arr.swap(0, k - 1); }
+            if k.is_multiple_of(2) { arr.swap(i, k - 1); } else { arr.swap(0, k - 1); }
         }
     }
     let mut perms = Vec::new();
