@@ -491,6 +491,27 @@ is now witnessed. So: χ-existence on a faithful constellation is
 **measured-positive** (was the open question of §4.8); the χ
 *measure* (Stage-2/3) is the next build, now on solid ground.
 
+**[Re-verified — classifier correction `c9ab43e`]** The §4.9/§4.10
+tables were originally measured under a `ray_is_subjective` that
+*head-gated* on a non-Neutral head (`sym.pol != Neutral && any
+arg-colour`). That gate is **not** §48.9-faithful: Eng §48.9
+(`refs/extracted/EngExegesis/doc.md:3814`) classifies subjective by
+*argument*-colour-nesting alone — `f(X,+h(Z))` is subjective with a
+Neutral head; §48.7 (doc.md:3792) "a ray is coloured if it contains a
+colour", no head-polarity precondition. `c9ab43e` corrects the rule to
+`any direct arg contains a colour` (head colour inert). Both χ
+harnesses were **re-run on the corrected classifier**: every figure
+above is unchanged — F3 §49.61 still 34 subj-rays / 58 psi / never-NF /
+χ-EXHIBITED; Stage-2 still χ=14 (max_chain 15) vs §49.53 χ=2
+(max_chain 3), theorem-SEPARATED; F1/F2/F4/F5 still IDEMPOTENT
+(specificity upheld). The numbers are stable because the §49.61
+witness's subjective rays all carry **non-Neutral coloured heads**, so
+the old gate and the corrected §48.9 rule *agree on this fixture*; the
+correction restores faithfulness for the general
+neutral-head/coloured-arg case without disturbing the measured χ
+story. iex byte-identity (fast/tabled/spec/accel) is unaffected and
+green (the classifier is a diagnostic, off the reduction path).
+
 ### 4.10 MEASURED — the χ FUNCTIONAL quantified & THEOREM-gated (Stage-2) [Measured]
 
 `crate::chi` (commit `8545ee2`, `chi.rs` + `examples/chi_stage02_functional.rs`,
