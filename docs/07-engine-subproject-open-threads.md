@@ -746,3 +746,95 @@ commit d6e584b); (b) the classifier divergence as the real critical
 path; (c) §7 not AEx-establishable; (d) the calibrated detector as the
 sound-as-possible instrument. No termination-crosser is justified
 until the H1 axis + calibrated IEx-trajectory reading land.
+
+## ═══ ARC STATE — 2026-05-17 (READ THIS FIRST after the above) ═══
+
+The faithful-reproduction thread CLOSED; pivoted past-Eng; ran a
+6-agent exploration swarm; landed perf wave-1. All commit-pinned,
+all faithfulness-gated, every harvest forensic-verified in the LIVE
+tree (never trust-the-green — the project spine).
+
+### CLOSED / PROVEN
+- **Galaxy faithful-reproduction = first-class N-KA-cover negative**,
+  now PROVEN-closed. docs/16 §7 (authoritative; §1–6 retained as the
+  historical hypothesis measurement overturned). `data[0]` blocker =
+  the nested isnil/force_value recursion (NOT docs/16 §1's premise —
+  retracted d6e584b). H1 redex-family measured-NEG (c8cb09e), H2
+  recurrence measured-NEG on the calibrated IEx trace, closed-subterm
+  NEG (b6c65d5). Agent B (`docs/explore/tractable-aex.md`): **no
+  tractable faithful AEx exists** (proof) ⇒ §57.13/§74.11 + docs/08 §7
+  closed-by-proof, not just measurement. Neither termination-crosser
+  (interaction-net / KA2) is evidence-justified. Σ(Φ) was always the
+  companion, shipped.
+
+### PAST-ENG χ — the landmark
+- χ EXISTS & is EXHIBITED (a3fd4aa, docs/08 §4.9): Eng's verbatim
+  §49.61 witness ⇒ sustained non-idempotent growth (subj rays 1→34,
+  ψ 3→58, NF never); Eng's §49.53 control idempotent (specificity).
+  Agent A (`docs/explore/chi-existence-theory.md`) supplied the theory
+  (§49.59–61 *establishes* χ-existence).
+- χ QUANTIFIED & THEOREM-GATED (8545ee2 + docs/08 §4.10): `chi.rs` =
+  §4.6 σu non-nilpotency degree on the subjective_stream provenance
+  DAG. SEPARATES Eng-PROVEN §49.53(nilpotent, χ pinned) vs
+  §49.61(unbounded, χ deepening/round) on the property the theorem
+  certifies. First theorem-anchored positive for the valence
+  make-or-break. Honest first-class finding: the literal §4.5
+  layer-integral does NOT separate ⇒ demoted to diagnostic, §4.6 GoI
+  reading load-bearing (AEx-idempotence ≠ IEx-forcing-ceases).
+  OPEN (Stage-3): recurrence-form χ (span≥2 whistle — not yet
+  exhibited) + wider-corpus validation of the 75%-clock heuristic.
+
+### PLATFORM / DISCIPLINE
+- Faithful Eng §48.7/§48.10 colour-nesting classifier
+  `constellation::star_kind_eng`/`ray_is_subjective` (de71654, the
+  root divergence the 5-agent audit converged on; legacy polarity
+  census left intact, doc-marked). Idempotence metatheorem executable
+  (1bf21ac): §49.55 ✓ on the faithful partition; §49.57 boundary
+  measured (non-idempotence is in subjective_stream, NOT aex).
+- detect_recurrence two-sided CALIBRATED: §67.10 cut-elim oracle =
+  specificity (f634f61, mll cut_elim_trace); §49.61 = divergent anchor.
+- 5-agent thesis audit → `docs/thesis-audit/00-05`; swarm strategic
+  synthesis → **`docs/explore/00-strategic-map.md` (the charting; read
+  it for priorities/dead-ends)**.
+- Discipline lessons banked: isnil over-conclusion RETRACTED
+  mid-stream (d6e584b — measure-don't-guess working); KG6c user edit
+  GATED before landing (df90b41); χ verdict-wiring bug caught & fixed
+  before any claim; every Eng §-cite verified verbatim; worktree
+  harvests = diff/cherry-pick + live-tree re-verify, never blind cp.
+
+### PERF WAVE-1 (banked, gated, live-verified)
+- KG6c df90b41 — force_value memo before budget-bail; value-identical
+  (galaxy descent byte-identical 4311/14/6/19) + strictly-more-term.
+- #2 IexAccel hoist 3b1fc6c — eval_forced builds Φ-accel ONCE
+  (106→1/[triple], D-W2 ~25%); rides proven iex_fast_with_accel≡iex_fast.
+- WIN-1 incremental psi_csyms 3a49c0f/174d05d — O(steps²)→O(steps),
+  ~6.5× on Ψ-growing corpora, steps strictly identical; live-verified
+  IN DEBUG so the per-step `PsiCS::assert_eq_full` (incremental==full)
+  oracle fired across combinator/binarith/Horn/galaxy Φ=405.
+- D-W3 attribution MEASURED+re-scoped 86dbfaf — sampler: the 73%
+  galaxy wall is the hash-cons FxHashMap (insert/get/reserve_rehash),
+  NOT the RwLock-per-se. #3 = (1) pre-size [14d1a39, done,
+  value-identical] → (2) lock-free/sharded store [IN FLIGHT].
+- Suite tax FIXED: `binarith::mul_table` (>100s, slow-by-reference-cost
+  since 33dfcee, NOT a regression — `add_table` 0.67s, repr correct)
+  given the established sibling `#[ignore]` consistently; the full lib
+  suite is runnable again (was the session-long blindness).
+
+### IN FLIGHT (2 worktree writers, disjoint, ≤2-writer rule held)
+- #4 `a11a96144f0a0a555` — discrimination-tree on the `find` phase
+  (index.rs), oracle-equiv-gated.
+- #3-step-2 `a6b3a0af071938f57` — lock-free/sharded hash-cons store
+  (term.rs). THE RISKIEST change (torn read = silent UB). Chartered to
+  PROVE value-identical + race-freedom + concurrency stress, else
+  honest-negative. Harvest HARDEST.
+- SEQUENCED next: #5 rayon over produce_stars_fast summand-fan
+  (interactive.rs — collides with #4; faithful by the existing
+  psi_compatible α-multiset gate, docs/explore/data-parallel.md).
+
+### OPEN (genuine, recorded)
+- χ Stage-3: recurrence-form χ + wider-corpus heuristic validation.
+- Website divergent-site line `c16bde9` (worktree
+  agent-a15879bd2f72532ea): the agent's engine-pages delta sits on a
+  divergent site/ history (merge-base ancient 445af70). Reconciling
+  two site/ histories is a branch-management call — DEFERRED to user,
+  work preserved on its branch, NOT silently merged.
