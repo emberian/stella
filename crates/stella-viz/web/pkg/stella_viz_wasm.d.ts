@@ -36,6 +36,32 @@ export function get_preset_dot(idx: number): string;
 export function get_preset_steps(idx: number): string;
 
 /**
+ * Behaviour / type bench — A^⊥, A^⊥⊥, is-behaviour over a small universe.
+ */
+export function lc_behaviour(json: string): string;
+
+/**
+ * Compare two configurations: same observable? ω of each result.
+ */
+export function lc_compare(pa: string, qa: string, pb: string, qb: string, fuel: number): string;
+
+/**
+ * ω-weight + visibility + structural counts for Φ ⊢ Ψ (no execution).
+ */
+export function lc_measures(phi: string, psi: string): string;
+
+/**
+ * Logic workbench — orthogonality `Φ₁ ⊥ Φ₂` (the three relations).
+ */
+export function lc_ortho(phi1: string, phi2: string): string;
+
+/**
+ * Proof-net correctness (DR / Girard) + Φ_comp source + guarded diagrams.
+ * `kind` ∈ {mll, mll2i}.
+ */
+export function lc_proofnet(kind: string, json: string): string;
+
+/**
  * Return all presets as a JSON array:
  * `[{"id": 0, "name": "…", "description": "…"}, …]`
  */
@@ -81,6 +107,11 @@ export interface InitOutput {
     readonly ex_run: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly get_preset_dot: (a: number) => [number, number];
     readonly get_preset_steps: (a: number) => [number, number];
+    readonly lc_behaviour: (a: number, b: number) => [number, number];
+    readonly lc_compare: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
+    readonly lc_measures: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly lc_ortho: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly lc_proofnet: (a: number, b: number, c: number, d: number) => [number, number];
     readonly list_presets: () => [number, number];
     readonly parse_check: (a: number, b: number, c: number, d: number) => [number, number];
     readonly preset_count: () => number;
