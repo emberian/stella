@@ -47,6 +47,7 @@ pub mod spec_phi;
 pub mod viz;
 pub mod omega_weight;
 pub mod chi;
+pub mod oracle;
 
 #[cfg(test)]
 mod engine_tests;

@@ -1,0 +1,52 @@
+name: CI
+
+# Test-gating only. Builds, runs the green stella-core release lib suite, and
+# lints. NO deploy, NO publish — the outward-facing Pages deploy is a separate
+# workflow this one neither touches nor references.
+
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  test:
+    name: build + test + clippy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache cargo registry and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: cargo build
+        run: cargo build --workspace
+
+      - name: cargo test (stella-core release lib suite)
+        run: cargo test -p stella-core --lib --release
+
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets
