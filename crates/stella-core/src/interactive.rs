@@ -75,7 +75,7 @@
 //! (maximum number of steps) and return whether normal form was reached.
 
 use crate::constellation::{Constellation, Star};
-use crate::dep_graph::{all_colours, ray_colours};
+use crate::dep_graph::{all_colours, ray_colours, ColourSet};
 use crate::polarised::{matchable, matchable_fast, ray_polarity, underlying_term, Polarity};
 use crate::subst::{freshen, Substitution};
 use crate::term::{get, mk_app, mk_var_interned, Term, TermData, Var};
@@ -211,9 +211,41 @@ pub fn mat_phi_colored(phi: &Constellation, psi: &[Star], r: Term) -> Vec<(usize
 }
 
 fn mat_phi_c(phi: &Constellation, r: Term, extra_c: &std::collections::HashSet<String>) -> Vec<(usize, usize)> {
+    mat_phi_c_in(phi, r, extra_c, &ColourSet::All)
+}
+
+/// `mat_Φ^C(r)` (§51.6) with a **first-class colour set** `cs`.
+///
+/// `cs = ColourSet::All` reproduces the pre-existing predicate *exactly*: the
+/// gate is `cr ⊆ c_set && crj ⊆ c_set` with `c_set = colours(Φ) ∪ extra_c`,
+/// i.e. the historical always-true filter (every ray that occurs is in the
+/// union). `mat_phi_c(..)` delegates here with `All`, so it is unchanged
+/// (`!a || !b` ≡ `!(a && b)` — same `continue`/empty outcomes).
+///
+/// `cs = ColourSet::Only(C)` runs the §51.6 gate against the caller's set:
+/// `colours(r) ⊆ C && colours(Φ[i][j]) ⊆ C`. A redex whose query ray or
+/// partner ray carries a colour ∉ `C` is *excluded* — so a **proper subset**
+/// `C ⊊ colours(Φ)∪colours(Ψ)` genuinely restricts the matchable set
+/// (thesis-audit 01 §2.1: this path was previously unreachable / dead).
+fn mat_phi_c_in(
+    phi: &Constellation,
+    r: Term,
+    extra_c: &std::collections::HashSet<String>,
+    cs: &ColourSet,
+) -> Vec<(usize, usize)> {
     let mut c_set = all_colours(phi);
     c_set.extend(extra_c.iter().cloned());
     let cr = ray_colours(r);
+    // §51.6 query-side gate. `All` ⇒ `cr ⊆ c_set` (the prior always-true
+    // check, identical). `Only(C)` ⇒ `cr ⊆ C` (genuine restriction): if the
+    // focus ray's own colour is outside C, no redex on it is admissible.
+    let cr_admitted = match cs {
+        ColourSet::All => cr.is_subset(&c_set),
+        ColourSet::Only(_) => cs.admits(&cr),
+    };
+    if !cr_admitted {
+        return Vec::new();
+    }
     let mut result = Vec::new();
     for (i, star) in phi.iter().enumerate() {
         for (j, &ray) in star.iter().enumerate() {
@@ -222,7 +254,12 @@ fn mat_phi_c(phi: &Constellation, r: Term, extra_c: &std::collections::HashSet<S
                 continue;
             }
             let crj = ray_colours(ray);
-            if !cr.is_subset(&c_set) || !crj.is_subset(&c_set) {
+            // §51.6 partner-side gate, same two modes.
+            let admitted = match cs {
+                ColourSet::All => cr.is_subset(&c_set) && crj.is_subset(&c_set),
+                ColourSet::Only(_) => cs.admits(&cr) && cs.admits(&crj),
+            };
+            if !admitted {
                 continue;
             }
             if matchable(r, ray) {
@@ -350,11 +387,38 @@ fn mat_phi_c_accel(
     r: Term,
     psi_csyms: &FxHashSet<crate::term::Sym>,
 ) -> Vec<(usize, usize)> {
-    // cr ⊆ c_set
-    if let Some(s) = ray_csym(r) {
-        if !accel.phi_csyms.contains(&s) && !psi_csyms.contains(&s) {
-            return Vec::new();
+    mat_phi_c_accel_in(accel, phi, r, psi_csyms, None)
+}
+
+/// Indexed `mat_Φ^C(r)` with an optional **restricting** colour set `only`.
+///
+/// `only = None` ⇒ the historical `C = colours(Φ)∪colours(Ψ)` accel path,
+/// **byte-identical** to [`mat_phi_c`] (`ColourSet::All`): the per-candidate
+/// `crj ⊆ C` check stays provably-redundant-and-dropped exactly as before.
+///
+/// `only = Some(C_syms)` ⇒ the §51.6 gate against the caller's colour set,
+/// as the interned-`Sym` mirror of `ColourSet::Only(C)` (`Sym::parse` is the
+/// exact inverse of `ray_colours`'s `display_name` for coloured rays). Now the
+/// per-candidate `colours(Φ[i][j]) ⊆ C` check is **re-instated** (no longer
+/// always-true once `C ⊊ colours(Φ)`), so a proper subset genuinely drops
+/// redexes. Output = the same set/order as
+/// `mat_phi_c_in(..,ColourSet::Only(C))` (the reference oracle for this path).
+fn mat_phi_c_accel_in(
+    accel: &IexAccel,
+    phi: &Constellation,
+    r: Term,
+    psi_csyms: &FxHashSet<crate::term::Sym>,
+    only: Option<&FxHashSet<crate::term::Sym>>,
+) -> Vec<(usize, usize)> {
+    // cr ⊆ C (query-side §51.6 gate).
+    match (only, ray_csym(r)) {
+        // Restricted: focus ray's own colour must be in C.
+        (Some(cset), Some(s)) if !cset.contains(&s) => return Vec::new(),
+        // All path: the proven-identical `phi_csyms ∪ psi_csyms` membership.
+        (None, Some(s)) if !accel.phi_csyms.contains(&s) && !psi_csyms.contains(&s) => {
+            return Vec::new()
         }
+        _ => {}
     }
     let (name, pol) = match get(r) {
         TermData::App(sym, _) => (sym.name, sym.pol),
@@ -370,6 +434,16 @@ fn mat_phi_c_accel(
         let ray = phi[i][j];
         if ray_polarity(ray) == Polarity::Neutral {
             return;
+        }
+        // Restricted path ONLY: re-instate the per-candidate
+        // `colours(Φ[i][j]) ⊆ C` check (dropped on the All path because it
+        // is provably always-true there; NOT always-true under a proper C).
+        if let Some(cset) = only {
+            if let Some(cs) = ray_csym(ray) {
+                if !cset.contains(&cs) {
+                    return;
+                }
+            }
         }
         if fp_unifiable(r, ray) && matchable_fast(r, ray) {
             result.push((i, j));
@@ -392,10 +466,26 @@ fn any_match_accel(
     r: Term,
     psi_csyms: &FxHashSet<crate::term::Sym>,
 ) -> bool {
-    if let Some(s) = ray_csym(r) {
-        if !accel.phi_csyms.contains(&s) && !psi_csyms.contains(&s) {
-            return false;
+    any_match_accel_in(accel, phi, r, psi_csyms, None)
+}
+
+/// Existence-only [`mat_phi_c_accel_in`]. `only = None` ⇒ byte-identical to
+/// the historical `any_match_accel` (same colour gate, same candidate set,
+/// same `matchable` decider). `only = Some(C)` ⇒ the §51.6-restricted
+/// existence check (same restriction as [`mat_phi_c_accel_in`]).
+fn any_match_accel_in(
+    accel: &IexAccel,
+    phi: &Constellation,
+    r: Term,
+    psi_csyms: &FxHashSet<crate::term::Sym>,
+    only: Option<&FxHashSet<crate::term::Sym>>,
+) -> bool {
+    match (only, ray_csym(r)) {
+        (Some(cset), Some(s)) if !cset.contains(&s) => return false,
+        (None, Some(s)) if !accel.phi_csyms.contains(&s) && !psi_csyms.contains(&s) => {
+            return false
         }
+        _ => {}
     }
     let (name, pol) = match get(r) {
         TermData::App(sym, _) => (sym.name, sym.pol),
@@ -416,6 +506,15 @@ fn any_match_accel(
         let ray = phi[i][j];
         if ray_polarity(ray) == Polarity::Neutral {
             return;
+        }
+        // Restricted path ONLY: per-candidate `colours(Φ[i][j]) ⊆ C`
+        // (parity with `mat_phi_c_accel_in`; no-op on the All path).
+        if let Some(cset) = only {
+            if let Some(cs) = ray_csym(ray) {
+                if !cset.contains(&cs) {
+                    return;
+                }
+            }
         }
         let tm = std::time::Instant::now();
         let m = fp_unifiable(r, ray) && matchable_fast(r, ray);
@@ -463,6 +562,31 @@ fn any_self(star: &Star, j: usize) -> bool {
     star.iter()
         .enumerate()
         .any(|(jk, &ray)| jk != j && matchable_fast(r, ray))
+}
+
+/// C-restricted existence-only self-interaction check (§51.9's `mat_{Ψ[i]}^C`
+/// sum). A self-pair `(j, jk)` is admissible only when both rays' colours are
+/// in `C` — parity with the external `mat_Φ^C` gate. Used only on the
+/// restricted (`Some(C)`) path; the unrestricted path keeps the uncoloured
+/// [`any_self`] exactly as the reference engine (byte-identity preserved).
+fn any_self_in(star: &Star, j: usize, cset: &FxHashSet<crate::term::Sym>) -> bool {
+    let r = star[j];
+    if let Some(s) = ray_csym(r) {
+        if !cset.contains(&s) {
+            return false;
+        }
+    }
+    star.iter().enumerate().any(|(jk, &ray)| {
+        if jk == j {
+            return false;
+        }
+        if let Some(s) = ray_csym(ray) {
+            if !cset.contains(&s) {
+                return false;
+            }
+        }
+        matchable_fast(r, ray)
+    })
 }
 
 /// Ψ colours as an interned-`Sym` set (allocation-free analogue of
@@ -748,6 +872,7 @@ fn interaction_step(
     ray_idx: usize,
     counter: &mut u32,
     psi_colours: &std::collections::HashSet<String>,
+    cs: &ColourSet,
 ) -> Vec<Star> {
     // Consume Ψ[i] from the interaction space.
     let selected_star = psi[star_idx].clone();
@@ -761,8 +886,9 @@ fn interaction_step(
     let r = selected_star[ray_idx];
 
     // First sum: external fusions — interact with fresh copies of Φ stars.
-    // C = colours(Φ) ∪ colours(Ψ) (§51.6: full configuration colour set).
-    let ext_matches = mat_phi_c(phi, r, psi_colours);
+    // §51.6 colour set: `ColourSet::All` ⇒ `colours(Φ)∪colours(Ψ)` (the
+    // historical always-true gate, byte-identical); `Only(C)` ⇒ the proper C.
+    let ext_matches = mat_phi_c_in(phi, r, psi_colours, cs);
     for (ik, jk) in ext_matches {
         // Fresh copy of Φ[i_k] (§51.13: Φ provides infinite supply).
         // α-rename the entire star at once so shared variables remain linked.
@@ -779,9 +905,18 @@ fn interaction_step(
         // unification failure → summand silently disappears (§51.9).
     }
 
-    // Second sum: self-interactions within Ψ[i].
+    // Second sum: self-interactions within Ψ[i]. Under `Only(C)` this is
+    // `mat_{Ψ[i]}^C` — colour-gate both rays against C. `All` keeps the
+    // uncoloured reference behaviour (byte-identity).
     let self_matches = mat_self(&selected_star, ray_idx);
     for jk in self_matches {
+        if let ColourSet::Only(_) = cs {
+            let rc = ray_colours(r);
+            let jkc = ray_colours(selected_star[jk]);
+            if !cs.admits(&rc) || !cs.admits(&jkc) {
+                continue;
+            }
+        }
         if let Some(si) = self_interact(&selected_star, ray_idx, jk) {
             psi_prime.push(si);
         }
@@ -958,6 +1093,14 @@ pub fn step_detail(
 /// 1. For every coloured ray `r = Ψ[i][j]`, `mat_Φ(r)` is empty, AND
 /// 2. `mat_{Ψ[i]}(r)` (self-matchable within the same star, excluding j) is empty.
 fn is_normal_form(phi: &Constellation, psi: &[Star]) -> bool {
+    is_normal_form_in(phi, psi, &ColourSet::All)
+}
+
+/// `is_normal_form` under a first-class colour set. `ColourSet::All` ⇒
+/// byte-identical to [`is_normal_form`]. Under `Only(C)` a ray coloured
+/// outside `C` carries no C-admissible redex and so cannot block the
+/// C-normal form (§51.9 fixpoint w.r.t. C; the §69.4 stopping condition).
+fn is_normal_form_in(phi: &Constellation, psi: &[Star], cs: &ColourSet) -> bool {
     let psi_vec: Constellation = psi.to_vec();
     let psi_colours = all_colours(&psi_vec);
     for (_i, star) in psi.iter().enumerate() {
@@ -965,11 +1108,33 @@ fn is_normal_form(phi: &Constellation, psi: &[Star]) -> bool {
             if ray_polarity(r) == Polarity::Neutral {
                 continue;
             }
-            if !mat_phi_c(phi, r, &psi_colours).is_empty() {
+            if let ColourSet::Only(_) = cs {
+                if !cs.admits(&ray_colours(r)) {
+                    continue;
+                }
+            }
+            if !mat_phi_c_in(phi, r, &psi_colours, cs).is_empty() {
                 return false;
             }
-            if !mat_self(star, j).is_empty() {
-                return false;
+            match cs {
+                ColourSet::All => {
+                    if !mat_self(star, j).is_empty() {
+                        return false;
+                    }
+                }
+                ColourSet::Only(_) => {
+                    for (jk, &ray) in star.iter().enumerate() {
+                        if jk == j {
+                            continue;
+                        }
+                        if cs.admits(&ray_colours(r))
+                            && cs.admits(&ray_colours(ray))
+                            && matchable(r, ray)
+                        {
+                            return false;
+                        }
+                    }
+                }
             }
         }
     }
@@ -1007,24 +1172,65 @@ pub struct IExResult {
 ///
 /// Returns `IExResult` with the final `Ψ` and whether it is a normal form.
 pub fn iex(phi: &Constellation, psi_init: Vec<Star>, fuel: usize) -> IExResult {
+    // `ColourSet::All` ⇒ the historical derived `C = colours(Φ)∪colours(Ψ)`:
+    // every gate stays the always-true predicate it always was, so this is
+    // byte-identical to the pre-existing reference engine.
+    iex_in(phi, psi_init, fuel, &ColourSet::All)
+}
+
+/// `IEx_C(Φ, Ψ)` with a **first-class colour set** `cs` (Eng §51.6 / §69.4) —
+/// the reference (un-accelerated) oracle for colour-restricted execution.
+///
+/// `cs = ColourSet::All` ⇒ delegated to by [`iex`]; behaviour is the
+/// pre-existing reference engine, unchanged.
+///
+/// `cs = ColourSet::Only(C)` ⇒ the §51.6 gate `colours(r)∪colours(Φ[i][j]) ⊆ C`
+/// is run against the caller's colour set `C`. When `C ⊊ colours(Φ)∪colours(Ψ)`
+/// this **genuinely restricts** the reachable redexes — the previously-dead
+/// `Ex_C` for a proper subset (thesis-audit 01 §2.1/§3.2), now live. This is
+/// the reference oracle for the §69.4 orthogonality predicates below.
+pub fn iex_in(
+    phi: &Constellation,
+    psi_init: Vec<Star>,
+    fuel: usize,
+    cs: &ColourSet,
+) -> IExResult {
     let mut psi = psi_init;
     let mut counter = 0u32;
     let mut steps = 0;
 
     while steps < fuel {
-        // C = colours(Φ) ∪ colours(Ψ) for the full configuration (§51.6).
+        // C = colours(Φ) ∪ colours(Ψ) for the full configuration (§51.6)
+        // — the union still feeds the `All` gate (always-true) and is the
+        // `extra_c` Ψ-side input under `Only(C)` (mat_phi_c_in re-gates on C).
         let psi_colours = all_colours(&psi);
 
         // Find the first applicable step: a coloured ray (i,j) in Ψ that has
-        // at least one external or self-interaction.
+        // at least one external or self-interaction *admissible under C*.
         let mut found_step = None;
         'outer: for (i, star) in psi.iter().enumerate() {
             for (j, &r) in star.iter().enumerate() {
                 if ray_polarity(r) == Polarity::Neutral {
                     continue;
                 }
-                let has_ext = !mat_phi_c(phi, r, &psi_colours).is_empty();
-                let has_self = !mat_self(star, j).is_empty();
+                // §51.6 query-side gate: under `Only(C)` a ray whose own
+                // colour ∉ C carries no admissible redex — skip it (no-op
+                // under `All`, preserving byte-identity).
+                if let ColourSet::Only(_) = cs {
+                    if !cs.admits(&ray_colours(r)) {
+                        continue;
+                    }
+                }
+                let has_ext = !mat_phi_c_in(phi, r, &psi_colours, cs).is_empty();
+                let has_self = match cs {
+                    ColourSet::All => !mat_self(star, j).is_empty(),
+                    ColourSet::Only(_) => star.iter().enumerate().any(|(jk, &ray)| {
+                        jk != j
+                            && cs.admits(&ray_colours(r))
+                            && cs.admits(&ray_colours(ray))
+                            && matchable(r, ray)
+                    }),
+                };
                 if has_ext || has_self {
                     found_step = Some((i, j));
                     break 'outer;
@@ -1034,19 +1240,98 @@ pub fn iex(phi: &Constellation, psi_init: Vec<Star>, fuel: usize) -> IExResult {
 
         match found_step {
             None => {
-                // Normal form reached.
+                // Normal form reached (w.r.t. C).
                 return IExResult { psi, is_normal_form: true, steps };
             }
             Some((i, j)) => {
-                psi = interaction_step(phi, psi, i, j, &mut counter, &psi_colours);
+                psi = interaction_step(phi, psi, i, j, &mut counter, &psi_colours, cs);
                 steps += 1;
             }
         }
     }
 
     // Fuel exhausted.
-    let nf = is_normal_form(phi, &psi);
+    let nf = is_normal_form_in(phi, &psi, cs);
     IExResult { psi, is_normal_form: nf, steps }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Orthogonality (Eng §69.4 — digest ch10 §69.4, p.323)
+//
+// Binary relations of orthogonality between two constellations Φ₁ and Φ₂
+// w.r.t. a colour set `C ⊆ F₊ ⊎ F₋` (§69.4):
+//   • Φ₁ ⊥¹_C Φ₂  when |AEx_C(Φ₁ ⊎ Φ₂)| = 1
+//   • Φ₁ ⊥ᴿ_C Φ₂  when  Ex_C(Φ₁ ⊎ Φ₂) = {Roots(Φ₁ ⊎ Φ₂)}, where
+//                  Roots(Φ) is the star of uncoloured rays in Φ.
+// ⊥ᴿ is the "favourite" orthogonality (§69.5): it forces full connection
+// between vehicle and test (proof-as-partitions).
+//
+// OPERATIONAL SCOPING (honest, cited): the engine's only execution surface
+// is the *directed* `IEx_C(Φ, Ψ)` — Φ a non-linear reference (infinite
+// supply), Ψ consumed linearly (§51.3). This is exactly §70.5's asymmetry
+// ("Φ' ⊎ Ψ where Ψ is a constellation of fully negative adapters
+// representing cuts" — the vehicle is reused, the cuts/test are consumed).
+// We therefore instantiate §69.4 *directionally*: Φ₁ is the reference
+// vehicle, Φ₂ the linearly-consumed test, and the §69.4 condition is read on
+// `IEx_C(Φ₁, Φ₂)`. `Roots` is taken on the consumed side Φ₂ (it carries the
+// conclusion/output rays). This is the operational orthogonality the
+// transcendental-syntax engine supports; the symmetric AEx-over-union form
+// is not realisable on the directed surface without the saturated-diagram
+// machinery (out of scope: touch only interactive.rs/dep_graph.rs).
+//
+// These predicates are now *callable under a proper C* — the previously-
+// dead `Ex_C` surface (thesis-audit 01 §2.1/§3.2), which the χ
+// identification (docs/08 §4.6) and the GoI computational/logical
+// separation rest on.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// `Roots(Φ)` (§69.4): the star of *uncoloured* rays of `Φ` — every ray
+/// whose `ray_colours` is `∅` (Var or Neutral-headed), flattened across all
+/// stars in order. The §69.4 ⊥ᴿ target shape.
+pub fn roots(phi: &[Star]) -> Star {
+    let mut s: Star = Vec::new();
+    for star in phi {
+        for &r in star {
+            if ray_colours(r).is_empty() {
+                s.push(r);
+            }
+        }
+    }
+    s
+}
+
+/// `Φ₁ ⊥¹_C Φ₂` (§69.4): `|AEx_C(Φ₁ ⊎ Φ₂)| = 1`, read operationally as the
+/// directed `IEx_C(Φ₁, Φ₂)` (Φ₁ reference vehicle, Φ₂ linearly-consumed
+/// test — §70.5) reaching a true normal form of **exactly one** star.
+/// (§69.3 convention: in §69 write Ex for AEx; the directed NF is the
+/// operational `|·| = 1` witness on the confluent fragment these target.)
+///
+/// `cs = ColourSet::Only(C)` with `C ⊊ colours(Φ₁⊎Φ₂)` exercises the
+/// colour-*restricted* orthogonality — the previously-unreachable surface.
+pub fn orth_1_c(phi1: &[Star], phi2: &[Star], cs: &ColourSet, fuel: usize) -> bool {
+    let phi: Constellation = phi1.to_vec();
+    let res = iex_in(&phi, phi2.to_vec(), fuel, cs);
+    res.is_normal_form && res.psi.len() == 1
+}
+
+/// `Φ₁ ⊥ᴿ_C Φ₂` (§69.4, favourite orthogonality §69.5): `IEx_C(Φ₁, Φ₂)`
+/// **normalises into the star of its uncoloured rays** (§68.21 verbatim:
+/// "Φ normalises into the star of its uncoloured rays" ⟺ S^φ connected &
+/// acyclic ⟺ Φ ⊥ᴿ). Operationally: reach a true normal form that is a
+/// *single* star carrying **no coloured ray** — every cut/colour-related
+/// ray eliminated (§70.3). This is the directed-IEx reading of
+/// `Ex_C(Φ₁⊎Φ₂) = {Roots(Φ₁⊎Φ₂)}` (the residual single star *is* the
+/// roots: nothing coloured remains to interact).
+pub fn orth_r_c(phi1: &[Star], phi2: &[Star], cs: &ColourSet, fuel: usize) -> bool {
+    let phi: Constellation = phi1.to_vec();
+    let res = iex_in(&phi, phi2.to_vec(), fuel, cs);
+    if !res.is_normal_form || res.psi.len() != 1 {
+        return false;
+    }
+    // §68.21: the normal form is the star of *uncoloured* rays — i.e. the
+    // residual star equals its own `roots` (no coloured ray survived).
+    let star = &res.psi[0];
+    star.iter().all(|&r| ray_colours(r).is_empty())
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1289,6 +1574,7 @@ fn spec_realise(
     Some(result)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn produce_stars_fast(
     accel: &IexAccel,
     phi: &Constellation,
@@ -1297,11 +1583,12 @@ fn produce_stars_fast(
     counter: &mut u32,
     psi_cs: &FxHashSet<crate::term::Sym>,
     spec: bool,
+    restrict: Option<&FxHashSet<crate::term::Sym>>,
 ) -> Vec<Star> {
     let mut produced: Vec<Star> = Vec::new();
     let r = selected_star[ray_idx];
 
-    for (ik, jk) in mat_phi_c_accel(accel, phi, r, psi_cs) {
+    for (ik, jk) in mat_phi_c_accel_in(accel, phi, r, psi_cs, restrict) {
         // Reference parity: the old scheme consumed one `counter` slot for
         // the (now-unused) per-fusion prefix before the per-var slots. Keep
         // it on BOTH paths so the generic fast path's `Var::Idx` numbering
@@ -1338,6 +1625,22 @@ fn produce_stars_fast(
     }
 
     for jk in mat_self(selected_star, ray_idx) {
+        // Restricted path ONLY: §51.9's self-interaction sum is
+        // `mat_{Ψ[i]}^C` — colour-gate both rays against C (parity with
+        // the external `mat_Φ^C`). No-op on the All path, where `mat_self`
+        // is uncoloured exactly as the reference engine (byte-identity).
+        if let Some(cset) = restrict {
+            if let Some(cs) = ray_csym(selected_star[jk]) {
+                if !cset.contains(&cs) {
+                    continue;
+                }
+            }
+            if let Some(cs) = ray_csym(r) {
+                if !cset.contains(&cs) {
+                    continue;
+                }
+            }
+        }
         if let Some(si) = self_interact_fast(selected_star, ray_idx, jk) {
             produced.push(si);
         }
@@ -1347,17 +1650,47 @@ fn produce_stars_fast(
 }
 
 fn is_normal_form_accel(accel: &IexAccel, phi: &Constellation, psi: &[Star]) -> bool {
+    is_normal_form_accel_in(accel, phi, psi, None)
+}
+
+/// Normal-form check under an optional restricting colour set.
+/// `restrict = None` ⇒ byte-identical to [`is_normal_form_accel`]. Under
+/// `Some(C)` a ray whose colour ∉ `C` is not C-coloured for §51.9 normal
+/// form (it can carry no C-admissible redex), so it does not block normal
+/// form — the §69.4 fixpoint is taken w.r.t. `C`.
+fn is_normal_form_accel_in(
+    accel: &IexAccel,
+    phi: &Constellation,
+    psi: &[Star],
+    restrict: Option<&FxHashSet<crate::term::Sym>>,
+) -> bool {
     let psi_cs = psi_csyms(psi);
     for star in psi.iter() {
         for (j, &r) in star.iter().enumerate() {
             if ray_polarity(r) == Polarity::Neutral {
                 continue;
             }
-            if any_match_accel(accel, phi, r, &psi_cs) {
+            if let Some(cset) = restrict {
+                if let Some(cs) = ray_csym(r) {
+                    if !cset.contains(&cs) {
+                        continue;
+                    }
+                }
+            }
+            if any_match_accel_in(accel, phi, r, &psi_cs, restrict) {
                 return false;
             }
-            if any_self(star, j) {
-                return false;
+            match restrict {
+                None => {
+                    if any_self(star, j) {
+                        return false;
+                    }
+                }
+                Some(cset) => {
+                    if any_self_in(star, j, cset) {
+                        return false;
+                    }
+                }
             }
         }
     }
@@ -1379,7 +1712,46 @@ fn is_normal_form_accel(accel: &IexAccel, phi: &Constellation, psi: &[Star]) -> 
 ///   skipped prefix is non-matchable). Any colour change ⇒ `start = 0`
 ///   (full-rescan fallback). The reference [`iex`] is the differential oracle.
 pub fn iex_fast(phi: &Constellation, psi_init: Vec<Star>, fuel: usize) -> IExResult {
-    iex_fast_inner(&IexAccel::build(phi), phi, psi_init, fuel, false, false)
+    iex_fast_inner(&IexAccel::build(phi), phi, psi_init, fuel, false, false, None)
+}
+
+/// KS-accelerated `IEx_C(Φ, Ψ)` under a caller-chosen colour set `cs`
+/// (Eng §51.6 / §69.4) — the **fast** counterpart of [`iex_in`].
+///
+/// `cs = ColourSet::All` ⇒ `iex_fast` exactly (the `restrict` argument is
+/// `None`, so every gate is the proven-identical fast scan; **byte-identical**
+/// to the pre-existing engine and hence to reference [`iex`] under the N-KS
+/// gate).
+///
+/// `cs = ColourSet::Only(C)` ⇒ the §51.6 colour gate is run against `C` (its
+/// interned-`Sym` mirror; `Sym::parse` inverts `ray_colours`'s `display_name`
+/// for coloured rays). When `C ⊊ colours(Φ)∪colours(Ψ)` this genuinely
+/// restricts the redexes — result-equivalent to `iex_in(..,&cs)` (the
+/// reference oracle), the previously-dead `Ex_C` made live.
+pub fn iex_fast_in_colours(
+    phi: &Constellation,
+    psi_init: Vec<Star>,
+    fuel: usize,
+    cs: &ColourSet,
+) -> IExResult {
+    match cs {
+        ColourSet::All => {
+            iex_fast_inner(&IexAccel::build(phi), phi, psi_init, fuel, false, false, None)
+        }
+        ColourSet::Only(c) => {
+            let csyms: FxHashSet<crate::term::Sym> =
+                c.iter().map(|s| crate::term::Sym::parse(s)).collect();
+            iex_fast_inner(
+                &IexAccel::build(phi),
+                phi,
+                psi_init,
+                fuel,
+                false,
+                false,
+                Some(&csyms),
+            )
+        }
+    }
 }
 
 /// Build the KS acceleration structure for a fixed Φ once, to be reused
@@ -1409,7 +1781,7 @@ pub fn iex_fast_with_accel(
     psi_init: Vec<Star>,
     fuel: usize,
 ) -> IExResult {
-    iex_fast_inner(accel, phi, psi_init, fuel, false, false)
+    iex_fast_inner(accel, phi, psi_init, fuel, false, false, None)
 }
 
 /// [`iex_tabled`] (KA1 variant-deletion) with a caller-supplied [`IexAccel`].
@@ -1421,7 +1793,7 @@ pub fn iex_tabled_with_accel(
     psi_init: Vec<Star>,
     fuel: usize,
 ) -> IExResult {
-    iex_fast_inner(accel, phi, psi_init, fuel, true, false)
+    iex_fast_inner(accel, phi, psi_init, fuel, true, false, None)
 }
 
 /// KA1 — `iex_fast` + **variant-deletion tabling** (spec §9). A produced star
@@ -1437,7 +1809,7 @@ pub fn iex_tabled_with_accel(
 /// (fixpoint termination for step-identity) is the reframed N-KS.
 /// `iex_fast` (the byte-identical jet) is left untouched.
 pub fn iex_tabled(phi: &Constellation, psi_init: Vec<Star>, fuel: usize) -> IExResult {
-    iex_fast_inner(&IexAccel::build(phi), phi, psi_init, fuel, true, false)
+    iex_fast_inner(&IexAccel::build(phi), phi, psi_init, fuel, true, false, None)
 }
 
 /// Σ(Φ) — the first Futamura projection as a **sibling fast tier** (docs/14,
@@ -1452,7 +1824,7 @@ pub fn iex_tabled(phi: &Constellation, psi_init: Vec<Star>, fuel: usize) -> IExR
 /// the proven byte-identical `iex_fast`/`iex_tabled`/`iex` are untouched —
 /// this is a parallel tier with the same deopt discipline as `iex_tabled`.
 pub fn iex_spec(phi: &Constellation, psi_init: Vec<Star>, fuel: usize) -> IExResult {
-    iex_fast_inner(&IexAccel::build(phi), phi, psi_init, fuel, false, true)
+    iex_fast_inner(&IexAccel::build(phi), phi, psi_init, fuel, false, true, None)
 }
 
 /// [`iex_spec`] with a caller-supplied [`IexAccel`] (carries the Σ(Φ)
@@ -1465,7 +1837,7 @@ pub fn iex_spec_with_accel(
     psi_init: Vec<Star>,
     fuel: usize,
 ) -> IExResult {
-    iex_fast_inner(accel, phi, psi_init, fuel, false, true)
+    iex_fast_inner(accel, phi, psi_init, fuel, false, true, None)
 }
 
 /// Conservative α-variant key of a star: `canonical` of its rays as an
@@ -1476,6 +1848,7 @@ fn star_key(star: &Star) -> Term {
     crate::antiunify::canonical(crate::term::mk_app_str("\u{22c6}star", star.clone()))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn iex_fast_inner(
     accel: &IexAccel,
     phi: &Constellation,
@@ -1483,6 +1856,11 @@ fn iex_fast_inner(
     fuel: usize,
     tabling: bool,
     spec: bool,
+    // `None` ⇒ historical `C = colours(Φ)∪colours(Ψ)` (byte-identical to the
+    // pre-existing engine). `Some(C)` ⇒ run `Ex_C` under the caller's colour
+    // set (Eng §51.6 / §69.4); when `C ⊊ colours(Φ)∪colours(Ψ)` the §51.6
+    // gate genuinely restricts the redexes (thesis-audit 01 §2.1).
+    restrict: Option<&FxHashSet<crate::term::Sym>>,
 ) -> IExResult {
     let mut psi = psi_init;
     let mut counter = 0u32;
@@ -1539,7 +1917,18 @@ fn iex_fast_inner(
                 // bit-identical to `iex_fast`; the lever is purely the cost
                 // of deciding the same boolean. `iex_fast`/`iex_tabled`/
                 // reference `iex` pass `spec=false` ⇒ never consult it.
-                let matched = if spec {
+                let matched = if let Some(cset) = restrict {
+                    // Restricted `Ex_C`: query ray's own colour must be in C
+                    // (else it carries no C-admissible redex — §51.6
+                    // query-side gate), then the C-gated existence checks.
+                    // The `spec` `sel.decide` short-circuit is bypassed here
+                    // (its positive witness holds only under the full colour
+                    // set; restricted entry points pass `spec=false` anyway).
+                    let r_in_c = ray_csym(r).map(|s| cset.contains(&s)).unwrap_or(true);
+                    r_in_c
+                        && (any_match_accel_in(accel, phi, r, psi_cs, restrict)
+                            || any_self_in(star, j, cset))
+                } else if spec {
                     match accel.sel.decide(r) {
                         Some(true) => true,
                         // `decide` is never `Some(false)`; `None` ⇒ exact scan.
@@ -1583,8 +1972,9 @@ fn iex_fast_inner(
                         }
                     }
                 });
-                let produced =
-                    produce_stars_fast(accel, phi, &selected, j, &mut counter, psi_cs, spec);
+                let produced = produce_stars_fast(
+                    accel, phi, &selected, j, &mut counter, psi_cs, spec, restrict,
+                );
                 // Snapshot the colour set for the next step's resume check
                 // *before* the delta mutates it (this also ends the immutable
                 // borrow of `pcs` so the incremental update below can take
@@ -1623,7 +2013,7 @@ fn iex_fast_inner(
         }
     }
 
-    let nf = is_normal_form_accel(accel, phi, &psi);
+    let nf = is_normal_form_accel_in(accel, phi, &psi, restrict);
     ks_report(steps);
     IExResult { psi, is_normal_form: nf, steps }
 }
@@ -1676,7 +2066,7 @@ pub fn step_at(
         return None;
     }
     Some(interaction_step(
-        phi, psi, star_idx, ray_idx, counter, &psi_colours,
+        phi, psi, star_idx, ray_idx, counter, &psi_colours, &ColourSet::All,
     ))
 }
 
@@ -2259,6 +2649,214 @@ mod tests {
         let btre = iex_tabled_with_accel(&baccel, &bphi, bq, 8000);
         assert_eq!(bt.psi, btre.psi, "tabled binarith: psi differs w/ accel");
         assert_eq!(bt.steps, btre.steps, "tabled binarith: steps differ w/ accel");
+    }
+
+    /// **Ex_C for a PROPER subset C is now LIVE — Eng §69.4 orthogonality +
+    /// the GoI computational/logical separation (digest ch10 §68 / §70.3).**
+    ///
+    /// Context (thesis-audit 01 §2.1/§3.2): every prior execution path forced
+    /// `C = colours(Φ)∪colours(Ψ)`, making the §51.6 gate
+    /// `colours(r)∪colours(Φ[i][j]) ⊆ C` *always true* — colour-restricted
+    /// execution and the §69.4 ⊥¹_C/⊥ᴿ_C orthogonalities were structurally
+    /// dead. `ColourSet::Only(C)` threaded through `mat_phi_c_in` /
+    /// `iex_in` / `iex_fast_in_colours` makes a proper `C` genuinely restrict.
+    ///
+    /// Worked vehicle/test pair: a constellation with **two independent
+    /// colour-tagged reduction chains** —
+    ///   • computation half, colour `c`: `[+c(0)]`, `[-c(X),+c(s(X))]`
+    ///     (the cut-elimination / *computational* content, §70.3);
+    ///   • typing half, colour `t`: `[+t(z)]`, `[-t(Y),+t(k(Y))]`
+    ///     (the correctness-test / *logical* content, §68);
+    /// plus the two probe stars `qc=[-c(s²0), Rc]`, `qt=[-t(z), Rt]`. The
+    /// halves share no symbol, so under the FULL colour set both run and the
+    /// run is byte-identical to today; under a PROPER C only the C-coloured
+    /// half is live — the GoI separation.
+    #[test]
+    fn ex_c_proper_subset_goi_separation() {
+        use crate::dep_graph::ColourSet;
+        use std::collections::HashSet;
+
+        // Structural "this is literally that star" test: equal *multiset of
+        // ray display strings*. (`stars_alpha_equiv` is α-*unifiability* with
+        // permutation — a star with a bare variable ray unifies with almost
+        // anything, so it cannot witness "frozen verbatim". Display equality
+        // can: `-c(s(s(0)))` ≠ `-t(s(0))` ≠ `Rc`.)
+        fn same_star(a: &Star, b: &Star) -> bool {
+            if a.len() != b.len() {
+                return false;
+            }
+            let mut da: Vec<String> = a.iter().map(|r| format!("{r}")).collect();
+            let mut db: Vec<String> = b.iter().map(|r| format!("{r}")).collect();
+            da.sort();
+            db.sort();
+            da == db
+        }
+        let has = |psi: &[Star], probe: &Star| psi.iter().any(|s| same_star(s, probe));
+
+        // ── Φ: two independent colour-tagged chains ───────────────────────
+        // Each half is structurally the Horn corpus shape proven to reach NF
+        // (`iex_horn_2_plus_2`): a positive base fact + a `[-p(X),+p(s(X))]`
+        // step, queried by `[-p(s^n 0), R]` which resolves down to the base.
+        // The two halves share NO neutral symbol — only their *colour* (the
+        // signed head `+c`/`-c` vs `+t`/`-t`) distinguishes them.
+        let phi: Constellation = vec![
+            // computation half (colour c)  — the §70.3 cut-elimination side
+            vec![pos_ray("c", vec![c("0")])],
+            vec![
+                neg_ray("c", vec![var("X")]),
+                pos_ray("c", vec![app("s", vec![var("X")])]),
+            ],
+            // typing half (colour t)  — the §68 correctness-test side
+            vec![pos_ray("t", vec![c("0")])],
+            vec![
+                neg_ray("t", vec![var("Y")]),
+                pos_ray("t", vec![app("s", vec![var("Y")])]),
+            ],
+        ];
+        // Probe stars: qc drives the c-chain (2 steps → c-base); qt the
+        // t-chain (1 step → t-base).
+        let qc = vec![
+            neg_ray("c", vec![app("s", vec![app("s", vec![c("0")])])]),
+            var("Rc"),
+        ];
+        let qt = vec![neg_ray("t", vec![app("s", vec![c("0")])]), var("Rt")];
+        let psi = vec![qc.clone(), qt.clone()];
+
+        // ── GATE: C = all  ⇒  BYTE-IDENTICAL to today ────────────────────
+        // `iex` (== `iex_in(All)` by delegation) vs the explicit
+        // `iex_in(&ColourSet::All)` must be bit-identical, and `iex_fast`
+        // (== `iex_fast_in_colours(All)`) must agree on the answer multiset.
+        let base = iex(&phi, psi.clone(), 2000);
+        let via_all = iex_in(&phi, psi.clone(), 2000, &ColourSet::All);
+        assert_eq!(
+            base.psi, via_all.psi,
+            "C=all: iex_in(All) must be BYTE-identical to iex"
+        );
+        assert_eq!(base.steps, via_all.steps, "C=all: step count identical");
+        assert_eq!(base.is_normal_form, via_all.is_normal_form);
+        let fast_all = iex_fast_in_colours(&phi, psi.clone(), 2000, &ColourSet::All);
+        assert_eq!(
+            base.is_normal_form, fast_all.is_normal_form,
+            "C=all: iex_fast_in_colours(All) NF must match iex"
+        );
+        // Under C=all both halves reduce: Rc ↦ s(s(s(s(s(s(0)))))) is wrong —
+        // the c-chain *generates* +c(s^n 0); the query -c(s²0) connects to
+        // +c(s²0) reached after 2 steps, so Rc binds and qc resolves; qt
+        // likewise. The contentful check is the *separation* below; here we
+        // only need: full-C run reaches NF (both halves live) and is the
+        // exact iex behaviour.
+        assert!(
+            base.is_normal_form,
+            "C=all: both halves live ⇒ reaches normal form"
+        );
+
+        // ── PROPER SUBSET C = {+c,-c}  ⇒  only the COMPUTATION half live ──
+        let only_c: HashSet<String> =
+            ["+c".to_string(), "-c".to_string()].into_iter().collect();
+        let cs_c = ColourSet::Only(only_c);
+        // Reference vs accelerated agree under the proper C (the accel path
+        // re-instates the dropped per-candidate `crj ⊆ C` check).
+        let ref_c = iex_in(&phi, psi.clone(), 2000, &cs_c);
+        let fast_c = iex_fast_in_colours(&phi, psi.clone(), 2000, &cs_c);
+        assert_eq!(
+            ref_c.is_normal_form, fast_c.is_normal_form,
+            "proper C={{c}}: ref/accel NF disagreement"
+        );
+        // SEPARATION (digest §68/§70.3): the t-probe qt cannot fire — its
+        // `-t(z)` ray's colour `-t ∉ C` (§51.6 query-side gate) — so qt
+        // survives *verbatim* in the normal form, while qc resolves. The
+        // logical (typing) half is frozen; only the computational half ran.
+        let qt_survives = has(&ref_c.psi, &qt);
+        assert!(
+            qt_survives,
+            "proper C={{c}}: t-coloured probe MUST be frozen (colour ∉ C) — \
+             GoI logical half inert; got psi={:?}",
+            ref_c
+                .psi
+                .iter()
+                .map(|s| s.iter().map(|r| format!("{r}")).collect::<Vec<_>>())
+                .collect::<Vec<_>>()
+        );
+        // And the c-probe did NOT survive verbatim (it reduced) — the
+        // computational half genuinely ran under the restriction.
+        let qc_consumed = !has(&ref_c.psi, &qc);
+        assert!(
+            qc_consumed,
+            "proper C={{c}}: c-coloured probe should have reduced (half live)"
+        );
+
+        // ── DUAL PROPER SUBSET C = {+t,-t}  ⇒  only the TYPING half live ──
+        let only_t: HashSet<String> =
+            ["+t".to_string(), "-t".to_string()].into_iter().collect();
+        let cs_t = ColourSet::Only(only_t);
+        let ref_t = iex_in(&phi, psi.clone(), 2000, &cs_t);
+        let qc_survives_t = has(&ref_t.psi, &qc);
+        assert!(
+            qc_survives_t,
+            "dual proper C={{t}}: c-coloured probe MUST be frozen — \
+             the separation is symmetric (computational half inert)"
+        );
+        // The two restrictions select *disjoint* live halves — that IS the
+        // GoI computational/logical separation, made operational.
+        assert!(
+            qt_survives && qc_survives_t,
+            "GoI separation: C={{c}} freezes the logical half; C={{t}} \
+             freezes the computational half — disjoint, as §70.3 requires"
+        );
+
+        // ── Eng §69.4 ⊥¹_C / ⊥ᴿ_C are now CALLABLE on a proper C ─────────
+        // Directed §70.5 axiom/cut pair under colour `a`:
+        //   vehicle Φ₁ = [ +a(X), conc(X) ]  (reference; +a axiom + a root)
+        //   test    Φ₂ = [ -a(w) ]           (linearly-consumed cut)
+        // `IEx_{a}(Φ₁, Φ₂)`: the cut `-a(w) ⋈ +a(X)` (θ={X↦w}) eliminates
+        // both coloured rays, leaving the single uncoloured residual
+        // `[conc(w)]` — §68.21 "Φ normalises into the star of its uncoloured
+        // rays" ⟺ Φ ⊥ᴿ. The predicate runs §69.4 under an *explicitly
+        // chosen* C — previously impossible (the gate was always-true, so C
+        // could not be selected at all: thesis-audit 01 §2.1).
+        let v1: Star = vec![pos_ray("a", vec![var("X")]), app("conc", vec![var("X")])];
+        let v2: Star = vec![neg_ray("a", vec![c("w")])];
+        let phi1 = vec![v1];
+        let phi2 = vec![v2];
+        let cs_a = ColourSet::Only(
+            ["+a".to_string(), "-a".to_string()].into_iter().collect(),
+        );
+        // Sanity: `roots(Φ₁)` is exactly the uncoloured `conc(X)` ray — the
+        // §69.4 Roots target the residual must equal.
+        assert_eq!(roots(&phi1).len(), 1, "roots(Φ₁) = {{conc(X)}}");
+        // ⊥ᴿ_C (§69.4 / §68.21 / §70.3): normalises to the single uncoloured
+        // root. Exercised under a proper, explicitly-chosen C.
+        let is_orth_r = orth_r_c(&phi1, &phi2, &cs_a, 100);
+        assert!(
+            is_orth_r,
+            "Eng §69.4 ⊥ᴿ_C: [+a(X),conc(X)] ⊥ᴿ_{{a}} [-a(w)] should hold \
+             (cut-elimination leaves only the uncoloured root conc(w))"
+        );
+        // ⊥¹_C (§69.4): |AEx_C| = 1 — directed NF is the single-star witness.
+        assert!(
+            orth_1_c(&phi1, &phi2, &cs_a, 100),
+            "Eng §69.4 ⊥¹_C: |AEx_{{a}}(Φ₁, Φ₂)| = 1 under proper C"
+        );
+        // Falsifier (proves the colour parameter is LOAD-BEARING, not
+        // vacuous): under the EMPTY colour set the `+a`/`-a` cut cannot fire
+        // (`-a ∉ ∅` — §51.6 query-side gate), so `-a(w)` survives in the NF;
+        // the residual still carries a *coloured* ray ⇒ ⊥ᴿ must be FALSE.
+        let cs_empty = ColourSet::Only(HashSet::new());
+        assert!(
+            !orth_r_c(&phi1, &phi2, &cs_empty, 100),
+            "falsifier: ⊥ᴿ_∅ must be FALSE — empty C freezes the cut, the \
+             coloured -a(w) survives (colour param is load-bearing)"
+        );
+        // And a second falsifier on the gate's *teeth*: under C={a} the
+        // engine must NOT also accept ⊥ᴿ for a NON-orthogonal pair. Add an
+        // extra dangling `+a(v)` to Φ₂: the cut still fires once but a
+        // coloured `+a` ray is left ⇒ residual not all-uncoloured ⇒ FALSE.
+        let phi2_bad: Vec<Star> =
+            vec![vec![neg_ray("a", vec![c("w")])], vec![pos_ray("a", vec![c("v")])]];
+        assert!(
+            !orth_r_c(&phi1, &phi2_bad, &cs_a, 100),
+            "gate teeth: a dangling +a(v) leaves a coloured ray ⇒ ⊥ᴿ FALSE"
+        );
     }
 
     /// Proof-of-work micro-bench (env-gated, ignored by default): per-call

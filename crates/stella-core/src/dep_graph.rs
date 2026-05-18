@@ -39,6 +39,67 @@ pub fn all_colours(phi: &Constellation) -> HashSet<String> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Colour-set parameter for `Ex_C` (Eng §51.6, §69.4)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// The colour set `C ⊆ F₊ ⊎ F₋` an interactive execution runs *under*
+/// (Eng §51.6: `mat_Φ^C(r) := {(i,j) | r ⋈ Φ[i][j],
+/// colours(r)∪colours(Φ[i][j]) ⊆ C}`).
+///
+/// Until now `C` was *derived* — every code path forced
+/// `C = colours(Φ) ∪ colours(Ψ)`, which makes `colours(r)∪colours(Φ[i][j]) ⊆ C`
+/// trivially true (every ray that appears is in the union by construction), so
+/// the §51.6 colour gate, the §69.4 colour-restricted orthogonalities, and the
+/// GoI computational/logical separation could never be exercised (thesis-audit
+/// 01 §2.1/§3.2: `Ex_C` for a proper subset was structurally dead).
+///
+/// This type makes `C` a *first-class caller parameter*:
+///  - [`ColourSet::All`] — `C = colours(Φ) ∪ colours(Ψ)`: the exact derived
+///    behaviour, **byte-identical** to the pre-existing engine (the gate
+///    `cr ⊆ C` is the same always-true predicate it always was).
+///  - [`ColourSet::Only`] — `C` is the explicit, caller-chosen set. A ray whose
+///    colour ∉ `C` is *invisible* to matching, so a **proper subset** `C ⊊
+///    colours(Φ)∪colours(Ψ)` genuinely restricts the reachable redexes. This is
+///    the new, previously-unreachable `Ex_C` surface.
+#[derive(Debug, Clone)]
+pub enum ColourSet {
+    /// `C := colours(Φ) ∪ colours(Ψ)` (the historical, always-true gate).
+    All,
+    /// `C` is exactly this caller-chosen set of coloured head display-names
+    /// (e.g. `{"+t","-t"}` for the typing colour, `{"+c","-c"}` for the
+    /// computation colour — the GoI logical/computational split).
+    Only(HashSet<String>),
+}
+
+impl ColourSet {
+    /// Does the §51.6 gate `colours(r) ⊆ C` admit a ray whose colour set is
+    /// `rc` (a `ray_colours` result: `∅` for Var/Neutral, else a singleton)?
+    ///
+    /// For [`ColourSet::All`] always `true` (the historical always-true
+    /// behaviour: the caller's full union contains every ray that occurs).
+    /// For [`ColourSet::Only`] the subset membership genuinely restricts.
+    #[inline]
+    pub fn admits(&self, rc: &HashSet<String>) -> bool {
+        match self {
+            ColourSet::All => true,
+            ColourSet::Only(c) => rc.is_subset(c),
+        }
+    }
+
+    /// `true` iff this is the historical derived (`All`) mode.
+    #[inline]
+    pub fn is_all(&self) -> bool {
+        matches!(self, ColourSet::All)
+    }
+}
+
+impl Default for ColourSet {
+    fn default() -> Self {
+        ColourSet::All
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Dependency graph
 // ─────────────────────────────────────────────────────────────────────────────
 
