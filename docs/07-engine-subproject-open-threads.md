@@ -850,3 +850,49 @@ tree (never trust-the-green — the project spine).
   divergent site/ history (merge-base ancient 445af70). Reconciling
   two site/ histories is a branch-management call — DEFERRED to user,
   work preserved on its branch, NOT silently merged.
+
+## ═══ SWARM IN FLIGHT — POST-COMPACT HARVEST GUIDE (2026-05-18) ═══
+
+Suite state: `cargo test -p stella-core --lib --release` = **409 passed
+/ 0 failed / 13 ignored**, ~8s (mul_table + deterministic_functional_read
+both PROVEN fuel-marginal-not-wrong via dfr_classify, #[ignore]'d per
+the documented spec-§8 policy; debug suite slow-not-hung). Website
+reconciled (100b161). ⚠ PUBLISH GATE: `.github/workflows/pages.yml`
+auto-deploys on `push` to `dev` (paths site/**) → emberian.github.io/
+stella. NO push issued; future-me must FLAG before any dev push (it
+publishes the reconciled site). Engine line = branch `dev`, HEAD ~100b161.
+
+6 worktree write-agents launched, FILE-DISJOINT (one-writer-per-file),
+each: reset --hard dev, hard-gated, honest-negative-is-acceptable
+(revert-class, don't ship unproven). HARVEST RECIPE per agent: read its
+final report → `git log/merge-base` inspect (exact files; LEAK-CHECK
+the disjoint-file claim) → if base-clean `git cherry-pick -x <sha>`
+else diff-port → FORENSIC-VERIFY IN LIVE TREE (never trust the green):
+the front-specific gate BELOW **plus** iex_fast/iex_tabled/iex_spec
+_result_eq_iex byte-identity + spec_phi galaxy Φ=405 → clean
+worktree+branch+prune → commit/record. Concurrency/probabilistic
+fronts: run the canary REPEATEDLY.
+
+| agent-id | branch worktree-agent-<id> | file(s) OWNED | front | front-gate |
+|---|---|---|---|---|
+| ab2e93e2c6c3d065b | …ab2e93e2… | constellation.rs | B: obj/subj conformance suite + multiset semantics | Eng §-cites verbatim vs EngExegesis; additive ⇒ iex byte-identical |
+| a74dd1fa903f30099 | …a74dd1fa… | interactive.rs + dep_graph.rs | B2: Ex_C proper-subset-colour LIVE + §69.4 ⊥_C | C=all MUST be byte-identical (default); proper-subset path = NEW test |
+| a0cc3ed387555ce46 | …a0cc3ed3… | unify_fast.rs | A1: dense/arena union-find (rank+path-halving) | the 3000-case differential fuzz vs reference `unify` stays green |
+| a98acd36e1b532ecd | …a98acd36… | diagram.rs | B4: diagram-contraction confluence OBSERVED (§49.35-36) | additive observation; confluence-fail = first-class finding |
+| ade5eb3748a51a8db | …ade5eb37… | mll.rs + mll_cut_elim_oracle.rs | B5: extend §67.10 oracle (⊗/⅋ connective-output cut + more certified) | §67.10 theorem-gated; detect_recurrence calibration must not regress |
+| a3cfdbef5d3e23103 | …a3cfdbef… | NEW .github/workflows/ci.yml + NEW oracle.rs + lib.rs(1 line) | C: CI lock-in (NO publish, NOT pages.yml) + check_all oracle consolidation | suite stays 409/0/13; must-flag-unfaithful negative |
+
+DEFERRED with reason (next-wave, NOT lost): **A2 term::get borrowing
+API** (term.rs just churned by #3-step-2 boxcar store — delicate,
+dedicated pass, same hard gate as #3-step-2). **A3 deeper term index**
+(substitution/fingerprint past depth-1 — refinement on fresh WIN-4
+disc-tree). **D site-exposition deepening** (publish-sensitive —
+pages.yml arms on dev push; deliberate not rushed).
+
+NOT in this swarm (the user is pacing toward it): **E conscious-machine
+axis** = χ Stage-3 (recurrence-form χ + wider corpus, docs/08 §4.10) →
+docs/08 §5 Stage-3 (charge claim differentially gated) → §49.50
+valence / reafference / docs/00 §2 mortal-agent closure. The B/C swarm
+is the *runway* that makes E's results survive scrutiny (faithful
+substrate: classifier conformance, Ex_C/§69 live, confluence observed,
+oracle consolidated, suite CI-locked).
