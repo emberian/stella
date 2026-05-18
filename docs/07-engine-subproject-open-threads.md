@@ -685,3 +685,64 @@ to `accel_detect::detect_recurrence`. This correction IS the
 measure-don't-guess discipline working: a wrong conclusion caught by
 the next measurement before it drove a build. docs/16 unrevised until
 (i)+(ii) land.
+
+## RE-AIM PROGRESS (user-approved, classifier-first) — steps 1-3 + 5
+
+Audit+measurement converged (docs/thesis-audit/00-05): the measured
+critical path was a FAITHFUL Eng §48.7/§48.10 objective/subjective
+classifier, not a termination-crosser. User approved the staged re-aim.
+
+- **Step 1 DONE (de71654).** `constellation::{ray_is_subjective,
+  star_kind_eng, term_contains_colour}` — colour-NESTING per §48.7/
+  §48.10, non-breaking (legacy polarity-census `star_kind` + its 34
+  callers untouched; doc-marked LEGACY). Conformance battery 3/3; the
+  divergence pinned both ways (`[+a(X),−a(Y)]` Eng-Objective vs
+  census-Animist; `+c(+d(X))` Eng-Subjective vs census-Objective).
+- **Step 2 DONE (1bf21ac).** Idempotence metatheorem as a falsifiable
+  property on the FAITHFUL partition: §49.55 holds (objective Φ incl.
+  Eng-§55 Horn-add — which the census mislabels Animist — is
+  AEx-idempotent); `star_kind_eng` validated against Eng's OWN §49.50
+  worked example; **§49.57 MEASURED not forced**: prototype `aex` is
+  idempotent even on the subjective fragment ⇒ §49.57 non-idempotence
+  lives in `subjective::subjective_stream`, NOT `aex` (recorded
+  boundary; audit 01 §1.9 predicted it).
+- **Step 3 — first-class HONEST NEGATIVE (measured, triangulated).**
+  The AEx/IEx differential (audit 02's experiment) CANNOT be run: the
+  reference saturated-diagram AEx is computationally intractable on
+  `combinator::machine_stars` itself — `aex_full` (Blind+2cp),
+  `aex_seminaive_full` (seminaive+2cp), AND copy-free `aex(phi,&dg)`
+  ALL fail to process `machine_stars + [+P(st(x,ε))]` (a ZERO-redex
+  value) within 45 s each (`examples/aex_combinator_probe.rs`). Root:
+  the 7 KAM stars are mutually matchable ⇒ saturated-diagram
+  enumeration explodes even with no reduction; the step-1 divergence
+  AMPLIFIES it (census labels all 7 Eng-objective stars Animist ⇒
+  `expand_constellation` 2×-copies them, 7→21) but is not the sole
+  cause (copy-free also fails). This empirically CONFIRMS
+  `combinator.rs`'s own module doc ("no copy-supply blowup, unlike
+  AEx") and Eng §57.13's punt ("without establishing any simulation
+  result"). ⇒ The §57.13/§74.11 obligation is NOT dischargeable by
+  running the reference AEx, and **docs/08 §7's IEx-loop-NF =
+  AEx-fixpoint identification is NOT empirically establishable via
+  `execution::aex*`** — by measurement, not assumption.
+- **Step 5 DONE (worktree a5fd718, pending forensic harvest).** The
+  §67.10 theorem-certified cut-elim oracle CALIBRATES
+  `accel_detect::detect_recurrence`: zero false-positive whistle on a
+  proven strongly-normalising (cut-elim) trajectory — the soundness
+  anchor the data[0]/layer-trace probes structurally could not give.
+  detect_recurrence is now a *calibrated* instrument.
+
+### Consequence — step 4 RESHAPED by measurement
+"Re-run measure(ii) at the faithful AEx-layer boundary" is BLOCKED:
+there is no tractable reference AEx to define that boundary (step 3).
+The honest path to the best-obtainable H1/H2/H3 reading: apply the
+now-cut-elim-CALIBRATED `detect_recurrence` to the IEx/`force_value`
+trajectory, **explicitly scoped as the IEx trajectory, NOT the §49.52
+AEx-layer** (docs/08 §7 remains formally open BY MEASUREMENT — a
+recorded result, not a gap to paper over). Independent axis: the H1
+redex-family-duplication probe (separate front, does not need the AEx
+boundary) — its result stands on its own. docs/16 to be revised with:
+(a) §1 premise falsified→reopened (the isnil/force_value recursion,
+commit d6e584b); (b) the classifier divergence as the real critical
+path; (c) §7 not AEx-establishable; (d) the calibrated detector as the
+sound-as-possible instrument. No termination-crosser is justified
+until the H1 axis + calibrated IEx-trajectory reading land.
