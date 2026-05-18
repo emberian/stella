@@ -815,10 +815,24 @@ tree (never trust-the-green — the project spine).
   galaxy wall is the hash-cons FxHashMap (insert/get/reserve_rehash),
   NOT the RwLock-per-se. #3 = (1) pre-size [14d1a39, done,
   value-identical] → (2) lock-free/sharded store [IN FLIGHT].
-- Suite tax FIXED: `binarith::mul_table` (>100s, slow-by-reference-cost
-  since 33dfcee, NOT a regression — `add_table` 0.67s, repr correct)
-  given the established sibling `#[ignore]` consistently; the full lib
-  suite is runnable again (was the session-long blindness).
+- Suite tax PARTIALLY addressed (HONEST status, not "fixed"):
+  `binarith::mul_table` *was* a real >100s runaway (slow-by-reference-
+  cost since 33dfcee, NOT a regression — `add_table` 0.67s, repr
+  correct; verified by timed bisect) → given the established sibling
+  `#[ignore]` consistently (b88ca36). Necessary + correct. BUT the
+  full *debug* lib suite still did NOT complete within 600s with
+  mul_table ignored ⇒ either a 2nd slow/runaway test OR the debug
+  suite is legitimately >10min (415 tests + the self-bounded §49.61
+  chi witness + galaxy spec_phi 37s + matchable/kt fuzz + WIN-1's
+  per-step PsiCS debug oracle re-adding O(|Ψ|)/step). A `--release`
+  full run is in flight as the discriminator (release ≈5–10× faster,
+  no debug oracle; if it hangs → true 2nd runaway, else debug-slow).
+  OPERATIVE verification remains the targeted iex/superset/spec_phi
+  gates (all green). FOLLOW-UP: pin the release verdict; if a 2nd
+  runaway, bisect+`#[ignore]` it the same documented way; also
+  `binarith::deterministic_functional_read` is a pre-existing
+  time-marginal `mul`-eval FAILURE (not ours; #5 confirmed it fails
+  on clean baseline) — same class, candidate for the same treatment.
 
 ### IN FLIGHT (2 worktree writers, disjoint, ≤2-writer rule held)
 - #4 `a11a96144f0a0a555` — discrimination-tree on the `find` phase
