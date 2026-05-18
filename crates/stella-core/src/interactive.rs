@@ -82,7 +82,7 @@ use crate::term::{get, mk_app, mk_var_interned, Term, TermData, Var};
 use crate::unify::{unify, Equation};
 use crate::index::RayIndex;
 use crate::spec_phi::{spec_star, SelPhi, Transition as SpecTr};
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::HashSet;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -446,6 +446,106 @@ fn psi_csyms(psi: &[Star]) -> FxHashSet<crate::term::Sym> {
         }
     }
     s
+}
+
+/// Incrementally-maintained analogue of [`psi_csyms`] — WIN 1
+/// (docs/explore/perf-audit.md §3): `iex_fast_inner` used to call
+/// `psi_csyms(&psi)` every step, an `O(|Ψ|)` rebuild over a *growing* Ψ ⇒
+/// `O(steps·|Ψ|)` ≈ quadratic (the largest single phase measured anywhere:
+/// binarith `add 999999 888888`, psics = 0.3204 s = 81 % of `iex_fast`
+/// wall). The colour set changes by tiny per-step deltas only: one star is
+/// `remove`d and a few `produced` stars are appended. So we keep a **colour
+/// multiset** — `counts[c]` = number of *ray occurrences* in Ψ whose
+/// `ray_csym` is `c` — and a derived `set` of the keys with `counts > 0`.
+///
+/// Multiset (not a plain set) is load-bearing: a star removal can drop the
+/// *last* bearer of a colour (the audit's explicit colour-*shrinking* hazard,
+/// §WIN1 "Faithfulness"). A union-only set would keep that colour forever and
+/// silently change the colour gate; the count makes the disappearance exact.
+///
+/// Faithfulness: `set` is, element-for-element, exactly
+/// `psi_csyms(&psi)` after each delta — it is a pure reindexing of the same
+/// per-ray `ray_csym` fold, just amortised. The debug-gated invariant
+/// [`PsiCS::assert_eq_full`] proves this by oracle every step (see
+/// `iex_fast_inner`). The consumer is the colour-subset gate
+/// `mat_phi_c_accel`/`any_match_accel`, already proven identical to reference
+/// `mat_phi_c`; identical set in ⇒ byte-identical redex selection out.
+struct PsiCS {
+    counts: FxHashMap<crate::term::Sym, u32>,
+    set: FxHashSet<crate::term::Sym>,
+}
+
+impl PsiCS {
+    /// Seed from the initial Ψ (one `O(|Ψ_init|)` fold — paid once, not per step).
+    fn from_psi(psi: &[Star]) -> Self {
+        let mut me = PsiCS {
+            counts: FxHashMap::default(),
+            set: FxHashSet::default(),
+        };
+        for star in psi {
+            me.add_star(star);
+        }
+        me
+    }
+
+    /// Account every coloured ray of `star` (+1 each occurrence; key enters
+    /// `set` on its 0→1 transition).
+    fn add_star(&mut self, star: &Star) {
+        for &ray in star {
+            if let Some(c) = ray_csym(ray) {
+                let n = self.counts.entry(c).or_insert(0);
+                *n += 1;
+                if *n == 1 {
+                    self.set.insert(c);
+                }
+            }
+        }
+    }
+
+    /// Un-account every coloured ray of `star` (−1 each occurrence; key
+    /// leaves `set` *exactly* when its count reaches 0 — this is the
+    /// colour-shrinking correctness point). `debug_assert`s guard against an
+    /// underflow that would mean the delta diverged from Ψ.
+    fn remove_star(&mut self, star: &Star) {
+        for &ray in star {
+            if let Some(c) = ray_csym(ray) {
+                match self.counts.get_mut(&c) {
+                    Some(n) => {
+                        debug_assert!(*n > 0, "PsiCS: count underflow for a colour");
+                        *n -= 1;
+                        if *n == 0 {
+                            self.counts.remove(&c);
+                            self.set.remove(&c);
+                        }
+                    }
+                    None => debug_assert!(false, "PsiCS: removing an unaccounted colour"),
+                }
+            }
+        }
+    }
+
+    /// The set view consumed by the colour gate (== `psi_csyms(&psi)`).
+    fn set(&self) -> &FxHashSet<crate::term::Sym> {
+        &self.set
+    }
+
+    /// Debug-only faithfulness oracle: the incremental `set` MUST equal the
+    /// full rebuild `psi_csyms(psi)` on *every* step. Compiled out of release
+    /// (`debug_assertions`), exercised by the test corpora so byte-identity
+    /// is *proven*, not argued (task gate #2).
+    #[inline]
+    fn assert_eq_full(&self, psi: &[Star]) {
+        if cfg!(debug_assertions) {
+            let full = psi_csyms(psi);
+            debug_assert!(
+                self.set == full,
+                "PsiCS divergence: incremental != psi_csyms full rebuild \
+                 (incremental={:?}, full={:?})",
+                self.set,
+                full
+            );
+        }
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1358,6 +1458,12 @@ fn iex_fast_inner(
     let mut steps = 0;
     let mut prev_cs: Option<FxHashSet<crate::term::Sym>> = None;
     let mut resume_from = 0usize;
+    // WIN 1 (docs/explore/perf-audit.md §3): the per-step `psi_csyms(&psi)`
+    // O(|Ψ|) rebuild is replaced by an incrementally-maintained colour
+    // multiset, seeded once here and updated by the per-step Ψ delta
+    // (`remove`d `selected` − , appended `produced` +). `pcs.set()` is, by
+    // the debug-gated oracle below, *exactly* `psi_csyms(&psi)` every step.
+    let mut pcs = PsiCS::from_psi(&psi);
     // KA1 table: α-variant keys of every star ever present (seed with the
     // initial Ψ so a re-derived copy of a starting subgoal is reused).
     let mut seen: FxHashSet<Term> = FxHashSet::default();
@@ -1369,13 +1475,17 @@ fn iex_fast_inner(
 
     while steps < fuel {
         let tp = std::time::Instant::now();
-        let psi_cs = psi_csyms(&psi);
+        // Faithfulness oracle (debug-only; compiled out of release): the
+        // incrementally-maintained set MUST equal the full `psi_csyms`
+        // rebuild on *every* step — proven, not argued (task gate #2).
+        pcs.assert_eq_full(&psi);
+        let psi_cs = pcs.set();
         ks_add(&T_PSICS, tp.elapsed());
 
         // Resume invariant: identical colour set ⇒ the untouched prefix
         // [0, resume_from) is still non-matchable; else full rescan.
         let start = match &prev_cs {
-            Some(p) if *p == psi_cs => resume_from.min(psi.len()),
+            Some(p) if p == psi_cs => resume_from.min(psi.len()),
             _ => 0,
         };
 
@@ -1402,10 +1512,10 @@ fn iex_fast_inner(
                     match accel.sel.decide(r) {
                         Some(true) => true,
                         // `decide` is never `Some(false)`; `None` ⇒ exact scan.
-                        _ => any_match_accel(accel, phi, r, &psi_cs) || any_self(star, j),
+                        _ => any_match_accel(accel, phi, r, psi_cs) || any_self(star, j),
                     }
                 } else {
-                    any_match_accel(accel, phi, r, &psi_cs) || any_self(star, j)
+                    any_match_accel(accel, phi, r, psi_cs) || any_self(star, j)
                 };
                 if matched {
                     found_step = Some((i, j));
@@ -1443,23 +1553,40 @@ fn iex_fast_inner(
                     }
                 });
                 let produced =
-                    produce_stars_fast(accel, phi, &selected, j, &mut counter, &psi_cs, spec);
+                    produce_stars_fast(accel, phi, &selected, j, &mut counter, psi_cs, spec);
+                // Snapshot the colour set for the next step's resume check
+                // *before* the delta mutates it (this also ends the immutable
+                // borrow of `pcs` so the incremental update below can take
+                // `&mut pcs`). Cheap: the set is over *distinct colours*, not
+                // |Ψ| — and this is the exact value the old code stored.
+                let cs_snapshot = psi_cs.clone();
+                // Ψ delta − : the `selected` star left Ψ.
+                pcs.remove_star(&selected);
                 if tabling {
                     // KA1: drop α-variant redundant stars; keep + table the rest.
                     // (If a step yields only variants ⇒ no growth ⇒ fixpoint.)
                     for s in produced {
                         let k = star_key(&s);
                         if seen.insert(k) {
+                            // Ψ delta + : only stars actually pushed are
+                            // accounted (α-variants dropped here never enter Ψ
+                            // ⇒ never contribute a colour) — keeps `pcs` an
+                            // exact mirror of `psi`.
+                            pcs.add_star(&s);
                             psi.push(s);
                         }
                     }
                 } else {
-                    psi.extend(produced);
+                    for s in produced {
+                        // Ψ delta + : every produced star enters Ψ.
+                        pcs.add_star(&s);
+                        psi.push(s);
+                    }
                 }
                 // Prefix [0, i) was scanned non-matchable this step and is
                 // physically untouched by remove/extend ⇒ safe resume point.
                 resume_from = i;
-                prev_cs = Some(psi_cs);
+                prev_cs = Some(cs_snapshot);
                 steps += 1;
             }
         }
