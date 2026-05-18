@@ -576,8 +576,24 @@ pub fn cut_elim_via_aex(ps: &ProofStructure, normal_form_ps: &ProofStructure) ->
     // (Required by the spec: use aex_full for equivalence sanity test.)
     let oracle_result = aex_full(&phi_r);
 
-    // Check AEx(Φ_R^comp) ≃_S Φ_S^ax.
-    let theorem_holds = constellations_equiv(&result, &phi_s_ax);
+    // Check AEx(Φ_R^comp) ≃_S Φ_S^ax (§67.7 / Thm 67.10).
+    //
+    // §67.7's `≃_S` is a bijection `φ : I_Φ → I_{Φ'}` with `|Φ[i]| = |Φ'[φ(i)]|`
+    // over the *diagram-bearing* stars: an index `i` with `|Φ[i]| = 0` is a
+    // zero-ray star that carries NO diagram. Such stars are AEx execution
+    // residue, not computational content: the §67.9 par/tensor case duplicates
+    // the cut ("the cut is duplicated; diagrams … are equal up to change of
+    // function symbols"), and a connective-output cut (Fig 66.2 shape) leaves
+    // the doubled `+c(1·X)`/`+c(r·X)` cut diagrams contracted to empty stars
+    // *alongside* the correct content star. The §67.1 ax/cut case ("the only
+    // true case") never duplicates, so it leaves zero residue — which is why
+    // ax/cut chains certify under the strict length check and the connective-
+    // output cut did not. Comparing the non-degenerate star multiset is faithful
+    // to §67.7 (a 0-ray star is not a diagram component, so it is not in the
+    // index bijection's content) and identical to the strict check whenever
+    // there is no residue (every ax/cut trajectory). Measured: ax-chain n=3
+    // AEx output = 1 star / 0 empty; Fig-66.2 = 1 content + 16 empty residue.
+    let theorem_holds = constellations_equiv_mod_residue(&result, &phi_s_ax);
 
     // (Also assert oracle agrees with fast path — not surfaced to caller but
     //  violations would be caught by the cfg(test) assertion below.)
@@ -842,6 +858,31 @@ pub fn constellations_equiv(a: &[Star], b: &[Star]) -> bool {
         return false;
     }
     true
+}
+
+/// `Φ ≃_S Φ'` **modulo zero-ray AEx residue** — the §67.7 structural
+/// equivalence used by the §67.10 cut-elimination gate ([`cut_elim_via_aex`]).
+///
+/// §67.7 defines `≃_S` as a bijection `φ : I_Φ → I_{Φ'}` with
+/// `|Φ[i]| = |Φ'[φ(i)]|`, extended ray-wise. A star with `|·| = 0` (no rays)
+/// carries no diagram: it is execution residue, not a content component.
+/// The §67.9 par/tensor case *duplicates* the cut, so a connective-output cut
+/// (Fig 66.2 shape) contracts its doubled `+c(1·X)`/`+c(r·X)` cut diagrams to
+/// empty stars sitting next to the correct content star; the §67.1 ax/cut
+/// case never duplicates and so leaves none. Dropping zero-ray stars before
+/// the multiset bijection is therefore exactly §67.7 on the diagram-bearing
+/// indices, and coincides with [`constellations_equiv`] whenever there is no
+/// residue (every pure ax/cut trajectory — verified: ax-chain produces 0
+/// empties, so this never relaxes the strictly-shrinking calibration corpus).
+///
+/// Kept separate from the general [`constellations_equiv`] (which §68/§69/§71
+/// behaviour tests rely on with its strict length check) so this §67.10-only
+/// reading has zero blast radius elsewhere.
+pub fn constellations_equiv_mod_residue(a: &[Star], b: &[Star]) -> bool {
+    let strip = |c: &[Star]| -> Vec<Star> {
+        c.iter().filter(|s| !s.is_empty()).cloned().collect()
+    };
+    constellations_equiv(&strip(a), &strip(b))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2574,11 +2615,14 @@ mod tests {
 
     /// The ⊗/⅋ (Fig 66.2) connective-output cut: the cut-reduction TRAJECTORY
     /// is structurally correct (⊗/⅋ splits Cut(7,8) into Cut(4,3)+Cut(6,5),
-    /// then ax/cut splices to Ax(1,2)), and reaches a cut-free endpoint —
-    /// asserted. §67.10 engine certification of a connective-output cut is a
-    /// documented limitation of the present `phi_ax`/AEx path, so the theorem
-    /// bit is *observed*, not asserted (measure-don't-guess; honest where
-    /// inconclusive).
+    /// then ax/cut splices to Ax(1,2)), reaches a cut-free endpoint, AND is now
+    /// §67.10-CERTIFIED. The earlier inconclusive was located precisely: the
+    /// §67.9 par/tensor case *duplicates* the cut, so AEx leaves zero-ray
+    /// residue stars beside the correct content star, and the old strict
+    /// length check in `constellations_equiv` rejected on count. §67.7's `≃_S`
+    /// is a bijection over diagram-bearing stars (a 0-ray star is no diagram),
+    /// so [`constellations_equiv_mod_residue`] is the faithful reading and now
+    /// certifies the connective-output cut. Hard-asserted (theorem is oracle).
     #[test]
     fn cut_elim_trace_tensor_par_trajectory_is_structurally_correct() {
         let r = ProofStructure {
@@ -2602,8 +2646,20 @@ mod tests {
             vec![LinkKind::Ax { left: VId(1), right: VId(2) }],
             "⊗/⅋ then ax/cut splicing yields the surviving conclusion axiom"
         );
-        // Engine certification of this connective-output cut is observed only.
-        let _observed = cut_elim_via_aex(&r, &last.ps).theorem_holds;
+        // §67.10 is now HARD-asserted for this connective-output cut, against
+        // the trajectory's own endpoint AND the theorem-as-written normal form.
+        assert!(
+            cut_elim_via_aex(&r, &last.ps).theorem_holds,
+            "§67.10 must hold for the ⊗/⅋ connective-output cut's own endpoint \
+             (residue-faithful ≃_S, §67.7)"
+        );
+        assert!(
+            cut_elim_via_aex(&r, &ProofStructure {
+                links: vec![LinkKind::Ax { left: VId(1), right: VId(2) }],
+            })
+            .theorem_holds,
+            "§67.10 must hold for the ⊗/⅋ cut against the stated normal form S"
+        );
     }
 
     /// CALIBRATION: `accel_detect::detect_recurrence` must NOT raise a sound,
@@ -2639,6 +2695,255 @@ mod tests {
                 );
             }
             // (No whistle at all is the expected, correct outcome here.)
+        }
+    }
+
+    /// Broaden the §67.10-certified corpus with DEEPER / MIXED reduction
+    /// shapes, every endpoint hard-asserted against the theorem (the oracle).
+    ///
+    /// * `deep ax-chain n=7` — a longer pure ax/cut chain (§67.1 "only true
+    ///   case") than the prior n≤4 corpus; strictly-shrinking SN trajectory.
+    ///   MEASURED honest boundary: §67.10 engine-certifies the ax/cut chain
+    ///   for `n ≤ 7`; at `n ≥ 8` the AEx fixpoint (BOTH `aex_seminaive_full`
+    ///   and the `aex_full` oracle — they agree, so it is not a fast-path bug)
+    ///   halts the cut/vehicle alternation early, leaving unresolved `μ`-
+    ///   positivised internal rays (e.g. n=8 → 2 non-empty stars `[17,-1]`,
+    ///   `[-16,0]` instead of the single telescoped `[0,17]`). This is a
+    ///   pre-existing AEx saturation-depth limit, distinct from the §67.9
+    ///   connective-output residue resolved via `constellations_equiv_mod_
+    ///   residue`; characterised here, NOT asserted past the certified bound.
+    /// * `two parallel ⊗/⅋ blocks` — a mix-style net: two independent
+    ///   connective-output cuts. Non-monotone cut count `2 3 4 3 2 1 0`.
+    /// * `⊗/⅋ then ax/cut chain` — a connective-output cut composed with an
+    ///   ax/cut splice (§67.9 par/tensor case feeding §67.1 ax/cut). Cut
+    ///   profile `2 3 2 1 0`.
+    ///
+    /// Measured profiles, not assumed; §67.10 is the oracle for each endpoint
+    /// AND for the theorem-as-written normal form S.
+    #[test]
+    fn cut_elim_extended_certified_corpus() {
+        // Deep pure ax/cut chain at the measured certified boundary (n = 7).
+        {
+            let n = 7u32;
+            let mut links = Vec::new();
+            for k in 0..=n {
+                links.push(LinkKind::Ax { left: VId(2 * k), right: VId(2 * k + 1) });
+            }
+            for k in 0..n {
+                links.push(LinkKind::Cut { left: VId(2 * k + 1), right: VId(2 * (k + 1)) });
+            }
+            let r = ProofStructure { links };
+            let s = ProofStructure {
+                links: vec![LinkKind::Ax { left: VId(0), right: VId(2 * n + 1) }],
+            };
+            let tr = cut_elim_trace(&r, 256);
+            let last = tr.last().unwrap();
+            assert_eq!(last.cuts_remaining, 0, "deep chain endpoint cut-free");
+            // Strictly shrinking — every step removes exactly one cut.
+            for w in tr.windows(2) {
+                assert_eq!(
+                    w[1].cuts_remaining + 1,
+                    w[0].cuts_remaining,
+                    "deep ax-chain strictly shrinks by one cut/step"
+                );
+            }
+            assert!(
+                cut_elim_via_aex(&r, &last.ps).theorem_holds
+                    && cut_elim_via_aex(&r, &s).theorem_holds,
+                "§67.10 must hold for the deep ax-chain (endpoint and S)"
+            );
+        }
+
+        // Two independent ⊗/⅋ connective-output cuts (mix-style).
+        {
+            let r = ProofStructure {
+                links: vec![
+                    LinkKind::Ax { left: VId(1), right: VId(2) },
+                    LinkKind::Ax { left: VId(3), right: VId(4) },
+                    LinkKind::Ax { left: VId(5), right: VId(6) },
+                    LinkKind::Par { left: VId(3), right: VId(5), output: VId(7) },
+                    LinkKind::Tensor { left: VId(4), right: VId(6), output: VId(8) },
+                    LinkKind::Cut { left: VId(7), right: VId(8) },
+                    LinkKind::Ax { left: VId(11), right: VId(12) },
+                    LinkKind::Ax { left: VId(13), right: VId(14) },
+                    LinkKind::Ax { left: VId(15), right: VId(16) },
+                    LinkKind::Par { left: VId(13), right: VId(15), output: VId(17) },
+                    LinkKind::Tensor { left: VId(14), right: VId(16), output: VId(18) },
+                    LinkKind::Cut { left: VId(17), right: VId(18) },
+                ],
+            };
+            let s = ProofStructure {
+                links: vec![
+                    LinkKind::Ax { left: VId(1), right: VId(2) },
+                    LinkKind::Ax { left: VId(11), right: VId(12) },
+                ],
+            };
+            let tr = cut_elim_trace(&r, 256);
+            let last = tr.last().unwrap();
+            assert_eq!(last.cuts_remaining, 0, "two-⊗/⅋ endpoint cut-free");
+            // Non-monotone (grow-then-shrink) cut profile — two-sided shape.
+            let profile: Vec<usize> = tr.iter().map(|s| s.cuts_remaining).collect();
+            assert_eq!(
+                profile,
+                vec![2, 3, 4, 3, 2, 1, 0],
+                "two-⊗/⅋ cut profile grows then shrinks (measured)"
+            );
+            assert!(
+                cut_elim_via_aex(&r, &last.ps).theorem_holds
+                    && cut_elim_via_aex(&r, &s).theorem_holds,
+                "§67.10 must hold for two parallel ⊗/⅋ connective-output cuts"
+            );
+        }
+
+        // ⊗/⅋ connective-output cut composed with an ax/cut chain.
+        {
+            let r = ProofStructure {
+                links: vec![
+                    LinkKind::Ax { left: VId(1), right: VId(2) },
+                    LinkKind::Ax { left: VId(3), right: VId(4) },
+                    LinkKind::Ax { left: VId(5), right: VId(6) },
+                    LinkKind::Par { left: VId(3), right: VId(5), output: VId(7) },
+                    LinkKind::Tensor { left: VId(4), right: VId(6), output: VId(8) },
+                    LinkKind::Cut { left: VId(7), right: VId(8) },
+                    LinkKind::Cut { left: VId(2), right: VId(9) },
+                    LinkKind::Ax { left: VId(9), right: VId(10) },
+                ],
+            };
+            let s = ProofStructure {
+                links: vec![LinkKind::Ax { left: VId(1), right: VId(10) }],
+            };
+            let tr = cut_elim_trace(&r, 256);
+            let last = tr.last().unwrap();
+            assert_eq!(last.cuts_remaining, 0, "conn+axchain endpoint cut-free");
+            let profile: Vec<usize> = tr.iter().map(|s| s.cuts_remaining).collect();
+            assert_eq!(
+                profile,
+                vec![2, 3, 2, 1, 0],
+                "conn+axchain cut profile (measured)"
+            );
+            assert!(
+                cut_elim_via_aex(&r, &last.ps).theorem_holds
+                    && cut_elim_via_aex(&r, &s).theorem_holds,
+                "§67.10 must hold for ⊗/⅋ composed with an ax/cut chain"
+            );
+        }
+    }
+
+    /// HONEST-NEGATIVE boundary pin: the AEx fixpoint does NOT certify §67.10
+    /// for a pure ax/cut chain of `n ≥ 8` cuts. This is a pre-existing engine
+    /// saturation-depth limit (the cut/vehicle alternation is not chased to
+    /// the fixpoint past ~7 hops) — `aex_seminaive_full` and the `aex_full`
+    /// oracle AGREE on the truncated result, so it is a genuine engine limit,
+    /// not a fast-path discrepancy and not the §67.9 connective-output residue
+    /// (which is resolved). Asserting the negative makes it a *characterised*
+    /// boundary: if a future AEx deepening fixes it, this test fails loudly
+    /// and the certified-corpus bound is to be raised — not a silent gap.
+    #[test]
+    fn cut_elim_axchain_engine_limit_n_ge_8_is_characterised_negative() {
+        let chain = |n: u32| {
+            let mut links = Vec::new();
+            for k in 0..=n {
+                links.push(LinkKind::Ax { left: VId(2 * k), right: VId(2 * k + 1) });
+            }
+            for k in 0..n {
+                links.push(LinkKind::Cut { left: VId(2 * k + 1), right: VId(2 * (k + 1)) });
+            }
+            (
+                ProofStructure { links },
+                ProofStructure {
+                    links: vec![LinkKind::Ax { left: VId(0), right: VId(2 * n + 1) }],
+                },
+            )
+        };
+        // n = 7 is the last certified depth (positive control).
+        let (r7, s7) = chain(7);
+        assert!(
+            cut_elim_via_aex(&r7, &s7).theorem_holds,
+            "n=7 ax/cut chain must still certify (certified boundary)"
+        );
+        // n = 8 is the first uncertified depth — HONEST NEGATIVE, asserted as
+        // such (the trajectory itself is still correct & cut-free; only the
+        // AEx-path §67.10 certification is out of reach at this depth).
+        let (r8, s8) = chain(8);
+        let last8 = cut_elim_trace(&r8, 256).last().unwrap().clone();
+        assert_eq!(
+            last8.cuts_remaining, 0,
+            "n=8 trajectory is still structurally correct (reaches cut-free)"
+        );
+        assert!(
+            !cut_elim_via_aex(&r8, &s8).theorem_holds,
+            "n=8 is the characterised AEx saturation-depth limit — if this \
+             now certifies, the engine improved: raise the certified bound"
+        );
+    }
+
+    /// TWO-SIDED calibration (the docs/08 §4.10 caveat — recurrence-form
+    /// calibration was thin because every prior certified trajectory STRICTLY
+    /// shrank). The ⊗/⅋ connective-output trajectories are §67.10-certified
+    /// AND **non-monotone** in cut count (the §67.9 par/tensor case duplicates
+    /// the cut: a +1 step, then ax/cut shrinks). So `detect_recurrence` is now
+    /// calibrated on a theorem-certified GROW-THEN-SHRINK trajectory, not only
+    /// on monotone-decreasing ones. The load-bearing safety property is
+    /// unchanged: NO sound, non-trivial "unfolds forever" whistle on a
+    /// reduction the theorem proves terminates — even one whose state metric
+    /// grows before it shrinks (where a naive size-decrease heuristic would be
+    /// the most tempted to misfire).
+    #[test]
+    fn detect_recurrence_no_false_positive_on_nonmonotone_certified_trajectory() {
+        use crate::accel_detect::{
+            detect_recurrence, is_sound_generalization, is_trivial_generalization,
+        };
+        let nets: Vec<ProofStructure> = vec![
+            // Single ⊗/⅋ connective-output cut (cut profile 1 2 1 0).
+            ProofStructure {
+                links: vec![
+                    LinkKind::Ax { left: VId(1), right: VId(2) },
+                    LinkKind::Ax { left: VId(3), right: VId(4) },
+                    LinkKind::Ax { left: VId(5), right: VId(6) },
+                    LinkKind::Par { left: VId(3), right: VId(5), output: VId(7) },
+                    LinkKind::Tensor { left: VId(4), right: VId(6), output: VId(8) },
+                    LinkKind::Cut { left: VId(7), right: VId(8) },
+                ],
+            },
+            // Two parallel ⊗/⅋ blocks (cut profile 2 3 4 3 2 1 0).
+            ProofStructure {
+                links: vec![
+                    LinkKind::Ax { left: VId(1), right: VId(2) },
+                    LinkKind::Ax { left: VId(3), right: VId(4) },
+                    LinkKind::Ax { left: VId(5), right: VId(6) },
+                    LinkKind::Par { left: VId(3), right: VId(5), output: VId(7) },
+                    LinkKind::Tensor { left: VId(4), right: VId(6), output: VId(8) },
+                    LinkKind::Cut { left: VId(7), right: VId(8) },
+                    LinkKind::Ax { left: VId(11), right: VId(12) },
+                    LinkKind::Ax { left: VId(13), right: VId(14) },
+                    LinkKind::Ax { left: VId(15), right: VId(16) },
+                    LinkKind::Par { left: VId(13), right: VId(15), output: VId(17) },
+                    LinkKind::Tensor { left: VId(14), right: VId(16), output: VId(18) },
+                    LinkKind::Cut { left: VId(17), right: VId(18) },
+                ],
+            },
+        ];
+        for (i, r) in nets.iter().enumerate() {
+            let tr = cut_elim_trace(r, 256);
+            // Confirm the trajectory really is non-monotone in cut count
+            // (otherwise this would not be the two-sided shape it claims).
+            let prof: Vec<usize> = tr.iter().map(|s| s.cuts_remaining).collect();
+            assert!(
+                prof.windows(2).any(|w| w[1] > w[0]),
+                "net {i}: trajectory must have a growth step (non-monotone)"
+            );
+            assert_eq!(tr.last().unwrap().cuts_remaining, 0, "net {i}: cut-free");
+            let states = trace_states(&tr);
+            if let Some(w) = detect_recurrence(&states) {
+                let inst = &states[w.earlier..=w.later];
+                let sound = is_sound_generalization(w.generalization, inst);
+                let trivial = is_trivial_generalization(w.generalization);
+                assert!(
+                    !(sound && !trivial && w.later - w.earlier >= 2),
+                    "net {i}: FALSE-POSITIVE whistle on a §67.10-certified \
+                     NON-MONOTONE strongly-normalising trajectory"
+                );
+            }
         }
     }
 
