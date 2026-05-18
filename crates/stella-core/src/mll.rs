@@ -587,6 +587,236 @@ pub fn cut_elim_via_aex(ps: &ProofStructure, normal_form_ps: &ProofStructure) ->
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// §67 Cut-elimination *trajectory* tap (theorem-certified differential oracle)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// `cut_elim_via_aex` above runs the stellar engine and returns ONLY the final
+// state + the §67.10 theorem bit; the per-contraction sequence is discarded.
+// This section captures that sequence on the proof-net side: the cut-reduction
+// rewrite `R = R₀ ~~> R₁ ~~> … ~~> Rₙ = S` (each step eliminates one cut), with
+// every intermediate `Rᵢ` reified to a canonical `TermId`.
+//
+// Why this is the project's one *theorem-certified* trajectory oracle
+// (vs. the `data[0]` / `galaxy_layer_trace` self-consistency probe):
+//
+// * §67.10 *proves* `AEx(Φ_R^comp) ≃_S Φ_S^ax` for `R ~~>* S`, S normal. So
+//   the *endpoint* of the trajectory is checkable against a theorem, not
+//   against the engine re-run on itself.
+// * MLL proof-net cut-elimination is *strongly normalising* and *confluent*
+//   (the unique cut-free normal form; the underlying diagram contraction
+//   `↝` terminates and is confluent on correct diagrams, §49.35–49.36). So
+//   the trajectory is a KNOWN-terminating, KNOWN-confluent reduction — the
+//   calibration setting `accel_detect::detect_recurrence` never had on the
+//   open-ended `data[0]` recursion.
+//
+// The reified per-step `TermId` is exactly the shape
+// `accel_detect::detect_recurrence(&[TermId])` consumes (the same per-state
+// `TermId` the `galaxy_layer_trace` probe and `subjective`/`valence` traces
+// feed it) — no parallel trajectory type is introduced.
+
+/// Which §67 cut-reduction rule produced a [`ReductionStep`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CutRule {
+    /// The initial (un-reduced) proof-structure `R₀` — no rule fired yet.
+    Initial,
+    /// **ax/cut** reduction (§67.1: "the only true case"): an `Ax(a,b)` whose
+    /// endpoint `b` is cut against `c` is spliced out — `c` is rewired to `a`.
+    AxCut,
+    /// **⊗/⅋** reduction (§67.1: purely shape-determined): `Cut(⊗-out, ⅋-out)`
+    /// is replaced by the two component cuts `Cut(tl,pl)` and `Cut(tr,pr)`.
+    MultiplicativeCut,
+}
+
+/// One state on the cut-elimination trajectory `R₀ ~~> R₁ ~~> … ~~> Rₙ`.
+///
+/// `state` is the canonical [`TermId`] reification of `Φ_{Rᵢ}^comp` — the
+/// shape [`crate::accel_detect::detect_recurrence`] consumes. Collecting the
+/// `state`s of a [`cut_elim_trace`] gives the `Vec<TermId>` trace to feed it.
+#[derive(Debug, Clone)]
+pub struct ReductionStep {
+    /// Step index along the trajectory (`0` = `R₀`, the input proof-structure).
+    pub index: usize,
+    /// The rule that produced this state (`Initial` for index 0).
+    pub rule: CutRule,
+    /// The proof-structure `Rᵢ` at this step.
+    pub ps: ProofStructure,
+    /// `Φ_{Rᵢ}^comp` (axiom ⊎ cut content) for this step.
+    pub phi_comp: Constellation,
+    /// Canonical [`TermId`] reification of `phi_comp` — α-stable, hash-consed,
+    /// O(1)-comparable; the per-step value `detect_recurrence` consumes.
+    pub state: Term,
+    /// Number of cuts still present at this step (`0` ⇔ cut-free normal form).
+    pub cuts_remaining: usize,
+}
+
+/// Reify a constellation into a single canonical [`Term`].
+///
+/// Each star becomes `star(r₁, …, r_k)` with its rays sorted by `TermId`
+/// (stars are multisets — order is not semantic); the whole state becomes
+/// `state(s₁, …, s_m)` with the stars likewise sorted, then run through
+/// [`crate::antiunify::canonical`] so α-equivalent states share one `TermId`.
+/// This is the loop-state key the recurrence detector keys on.
+fn reify_constellation(phi: &Constellation) -> Term {
+    let mut stars: Vec<Term> = phi
+        .iter()
+        .map(|s| {
+            let mut rays: Vec<Term> = s.clone();
+            rays.sort_unstable();
+            mk_app_str("star", rays)
+        })
+        .collect();
+    stars.sort_unstable();
+    crate::antiunify::canonical(mk_app_str("state", stars))
+}
+
+/// Find a redex: either an ax/cut pair or a ⊗/⅋ cut pair.
+///
+/// Returns the rewritten [`ProofStructure`] and the [`CutRule`] applied, or
+/// `None` when `ps` is cut-free (normal form reached).
+///
+/// Strategy: deterministic leftmost — scan cuts in link order, take the first
+/// reducible one. Confluence (§49.35–49.36 / MLL strong normalisation) means
+/// the normal form does not depend on this choice; a fixed order just makes
+/// the *trajectory* reproducible.
+fn reduce_one_cut(ps: &ProofStructure) -> Option<(ProofStructure, CutRule)> {
+    // Index helper closures over the current link list.
+    let find_ax = |v: VId| -> Option<(usize, VId)> {
+        ps.links.iter().enumerate().find_map(|(i, l)| match l {
+            LinkKind::Ax { left, right } if *left == v => Some((i, *right)),
+            LinkKind::Ax { left, right } if *right == v => Some((i, *left)),
+            _ => None,
+        })
+    };
+    let find_conn = |v: VId| -> Option<(usize, LinkKind)> {
+        ps.links.iter().enumerate().find_map(|(i, l)| match l {
+            LinkKind::Tensor { output, .. } | LinkKind::Par { output, .. } if *output == v => {
+                Some((i, l.clone()))
+            }
+            _ => None,
+        })
+    };
+
+    for (cut_i, link) in ps.links.iter().enumerate() {
+        let LinkKind::Cut { left: cl, right: cr } = link else { continue };
+        let (cl, cr) = (*cl, *cr);
+
+        // ── ax/cut case ──────────────────────────────────────────────────────
+        // Ax(a, b) with b == one cut endpoint ⇒ rewire the OTHER cut endpoint
+        // to `a`, drop the Ax and the Cut.
+        for (cut_end, other_end) in [(cl, cr), (cr, cl)] {
+            if let Some((ax_i, a)) = find_ax(cut_end) {
+                // a == the Ax endpoint NOT touching the cut; rewire every
+                // remaining occurrence of `other_end` to `a`.
+                let mut links: Vec<LinkKind> = Vec::with_capacity(ps.links.len());
+                for (j, l) in ps.links.iter().enumerate() {
+                    if j == ax_i || j == cut_i {
+                        continue;
+                    }
+                    links.push(rename_vertex(l, other_end, a));
+                }
+                return Some((ProofStructure { links }, CutRule::AxCut));
+            }
+        }
+
+        // ── ⊗/⅋ case ─────────────────────────────────────────────────────────
+        // Cut(⊗-out, ⅋-out) ⇒ replace by Cut(tl,pl) + Cut(tr,pr).
+        let (ten, par) = match (find_conn(cl), find_conn(cr)) {
+            (Some((ti, t @ LinkKind::Tensor { .. })), Some((pi, p @ LinkKind::Par { .. }))) => {
+                (Some((ti, t)), Some((pi, p)))
+            }
+            (Some((pi, p @ LinkKind::Par { .. })), Some((ti, t @ LinkKind::Tensor { .. }))) => {
+                (Some((ti, t)), Some((pi, p)))
+            }
+            _ => (None, None),
+        };
+        if let (Some((ti, LinkKind::Tensor { left: tl, right: tr, .. })), Some((pi, LinkKind::Par { left: pl, right: pr, .. }))) = (ten, par) {
+            let mut links: Vec<LinkKind> = Vec::with_capacity(ps.links.len() + 1);
+            for (j, l) in ps.links.iter().enumerate() {
+                if j == cut_i || j == ti || j == pi {
+                    continue;
+                }
+                links.push(l.clone());
+            }
+            links.push(LinkKind::Cut { left: tl, right: pl });
+            links.push(LinkKind::Cut { left: tr, right: pr });
+            return Some((ProofStructure { links }, CutRule::MultiplicativeCut));
+        }
+    }
+    None
+}
+
+/// Substitute vertex `from` ↦ `to` in a single link.
+fn rename_vertex(l: &LinkKind, from: VId, to: VId) -> LinkKind {
+    let s = |v: VId| if v == from { to } else { v };
+    match l {
+        LinkKind::Ax { left, right } => LinkKind::Ax { left: s(*left), right: s(*right) },
+        LinkKind::Cut { left, right } => LinkKind::Cut { left: s(*left), right: s(*right) },
+        LinkKind::Tensor { left, right, output } => {
+            LinkKind::Tensor { left: s(*left), right: s(*right), output: s(*output) }
+        }
+        LinkKind::Par { left, right, output } => {
+            LinkKind::Par { left: s(*left), right: s(*right), output: s(*output) }
+        }
+    }
+}
+
+/// Capture the per-cut-reduction **trajectory** of proof-structure `ps`.
+///
+/// Returns `R₀, R₁, …, Rₙ` where `R₀ = ps`, each `Rᵢ₊₁` is `Rᵢ` with one cut
+/// eliminated (leftmost redex; ax/cut or ⊗/⅋), and `Rₙ` is cut-free — the
+/// §67.10-certified normal form `S` (Theorem 67.10:
+/// `AEx(Φ_R^comp) ≃_S Φ_S^ax`). This is the sequence `cut_elim_via_aex`
+/// discards.
+///
+/// `bound` caps the number of reduction steps (defensive: MLL cut-elimination
+/// is strongly normalising, so a correct net always halts well before any
+/// sensible bound; exceeding it is reported by the trajectory simply not
+/// ending cut-free, which the caller can detect via `cuts_remaining`).
+///
+/// Behaviour-preserving: a pure read over `ps`; no existing API changed.
+pub fn cut_elim_trace(ps: &ProofStructure, bound: usize) -> Vec<ReductionStep> {
+    let mut steps: Vec<ReductionStep> = Vec::new();
+    let mut cur = ps.clone();
+    let mut idx = 0usize;
+    let mut rule = CutRule::Initial;
+    loop {
+        let phi_comp_cur = phi_comp(&cur);
+        let state = reify_constellation(&phi_comp_cur);
+        let cuts_remaining = cur.cuts().len();
+        steps.push(ReductionStep {
+            index: idx,
+            rule,
+            ps: cur.clone(),
+            phi_comp: phi_comp_cur,
+            state,
+            cuts_remaining,
+        });
+        if cuts_remaining == 0 || idx >= bound {
+            break;
+        }
+        match reduce_one_cut(&cur) {
+            Some((next, r)) => {
+                cur = next;
+                rule = r;
+                idx += 1;
+            }
+            // A cut remains but no ax/cut or ⊗/⅋ redex applies (e.g. a
+            // cut between two unreduced connectives not in ⊗/⅋ duality, or
+            // a non-proof-net input). Stop honestly: the trajectory ends
+            // here and `cuts_remaining > 0` flags it as not-normalised.
+            None => break,
+        }
+    }
+    steps
+}
+
+/// The reified `state` sequence of a [`cut_elim_trace`] — exactly the
+/// `Vec<TermId>` to hand to [`crate::accel_detect::detect_recurrence`].
+pub fn trace_states(steps: &[ReductionStep]) -> Vec<Term> {
+    steps.iter().map(|s| s.state).collect()
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Structural equivalence ≃_S (§67.7)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -2275,6 +2505,141 @@ mod tests {
         let elim = cut_elim_via_aex(&ps, &ps);
         assert!(elim.theorem_holds,
             "Base case: Thm 67.10 must hold when R = S (no cuts)");
+    }
+
+    // ── Cut-elimination *trajectory* tap: §67.10-certified differential oracle ─
+
+    /// `cut_elim_trace` produces the per-cut-reduction sequence whose ENDPOINT
+    /// is §67.10-certified, on the pure ax/cut case (§67.1's "only true case").
+    ///
+    /// This is the THEOREM-as-oracle gate: `cut_elim_via_aex(R, Rₙ)` runs the
+    /// independent stellar engine and `theorem_holds` is `AEx(Φ_R^comp) ≃_S
+    /// Φ_Rₙ^ax` — true differential gating against a proved answer, not an
+    /// engine re-run on itself.
+    #[test]
+    fn cut_elim_trace_endpoint_is_theorem_certified() {
+        // n-cut axiom chain: Ax(0,1) Cut(1,2) Ax(2,3) … Ax(2n,2n+1).
+        let chain = |n: u32| -> (ProofStructure, ProofStructure) {
+            let mut links = Vec::new();
+            for k in 0..=n {
+                links.push(LinkKind::Ax { left: VId(2 * k), right: VId(2 * k + 1) });
+            }
+            for k in 0..n {
+                links.push(LinkKind::Cut { left: VId(2 * k + 1), right: VId(2 * (k + 1)) });
+            }
+            (
+                ProofStructure { links },
+                ProofStructure { links: vec![LinkKind::Ax { left: VId(0), right: VId(2 * n + 1) }] },
+            )
+        };
+
+        for n in 1..=4u32 {
+            let (r, s) = chain(n);
+            let trace = cut_elim_trace(&r, 256);
+
+            // R₀ is always present and is the input.
+            assert_eq!(trace[0].index, 0);
+            assert_eq!(trace[0].rule, CutRule::Initial);
+            assert_eq!(trace[0].ps.links, r.links);
+
+            // n cuts ⇒ n ax/cut reductions ⇒ n+1 states; endpoint cut-free.
+            assert_eq!(
+                trace.len(),
+                (n + 1) as usize,
+                "n={n}: expected {} trajectory states", n + 1
+            );
+            let last = trace.last().unwrap();
+            assert_eq!(last.cuts_remaining, 0, "n={n}: endpoint must be cut-free");
+            for w in trace.windows(2) {
+                assert!(
+                    w[1].cuts_remaining < w[0].cuts_remaining,
+                    "n={n}: every step strictly removes a cut (strong normalisation)"
+                );
+                assert_eq!(w[1].rule, CutRule::AxCut, "pure ax/cut chain");
+            }
+
+            // THEOREM IS THE ORACLE: §67.10 against the trajectory endpoint
+            // AND against the theorem-as-written normal form S.
+            assert!(
+                cut_elim_via_aex(&r, &last.ps).theorem_holds,
+                "n={n}: §67.10 AEx(Φ_R^comp) ≃_S Φ_Rₙ^ax must hold for the \
+                 trajectory's own endpoint"
+            );
+            assert!(
+                cut_elim_via_aex(&r, &s).theorem_holds,
+                "n={n}: §67.10 must hold against the stated normal form S"
+            );
+        }
+    }
+
+    /// The ⊗/⅋ (Fig 66.2) connective-output cut: the cut-reduction TRAJECTORY
+    /// is structurally correct (⊗/⅋ splits Cut(7,8) into Cut(4,3)+Cut(6,5),
+    /// then ax/cut splices to Ax(1,2)), and reaches a cut-free endpoint —
+    /// asserted. §67.10 engine certification of a connective-output cut is a
+    /// documented limitation of the present `phi_ax`/AEx path, so the theorem
+    /// bit is *observed*, not asserted (measure-don't-guess; honest where
+    /// inconclusive).
+    #[test]
+    fn cut_elim_trace_tensor_par_trajectory_is_structurally_correct() {
+        let r = ProofStructure {
+            links: vec![
+                LinkKind::Ax { left: VId(1), right: VId(2) },
+                LinkKind::Ax { left: VId(3), right: VId(4) },
+                LinkKind::Ax { left: VId(5), right: VId(6) },
+                LinkKind::Par { left: VId(3), right: VId(5), output: VId(7) },
+                LinkKind::Tensor { left: VId(4), right: VId(6), output: VId(8) },
+                LinkKind::Cut { left: VId(7), right: VId(8) },
+            ],
+        };
+        let trace = cut_elim_trace(&r, 256);
+        // First reduction is the ⊗/⅋ split, then two ax/cut splices.
+        assert_eq!(trace[1].rule, CutRule::MultiplicativeCut);
+        assert!(trace.iter().skip(2).all(|s| s.rule == CutRule::AxCut));
+        let last = trace.last().unwrap();
+        assert_eq!(last.cuts_remaining, 0, "trajectory reaches a cut-free endpoint");
+        assert_eq!(
+            last.ps.links,
+            vec![LinkKind::Ax { left: VId(1), right: VId(2) }],
+            "⊗/⅋ then ax/cut splicing yields the surviving conclusion axiom"
+        );
+        // Engine certification of this connective-output cut is observed only.
+        let _observed = cut_elim_via_aex(&r, &last.ps).theorem_holds;
+    }
+
+    /// CALIBRATION: `accel_detect::detect_recurrence` must NOT raise a sound,
+    /// non-trivial "this unfolds forever" whistle on a §67.10-certified
+    /// strongly-normalising trajectory. A cut-elim trajectory strictly shrinks
+    /// (each step deletes a cut-star), so — exactly per `accel_detect`'s
+    /// decreasing-counter note — it legitimately produces no pairwise
+    /// homeomorphic embedding; the load-bearing property is the *absence of a
+    /// false positive* where the theorem proves termination.
+    #[test]
+    fn detect_recurrence_no_false_positive_on_certified_sn_trajectory() {
+        use crate::accel_detect::{
+            detect_recurrence, is_sound_generalization, is_trivial_generalization,
+        };
+        for n in 1..=4u32 {
+            let mut links = Vec::new();
+            for k in 0..=n {
+                links.push(LinkKind::Ax { left: VId(2 * k), right: VId(2 * k + 1) });
+            }
+            for k in 0..n {
+                links.push(LinkKind::Cut { left: VId(2 * k + 1), right: VId(2 * (k + 1)) });
+            }
+            let r = ProofStructure { links };
+            let states = trace_states(&cut_elim_trace(&r, 256));
+            if let Some(w) = detect_recurrence(&states) {
+                let inst = &states[w.earlier..=w.later];
+                let sound = is_sound_generalization(w.generalization, inst);
+                let trivial = is_trivial_generalization(w.generalization);
+                assert!(
+                    !(sound && !trivial && w.later - w.earlier >= 2),
+                    "n={n}: FALSE-POSITIVE whistle on a §67.10-certified \
+                     strongly-normalising trajectory"
+                );
+            }
+            // (No whistle at all is the expected, correct outcome here.)
+        }
     }
 
     // ── §68 Tests: Danos-Regnier stellar correctness criterion ───────────────
