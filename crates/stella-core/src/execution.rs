@@ -973,3 +973,130 @@ pub fn stars_alpha_equiv(s1: &Star, s2: &Star) -> bool {
     }
     false
 }
+
+#[cfg(test)]
+mod idempotence_metatheorem {
+    //! Re-aim step 2 — the load-bearing metatheorem as a falsifiable
+    //! engine property (thesis-audit 01 §3.1). Eng §49.55: AEx is
+    //! idempotent on **objective** constellations; §49.57: idempotence
+    //! is lost with **subjective** rays. Classification is the FAITHFUL
+    //! colour-nesting `star_kind_eng` (re-aim step 1), NOT the legacy
+    //! polarity census. The subjective case is **measured, not forced**
+    //! (the isnil-retraction lesson): we assert the positive firmly and
+    //! record what the prototype `aex` actually does on the subjective
+    //! fragment — a real faithfulness boundary either way.
+    use super::{aex, result_sets_alpha_equiv_pub};
+    use crate::constellation::{star_kind_eng, Constellation, StarKind};
+    use crate::dep_graph::DepGraph;
+    use crate::polarised::{neg_ray, pos_ray};
+    use crate::term::mk_var;
+
+    fn aex_nf(phi: &Constellation) -> Vec<crate::constellation::Star> {
+        let dg = DepGraph::from_constellation(phi);
+        aex(phi, &dg)
+    }
+
+    /// AEx(AEx(Φ)) =α AEx(Φ) (Eng §49.55 idempotence statement).
+    fn aex_idempotent(phi: &Constellation) -> bool {
+        let r1 = aex_nf(phi);
+        let r2 = aex_nf(&r1);
+        result_sets_alpha_equiv_pub(&r1, &r2)
+    }
+
+    /// §49.55 positive: every Eng-objective constellation is AEx-idempotent.
+    #[test]
+    fn objective_constellations_are_aex_idempotent() {
+        let zero = || crate::term::mk_app_str("zero", vec![]);
+        // (1) single objective star, no interaction (trivial idempotent).
+        let c1: Constellation = vec![vec![pos_ray("a", vec![zero()])]];
+        // (2) an interacting objective pair: +p(zero) × [−p(X),+q(X)].
+        let c2: Constellation = vec![
+            vec![pos_ray("p", vec![zero()])],
+            vec![neg_ray("p", vec![mk_var("X")]), pos_ray("q", vec![mk_var("X")])],
+        ];
+        // (3) Eng §55 Horn `add` — note: legacy census calls its 2-ray
+        // star Animist (sign-mixed); star_kind_eng correctly = Objective.
+        let c3 = crate::arith::add_stars();
+
+        for (name, phi) in [("single", &c1), ("pair", &c2), ("horn-add", &c3)] {
+            for (i, s) in phi.iter().enumerate() {
+                assert_eq!(
+                    star_kind_eng(s),
+                    StarKind::Objective,
+                    "{name}: star {i} must be Eng-objective"
+                );
+            }
+            assert!(
+                aex_idempotent(phi),
+                "{name}: §49.55 — objective Φ must be AEx-idempotent"
+            );
+        }
+    }
+
+    /// Eng's OWN §49.50 worked example (`subjective.rs` gate-a):
+    /// Φ-star `[X,+f(X)]` is objective; the query `[−f(+g(Z))]` is the
+    /// canonical **subjective** ray (coloured head, colour nested in its
+    /// argument). This validates `star_kind_eng` against Eng's worked
+    /// example directly — the step-1↔Eng tie.
+    #[test]
+    fn eng_4950_example_is_classified_faithfully() {
+        let phi_star = vec![mk_var("X"), pos_ray("f", vec![mk_var("X")])];
+        let subj_star = vec![neg_ray("f", vec![pos_ray("g", vec![mk_var("Z")])])];
+        assert_eq!(
+            star_kind_eng(&phi_star),
+            StarKind::Objective,
+            "[X,+f(X)] is Eng-objective (colour over uncoloured args)"
+        );
+        assert_eq!(
+            star_kind_eng(&subj_star),
+            StarKind::Subjective,
+            "[−f(+g(Z))] is Eng-SUBJECTIVE (colour g nested in f's argument)"
+        );
+        // The combined constellation mixes an objective and a subjective
+        // star ⇒ an animist constellation (the §49.50 fragment).
+        let kinds: Vec<_> = [&phi_star, &subj_star]
+            .iter()
+            .map(|s| star_kind_eng(s))
+            .collect();
+        assert!(
+            kinds.contains(&StarKind::Objective) && kinds.contains(&StarKind::Subjective),
+            "the §49.50 constellation is animist (objective Φ-star + subjective query)"
+        );
+    }
+
+    /// §49.57 — MEASURED, not forced. Run `aex_idempotent` on the
+    /// subjective §49.50 fragment and pin whatever the prototype actually
+    /// does, with the honest interpretation. (If `aex` is idempotent here
+    /// too, that pins the boundary: prototype AEx does NOT realise
+    /// §49.57's new-ray non-idempotence — that lives in
+    /// `subjective::subjective_stream`, not `aex`. That is itself the
+    /// faithfulness finding audit 01 §1.9 predicted.)
+    #[test]
+    fn subjective_fragment_aex_idempotence_is_measured() {
+        let phi: Constellation = vec![
+            vec![mk_var("X"), pos_ray("f", vec![mk_var("X")])],
+            vec![neg_ray("f", vec![pos_ray("g", vec![mk_var("Z")])])],
+        ];
+        // Sanity: this constellation contains a subjective star.
+        assert!(
+            phi.iter().any(|s| star_kind_eng(s) == StarKind::Subjective),
+            "fixture must contain the Eng-subjective query star"
+        );
+        let idem = aex_idempotent(&phi);
+        eprintln!(
+            "[§49.57 PROBE] prototype aex idempotent on the Eng-subjective \
+             §49.50 fragment = {idem}  (false ⇒ §49.57 non-idempotence \
+             realised by aex; true ⇒ non-idempotence lives in \
+             subjective_stream, NOT aex — a recorded faithfulness boundary)"
+        );
+        // Deterministic pin of the MEASURED reality (updated to match the
+        // observed value after first run — see commit message).
+        assert_eq!(
+            idem, MEASURED_SUBJECTIVE_AEX_IDEMPOTENT,
+            "the §49.57 boundary moved — re-investigate, do not silently retune"
+        );
+    }
+    /// The observed value (set from the first run, then frozen as a
+    /// regression pin — moving it requires a documented investigation).
+    const MEASURED_SUBJECTIVE_AEX_IDEMPOTENT: bool = true;
+}
