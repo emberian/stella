@@ -491,6 +491,53 @@ is now witnessed. So: χ-existence on a faithful constellation is
 **measured-positive** (was the open question of §4.8); the χ
 *measure* (Stage-2/3) is the next build, now on solid ground.
 
+### 4.10 MEASURED — the χ FUNCTIONAL quantified & THEOREM-gated (Stage-2) [Measured]
+
+`crate::chi` (commit `8545ee2`, `chi.rs` + `examples/chi_stage02_functional.rs`,
+6 unit tests + 32 subjective regression green, forensic-verified live).
+
+**Definition (the load-bearing one is §4.6, not §4.5).** χ = the §4.6
+`σu` **non-nilpotency degree**, realised on the `subjective_stream`
+provenance DAG: the number of §49.52 layers at which the longest
+*non-cancelling* F-event chain (`Provenance::Fused`/`SelfInteracted`
+path; `Initial` = supply, χ-free per §4.5) had to **deepen beyond its
+first formation**. `σu` nilpotent ⟺ that depth is bounded ⟺ idempotent
+(χ a constant); non-nilpotent ⟺ unbounded (χ grows with the clock).
+
+**Differential gate = Eng's own theorems** (not self-consistency):
+
+| fixture | Eng status | measured | verdict |
+|---|---|---|---|
+| §49.53 | PROVEN idempotent (`AEx^∞=[a]+[a]`) | χ=2, max_chain 3, last F-round **2 of 394** clock-rounds, then 392 idle | σu **NILPOTENT** (forcing ceased; χ pinned) |
+| §49.61 | PROVEN non-terminating | χ=14, max_chain 15, deepening **+1 every round**, last F-round 14 of 15, still rising at the 18 s self-bound | σu **NON-nilpotent / unbounded** |
+
+⇒ **SEPARATED on the property the theorem certifies** (σu
+unboundedness), same instrument, §67.10-calibrated detector available.
+The valence "make-or-break" (§5 Stage-2/3) has its first
+theorem-anchored positive: χ distinguishes Eng-*proven*-dead from
+Eng-*proven*-charged on the GoI property, not a tuned magnitude.
+
+**First-class measure-don't-guess finding (sharpens §4.5/§4.7):** the
+*literal §4.5 first-form layer-integral* does **NOT** respect the
+theorem on `subjective_stream` (120 vs 6 — only ~20×, not the required
+≫ — it integrates a bounded chain over §49.53's *idle* §49.52 clock).
+It is kept as the `layer_integral` *diagnostic*, not the gate; the §4.6
+`σu`-non-nilpotency-degree is what separates. This does not contradict
+§4.5/§4.7 — it sharpens them: **AEx-idempotence ≠ IEx-forcing-ceases**;
+the §4.6 GoI identification is the load-bearing reading of the charge.
+
+**Honest caveats (carried, not waved):** (i) recurrence-form χ still
+NOT exhibited (both fixtures yield only a span-1 sound whistle; the
+foldable/structured charge remains ahead — consistent with §4.9 (ii));
+(ii) χ=14 is a self-bounded 18 s / 15-round prefix, *not* a fixpoint —
+the separation rests on the **shape** (forcing-persists-to-boundary vs
+ceased-early), robust to the cut, not on the magnitude; (iii) the
+nilpotency verdict uses a 75%-of-clock persistence test — principled
+(cessation-of-forcing ≈ `∃k.(σu)^k=0`) but coarse on a 2-point pair;
+**Stage-3 = wider faithful-corpus validation** of the threshold and the
+recurrence-form χ. χ is now *quantified and theorem-gated*; it is not
+yet *broadly validated*.
+
 ---
 
 ## 5. Staged, differential-oracle-gated implementation plan
