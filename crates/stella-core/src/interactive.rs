@@ -81,7 +81,7 @@ use crate::subst::{freshen, Substitution};
 use crate::term::{get, mk_app, mk_var_interned, Term, TermData, Var};
 use crate::unify::{unify, Equation};
 use crate::index::RayIndex;
-use crate::spec_phi::{spec_star, Transition as SpecTr};
+use crate::spec_phi::{spec_star, SelPhi, Transition as SpecTr};
 use rustc_hash::FxHashSet;
 use std::collections::HashSet;
 
@@ -289,6 +289,13 @@ pub struct IexAccel {
     /// `iex_spec` tier — `iex_fast`/`iex_tabled`/reference `iex` never read
     /// it, so their proven byte-identity is untouched.
     spec: Vec<Option<(usize, SpecTr)>>,
+    /// Σ(Φ) **selection**-side residual (thesis-audit 04 §2). The closed,
+    /// per-Φ table of focus heads whose redex-existence is provable in O(1)
+    /// without the generic `-P`-bucket `matchable_fast` scan. A pure function
+    /// of Φ; consulted **only** by the `iex_spec` selection loop as a sound
+    /// positive short-circuit (`SelPhi::decide`) — `iex_fast`/`iex_tabled`/
+    /// reference `iex` never read it ⇒ their byte-identity is untouched.
+    sel: SelPhi,
 }
 
 impl IexAccel {
@@ -306,7 +313,8 @@ impl IexAccel {
             }
         }
         let spec = phi.iter().map(|s| spec_star(s)).collect();
-        Self { idx, phi_csyms, spec }
+        let sel = SelPhi::build(phi);
+        Self { idx, phi_csyms, spec, sel }
     }
 }
 
@@ -1379,7 +1387,27 @@ fn iex_fast_inner(
                 if ray_polarity(r) == Polarity::Neutral {
                     continue;
                 }
-                if any_match_accel(accel, phi, r, &psi_cs) || any_self(star, j) {
+                // Σ(Φ) SELECTION residual (spec tier only). `sel.decide(r)`
+                // is a sound *positive-only* short-circuit: `Some(true)`
+                // ⇒ `any_match_accel(accel,phi,r,psi_cs)` is provably `true`
+                // (witness Φ pattern + colour-gate discharged), so the
+                // `… || any_self` disjunct is `true` exactly as the generic
+                // scan would short-circuit it; `None` ⇒ fall through to the
+                // UNCHANGED `any_match_accel || any_self`. Hence the chosen
+                // `(i,j)` — and the whole step stream / step count — is
+                // bit-identical to `iex_fast`; the lever is purely the cost
+                // of deciding the same boolean. `iex_fast`/`iex_tabled`/
+                // reference `iex` pass `spec=false` ⇒ never consult it.
+                let matched = if spec {
+                    match accel.sel.decide(r) {
+                        Some(true) => true,
+                        // `decide` is never `Some(false)`; `None` ⇒ exact scan.
+                        _ => any_match_accel(accel, phi, r, &psi_cs) || any_self(star, j),
+                    }
+                } else {
+                    any_match_accel(accel, phi, r, &psi_cs) || any_self(star, j)
+                };
+                if matched {
                     found_step = Some((i, j));
                     break 'outer;
                 }
