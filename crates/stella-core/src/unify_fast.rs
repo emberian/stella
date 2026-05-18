@@ -248,7 +248,6 @@ pub fn unify_fast_with<C: Compatible>(
                     work.push((fa[i], ga[i]));
                 }
             }
-            _ => return None,
         }
     }
 

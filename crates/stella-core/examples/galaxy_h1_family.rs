@@ -301,7 +301,7 @@ fn main() {
         let delta = by_class.get(&Class::Delta).cloned().unwrap_or_default();
         let splice = by_class.get(&Class::Splice).cloned().unwrap_or_default();
 
-        let capped = (log.len() >= TAP_CAP).then_some(" [tap@cap]").unwrap_or("");
+        let capped = if log.len() >= TAP_CAP { " [tap@cap]" } else { "" };
         println!(
             "{:>7} {:>10} {:>8.2} {:>8} | {:>9} {:>8} {:>7.2} | {:>9} {:>8} {:>7.2} | {:>7} {:>6.2}{}",
             budget,

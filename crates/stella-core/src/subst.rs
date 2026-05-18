@@ -9,7 +9,7 @@
 use rustc_hash::FxHashMap;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use crate::term::{get, mk_app_interned, mk_var_interned, Sym, TermData, TermId, Var};
+use crate::term::{get, mk_app_interned, mk_var_interned, TermData, TermId, Var};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Substitution: Var → TermId

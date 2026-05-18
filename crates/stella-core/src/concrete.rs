@@ -48,7 +48,7 @@
 
 use crate::constellation::{Constellation, Star};
 use crate::dep_graph::DepGraph;
-use crate::execution::{aex, saturated_diagrams};
+use crate::execution::saturated_diagrams;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Construction space (§50.2)

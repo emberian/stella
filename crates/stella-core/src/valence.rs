@@ -159,7 +159,7 @@ pub fn viability(step: &Step, partition: &AgentSet) -> ViabilityScore {
             + class_bonus;
 
     // Clamp to [0, 1.0].
-    let score = raw.min(1.0).max(0.0);
+    let score = raw.clamp(0.0, 1.0);
 
     ViabilityScore { score, psi_size, frontier_size, boundary_flux, ch9_class }
 }

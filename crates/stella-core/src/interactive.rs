@@ -83,7 +83,6 @@ use crate::unify::{unify, Equation};
 use crate::index::DiscIndex;
 use crate::spec_phi::{spec_star, SelPhi, Transition as SpecTr};
 use rustc_hash::{FxHashMap, FxHashSet};
-use std::collections::HashSet;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -364,7 +363,7 @@ impl IexAccel {
                 }
             }
         }
-        let spec = phi.iter().map(|s| spec_star(s)).collect();
+        let spec = phi.iter().map(spec_star).collect();
         let sel = SelPhi::build(phi);
         Self { idx, phi_csyms, spec, sel }
     }
@@ -1103,7 +1102,7 @@ fn is_normal_form(phi: &Constellation, psi: &[Star]) -> bool {
 fn is_normal_form_in(phi: &Constellation, psi: &[Star], cs: &ColourSet) -> bool {
     let psi_vec: Constellation = psi.to_vec();
     let psi_colours = all_colours(&psi_vec);
-    for (_i, star) in psi.iter().enumerate() {
+    for star in psi.iter() {
         for (j, &r) in star.iter().enumerate() {
             if ray_polarity(r) == Polarity::Neutral {
                 continue;
@@ -2133,7 +2132,7 @@ mod tests {
     use super::*;
     use crate::execution::stars_alpha_equiv;
     use crate::polarised::{neg_ray, pos_ray};
-    use crate::automata::{encode_word, encode_nfa, eng_fig561_nfa, nfa_constellation};
+    use crate::automata::{encode_word, encode_nfa, eng_fig561_nfa};
 
     fn var(x: &str) -> Term { crate::term::mk_var(x) }
     fn app(f: &str, args: Vec<Term>) -> Term { crate::term::mk_app_str(f, args) }
@@ -2351,6 +2350,7 @@ mod tests {
     /// `mat_phi_c_accel` returns the *identical* match list as `mat_phi_c`.
     #[test]
     fn mat_accel_eq_mat_ref() {
+        use std::collections::HashSet;
         let phi = add_prog();
         let accel = IexAccel::build(&phi);
         let empty_s: HashSet<String> = HashSet::new();
@@ -2576,8 +2576,8 @@ mod tests {
     #[test]
     fn iex_tabled_result_eq_iex() {
         let same_answers = |a: &[Star], b: &[Star]| -> bool {
-            let av = conceal_and_filter(&a.to_vec());
-            let bv = conceal_and_filter(&b.to_vec());
+            let av = conceal_and_filter(a);
+            let bv = conceal_and_filter(b);
             let subset = |xs: &[Star], ys: &[Star]| {
                 xs.iter()
                     .all(|x| ys.iter().any(|y| crate::execution::stars_alpha_equiv(x, y)))

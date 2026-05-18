@@ -936,14 +936,11 @@ mod tests {
             n4_result: true,
             plain_text_dump: "test".to_string(),
         };
-        // If verdict() existed, this would compile. The absence of a call here
-        // is intentional — there is nothing to call.
-        let _ = &report.plain_text_dump; // just access a field to use the binding
-        assert!(
-            report.plain_text_dump.contains("test") || report.plain_text_dump.is_empty()
-                || true, // always passes; the real check is compilation
-            "EvidenceReport has no verdict() method — verified by absence of such a call"
-        );
+        // The real check is structural: `EvidenceReport` has no `verdict()`
+        // method, so any call would fail to compile. There is nothing to
+        // assert at runtime — constructing the report above is the test. We
+        // exercise a field so the binding is genuinely used.
+        assert_eq!(report.plain_text_dump, "test");
 
         // 4. Gates are pure: calling them twice on the same input gives the same result.
         let evidence: Vec<MemberEvidence> = vec![];

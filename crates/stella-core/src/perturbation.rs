@@ -1210,12 +1210,10 @@ mod tests {
             m5_result: M5Status::Undetermined,
             plain_text_dump: "test".to_string(),
         };
-        // If verdict() existed, a call would compile.  Its absence is the check.
-        let _ = &report.plain_text_dump;
-        assert!(
-            !report.plain_text_dump.is_empty() || true,
-            "ReformReport has no verdict() method — verified by absence of such a call"
-        );
+        // The real check is structural: `ReformReport` has no `verdict()`
+        // method, so any call would fail to compile. Constructing the report
+        // above is the test; assert a real field value, not a tautology.
+        assert_eq!(report.plain_text_dump, "test");
 
         // 4. Gates are pure: same input → same result.
         let ev: Vec<MemberReformEvidence> = vec![];

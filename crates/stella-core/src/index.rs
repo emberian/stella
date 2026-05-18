@@ -365,7 +365,6 @@ impl DepGraph {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
     use std::time::Instant;
 
     use crate::circuits::{bool_module, circuit_constellation, excluded_middle_circuit_input1};

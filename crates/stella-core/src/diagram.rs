@@ -5,8 +5,8 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use crate::constellation::{Constellation, Star};
 use crate::dep_graph::DepEdge;
 use crate::polarised::underlying_term;
-use crate::subst::{freshen, Substitution};
-use crate::term::{get, mk_var_interned, TermData, TermId, Var};
+use crate::subst::Substitution;
+use crate::term::{mk_var_interned, TermId, Var};
 use crate::unify::{unify, Equation};
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -250,7 +250,6 @@ pub fn diagram_embeds(_delta: &Diagram, _delta_prime: &Diagram) -> bool {
 
 #[cfg(test)]
 mod confluence_harness {
-    use super::*;
     use crate::antiunify::canonical;
     use crate::constellation::Constellation;
     use crate::dep_graph::DepGraph;

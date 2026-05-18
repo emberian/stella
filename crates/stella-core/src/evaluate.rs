@@ -180,8 +180,8 @@ fn differential_check(
             if !fast_nf {
                 return Err("Tabled: did not reach a true normal form".to_string());
             }
-            let av = crate::interactive::conceal_and_filter(&fast_psi.to_vec());
-            let bv = crate::interactive::conceal_and_filter(&ref_psi.to_vec());
+            let av = crate::interactive::conceal_and_filter(fast_psi);
+            let bv = crate::interactive::conceal_and_filter(ref_psi);
             let subset = |xs: &[Star], ys: &[Star]| {
                 xs.iter()
                     .all(|x| ys.iter().any(|y| stars_alpha_equiv(x, y)))
@@ -208,7 +208,7 @@ fn oracle_fires(mode: OracleMode, call_idx: u64) -> bool {
             if n <= 1 {
                 true
             } else {
-                call_idx % (n as u64) == 0
+                call_idx.is_multiple_of(n as u64)
             }
         }
     }

@@ -1,10 +1,10 @@
 //! Dependency graph `D[Φ; C]` (Eng §49.10–§49.14).
 
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
 use std::collections::HashSet;
 
 use crate::constellation::{get_ray, id_rays, Constellation, RayId};
-use crate::polarised::{matchable, ray_polarity, Polarity, Ray};
+use crate::polarised::{matchable, Polarity, Ray};
 use crate::term::{get, TermData};
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -62,8 +62,10 @@ pub fn all_colours(phi: &Constellation) -> HashSet<String> {
 ///    colours(Φ)∪colours(Ψ)` genuinely restricts the reachable redexes. This is
 ///    the new, previously-unreachable `Ex_C` surface.
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub enum ColourSet {
     /// `C := colours(Φ) ∪ colours(Ψ)` (the historical, always-true gate).
+    #[default]
     All,
     /// `C` is exactly this caller-chosen set of coloured head display-names
     /// (e.g. `{"+t","-t"}` for the typing colour, `{"+c","-c"}` for the
@@ -93,11 +95,6 @@ impl ColourSet {
     }
 }
 
-impl Default for ColourSet {
-    fn default() -> Self {
-        ColourSet::All
-    }
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Dependency graph

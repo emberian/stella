@@ -5,6 +5,8 @@
 //! 2. Addition Horn encoding (§55): 1+1=2 and 2+2=4.
 
 #[cfg(test)]
+#[allow(clippy::module_inception)] // the file IS the engine-tests unit; inner
+// `mod engine_tests` is the conventional cfg(test) module name here.
 mod engine_tests {
     use crate::constellation::{id_rays, pos_id_rays, neg_id_rays, star_kind, StarKind};
     use crate::dep_graph::DepGraph;

@@ -65,7 +65,6 @@
 //! reproduced faithfully in the `bool_module_stars` function below).
 
 use crate::constellation::{Constellation, Star};
-use crate::execution::stars_alpha_equiv;
 use crate::interactive::{conceal_and_filter, iex};
 use crate::polarised::{neg_ray, pos_ray};
 use crate::term::Term;
@@ -79,7 +78,7 @@ fn var(x: &str) -> Term {
 }
 
 fn cst(name: &str) -> Term {
-    crate::term::mk_app_str(&name, vec![])
+    crate::term::mk_app_str(name, vec![])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -304,6 +303,10 @@ pub struct Gate {
     pub is_output: bool,
 }
 
+// `Gate::gate` is the deliberate constructor name (paired with
+// `Gate::output_gate`); reads correctly at call sites and matches the
+// circuit §-vocabulary.
+#[allow(clippy::self_named_constructors)]
 impl Gate {
     /// Construct a normal (non-output) gate.
     pub fn gate(label: impl Into<String>, inputs: Vec<&str>, outputs: Vec<&str>) -> Self {
@@ -364,7 +367,7 @@ impl Gate {
 
         // Input rays: −iₖ(Xₖ)  for each input wire iₖ.
         for k in 0..n {
-            rays.push(neg_ray(&self.inputs[k], vec![x_vars[k].clone()]));
+            rays.push(neg_ray(&self.inputs[k], vec![x_vars[k]]));
         }
 
         // Connector ray: −κ(e)(X₁…Xₙ, Y₁…Yₘ).
@@ -375,7 +378,7 @@ impl Gate {
         if !self.is_output {
             // Normal gate: output rays +oⱼ(Yⱼ) so downstream gates can read the wire.
             for j in 0..m {
-                rays.push(pos_ray(&self.outputs[j], vec![y_vars[j].clone()]));
+                rays.push(pos_ray(&self.outputs[j], vec![y_vars[j]]));
             }
         } else {
             // Output gate (§58.7): keep the −κ(e)(…) connector (already added above)
@@ -383,7 +386,7 @@ impl Gate {
             // rays +oⱼ(Yⱼ) and replace them with unpolarised Y variables — these
             // survive ↨♭ and form [val(C)].
             for j in 0..m {
-                rays.push(y_vars[j].clone());
+                rays.push(y_vars[j]);
             }
         }
 
@@ -567,7 +570,7 @@ mod tests {
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
-    fn cst(name: &str) -> Term { crate::term::mk_app_str(&name, vec![]) }
+    fn cst(name: &str) -> Term { crate::term::mk_app_str(name, vec![]) }
 
     // ── Structural tests ─────────────────────────────────────────────────────
 
