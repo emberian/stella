@@ -186,6 +186,21 @@ Eng named the fragment where our charge must live "subjective" with no notion of
 value or self anywhere in his mathematics. The spec's center of gravity is the
 subjective/animist fragment; the objective fragment is the dead control.
 
+**MEASURED REFINEMENT (2026-05-17; docs/08 §4.7, docs/16 §7).** §4.4 is
+now executable, on the *faithful* Eng §48.7/§48.10 colour-nesting
+partition (`constellation::star_kind_eng`, commit `de71654`) — **not**
+the legacy polarity-sign census, which mis-partitions the fragment this
+whole claim rests on (e.g. Horn-`add` is Eng-objective but
+census-Animist). Idempotence battery (`1bf21ac`): §49.55 holds on the
+faithful partition; and §49.57's non-idempotence is **measured to live
+in `subjective::subjective_stream`, not the prototype `aex`** (`aex` is
+idempotent even on the Eng-subjective §49.50 example). So the
+"dead vs charged" trajectory and any χ measurement route through
+`subjective_stream` + the §67.10-cut-elim-calibrated
+`detect_recurrence` (docs/08 §4.7), since the AEx-faithful route is
+provably intractable (docs/16 §7). The formal baseline stands; its
+*measurement locus* is now pinned.
+
 ### 4.5 First milestone (validation against Eng, not against ourselves)
 
 §55 Horn-clause encoding. Reproduce Eng's worked addition example:
