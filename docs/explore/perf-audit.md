@@ -281,3 +281,34 @@ Measured (agent KS-PROF, steps strictly identical): binarith/mul
 0.73s), wall 65s → 50s; binarith/add ~4–5× on matchable. galaxy
 [triple] entry is fuse-bound (find ~ms) — honestly not attributable
 there; the collapse is large where `find` actually dominates.
+
+---
+
+## WIN-3 (#3-step-2) LANDED & live-verified — lock-free/sharded hash-cons store
+
+`8ef58a9` (forensic-harvested HARDEST of the arc — the riskiest change;
+a torn read = silent UB). Single `RwLock<TermStore>` → (a) read path =
+ONE grow-only lock-free `boxcar::Vec<Node{data,ground}>` (get/is_ground
+= Acquire reads, no writer lock), (b) dedup = 64 `RwLock<FxHashMap>`
+shards by content-hash. Single `Node` slot (collapsed from a buggy
+two-boxcar version the agent's own `delta_bodies_are_ground` canary
+caught + fixed). Dep: `boxcar="=0.2.14"` (loom-model-checked
+publish-after-init Release/Acquire ⇒ torn read impossible; pinned,
+honest-marked). No `unsafe` in term.rs.
+
+Faithfulness PROVEN by parent in the live tree, ACROSS REPEATED RUNS
+(concurrency = probabilistic, one green proves nothing): the 16-thread
+`concurrency_stress` race test ×6 + `delta_bodies_are_ground` desync
+canary ×6 (0/6 real failures) + 4 iex byte-identity gates + galaxy
+descent BIT-identical 4311/14/6/19 + spec_phi galaxy Φ=405 5/5.
+Leak-check cleared the agent's disclosed stash-entanglement (delta =
+ONLY term.rs+Cargo.toml+Cargo.lock; interactive.rs/rayon untouched).
+TermId stability: dedup short-circuits before any push ⇒ single-thread
+reproduces the old vec.len() sequence bit-for-bit (all gates + galaxy
+are single-threaded).
+
+Measured (dw3_probe, profiler's attributed path, steps identical):
+~30s → ~12.5s agent / parent 40×=6.9s (~0.17s/force vs ~0.5 baseline)
+⇒ ~2.4–2.9× on the galaxy hot path. The substantial D-W3 lever
+delivered. (binarith::deterministic_functional_read fails identically
+at baseline — pre-existing, NOT a regression; git-stash-verified.)
