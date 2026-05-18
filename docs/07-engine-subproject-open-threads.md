@@ -851,9 +851,49 @@ tree (never trust-the-green — the project spine).
   two site/ histories is a branch-management call — DEFERRED to user,
   work preserved on its branch, NOT silently merged.
 
-## ═══ SWARM IN FLIGHT — POST-COMPACT HARVEST GUIDE (2026-05-18) ═══
+## ═══ SWARM FULLY HARVESTED ✓ — ALL 6 FRONTS LANDED + LIVE-VERIFIED (2026-05-18) ═══
 
-Suite state: `cargo test -p stella-core --lib --release` = **409 passed
+**STATUS: COMPLETE.** All 6 runway fronts cherry-picked onto `dev` and
+forensic-verified in the LIVE tree (never-trust-the-green: front-gate +
+iex byte-identity + galaxy descent, each in the live tree, not the
+worktree). All 6 worktrees + branches removed + pruned. Live HEAD =
+`6232fa7`. Post-harvest live suite = **422 passed / 0 failed / 16
+ignored**, 8.38s (the +13→16 ignored delta = B4's 2 documented
+NFA/machine-stars AEx-intractable + A1's 1 heavy differential fuzz that
+was *run explicitly green* — none mask correctness).
+
+| front | source sha | cherry-pick | live-tree gate (forensic) |
+|---|---|---|---|
+| B-const (constellation.rs) | 94b3039 | **c9ab43e** | §48.9 reverify RESOLVED (ae2c6fe): constellation 26/26, chi 14/14, idempotence 3/3, iex byte-id 4/4, chi_stage01/02 figures STABLE |
+| C (ci.yml+oracle.rs+lib.rs) | 1157a57 | **a13da70** | `oracle::` 2/2 incl. Goodhart must-flag-unfaithful guard; suite 422/0/16 |
+| A1 (unify_fast.rs) | e7f6b55 | **1ea8861** | iex_fast/with_accel byte-identical; unify_fast 5/5 + heavy differential fuzz 1/1 (run explicitly) |
+| B4 (diagram.rs) | 2f7e11d | **7862bc6** | diagram 4/4 (+2 NFA documented-ignored, 03bfa0a policy) |
+| B5 (mll.rs+example) | 172da1d | **d9bf3d2** | mll 42/42; §67.10 oracle example = 9 trajectories ENDPOINT-CERTIFIED, ⊗/⅋ cut CERTIFIED, two-sided calibration confirmed |
+| B2 (interactive.rs+dep_graph.rs) | 46b4029 | **6232fa7** | iex_fast/tabled/spec/accel byte-identical; galaxy descent **4311/14/6/19 fully_reduced** (byte-identical); Ex_C-separation 1/1 + §69.4 orth 5/5; suite 422/0/16 |
+
+Process notes: (i) the pre-harvest E0061 (`interaction_step` 7-vs-6
+args) was B2's *in-flight partial leak* into the main repo
+(cwd-ambiguity); B2's completion self-reverted it (live interactive.rs
+had zero ColourSet refs pre-cherry-pick, confirmed). (ii) Two leaked
+throwaway diagnostics (`examples/zz_diag.rs` + an `mll.rs`
+`zz_diag_fig662` test, B5-session cwd-leak) were reverted before
+harvest. (iii) `.claude/launch.json` editor-config drift left as-is
+(user-owned, non-engine, non-blocking). The B-const correction was a
+genuine §48.9 faithfulness FIX the conformance suite was built to catch
+(again: capable-agent + parent-forensic-read > spec).
+
+DEFERRED-3 (next-wave, unchanged): A2 term::get borrowing · A3 deeper
+term index · D site-exposition (publish-sensitive). E (conscious-machine
+axis) now has its faithful runway.
+
+⚠ PUBLISH GATE still armed: `.github/workflows/pages.yml` auto-deploys
+on `push` to `dev` (paths `site/**`). NO push issued this session;
+future-me must FLAG before any `dev` push.
+
+---
+### Historical: the in-flight harvest guide (kept for the record)
+
+Suite state at launch: `cargo test -p stella-core --lib --release` = **409 passed
 / 0 failed / 13 ignored**, ~8s (mul_table + deterministic_functional_read
 both PROVEN fuel-marginal-not-wrong via dfr_classify, #[ignore]'d per
 the documented spec-§8 policy; debug suite slow-not-hung). Website
@@ -939,7 +979,8 @@ story). docs/08 §4.9/4.10 annotated honestly with the
 `[Re-verified — classifier correction c9ab43e]` note (ae2c6fe); no
 number changed. The #1 post-compact priority is CLOSED.
 
-A1 (dense union-find, e7f6b55, worktree-agent-a0cc3ed387555ce46): clean
-perf — 3.48× UF, 20000-case differential fuzz green, iex gates green,
-409/0/13. Straightforward harvest, queued (unify_fast.rs disjoint).
-C (CI+oracle, a13da70): cherry-picked, gate /tmp/cgate.txt pending.
+A1 (dense union-find): HARVESTED 1ea8861 — live iex_fast/with_accel
+byte-identical + heavy differential fuzz run explicitly green.
+C (CI+oracle, a13da70): gate CONFIRMED — `oracle::` 2/2 (incl. Goodhart
+must-flag-unfaithful guard) + live suite 422/0/16.
+**→ See the SWARM FULLY HARVESTED ✓ block above: all 6 fronts landed.**
