@@ -74,20 +74,39 @@ pub fn term_contains_colour(t: TermId) -> bool {
     false
 }
 
-/// Eng §48.7 ray classification (faithful). A ray is **objective** if its
-/// head is uncoloured, *or* it is a colour over colour-free arguments;
-/// **subjective** if it is a coloured ray with ≥1 argument that contains a
-/// colour (colour nested in an argument). Returns `true` iff subjective.
+/// Eng §48.7 ray classification (faithful). Verbatim §48.7: a ray `r` is
+/// **objective** iff it is *uncoloured*, **or** it is a coloured ray
+/// `r = c(r₁,…,rₙ)` with `c` coloured and `r₁,…,rₙ` uncoloured ("uncoloured
+/// terms prefixed by a colour"); **subjective** otherwise, i.e. a coloured
+/// ray `r = f(r₁,…,rₙ)` with **at least one of `{r₁,…,rₙ}` coloured**. Note
+/// "coloured" = *contains a colour anywhere* (§48.7: "A ray r is coloured if
+/// it contains a colour"), NOT "coloured head". Hence the classification
+/// reduces exactly to: **subjective iff ≥1 *direct argument* contains a
+/// colour** — if some arg is coloured the ray is automatically a coloured
+/// ray; if no arg is coloured the ray is objective regardless of the head
+/// (either uncoloured, or the §48.7 "colour over uncoloured args" case). The
+/// head's own colour/polarity is irrelevant. This is the verbatim §48.9
+/// classification (`f(X,+h(Z))` is subjective even though its head `f` is
+/// uncoloured). Returns `true` iff subjective.
+///
+/// HISTORY: a prior revision gated this on `sym.pol != Neutral` (coloured
+/// *head*). That is the audit-01 §2.1-class divergence — Eng's split is on
+/// "colours nested inside arguments, not the +/− sign of the head" (audit-01
+/// §1.6, lines 66–70). The §48.9 verbatim example `f(X,+h(Z))` (uncoloured
+/// head, coloured arg, declared *subjective* by Eng) is the counterexample;
+/// the head-gate wrongly returned objective for it. Corrected here and
+/// pinned by the §48.9 conformance battery below. Not on the iex/aex
+/// reduction path (only `expand_constellation` consumes the *legacy*
+/// `star_kind`), so the engine is byte-identical.
 pub fn ray_is_subjective(r: Ray) -> bool {
     match get(r) {
-        // Uncoloured (variable, or neutral-headed): objective by §48.7
-        // ("objective if uncoloured"). Subjectivity is defined only for a
-        // *coloured ray* (audit 01 §1.2, docs/00 §4.1 verbatim).
+        // A bare variable contains no colour ⇒ uncoloured ⇒ objective.
         TermData::Var(_) => false,
-        TermData::App(sym, args) => {
-            sym.pol != Polarity::Neutral
-                && args.iter().any(|&a| term_contains_colour(a))
-        }
+        // §48.7/§48.9: subjective iff ≥1 direct argument contains a colour.
+        // (Head colour is irrelevant — see doc comment.) The empty-arg case
+        // (constant, e.g. `+d`) has no coloured arg ⇒ objective: it is the
+        // "colour over (zero) uncoloured args" objective form.
+        TermData::App(_, args) => args.iter().any(|&a| term_contains_colour(a)),
     }
 }
 
@@ -113,6 +132,62 @@ pub fn star_kind_eng(star: &Star) -> StarKind {
 /// A constellation: a finite indexed family of stars (§48.14).
 pub type Constellation = Vec<Star>;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Multiset semantics (§48.10, §48.14) — additive, non-destructive
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Canonical **multiset key** of a star.
+///
+/// §48.10 verbatim: "a star ϕ … is a finite indexed family … of rays …
+/// stars will be written as an **unordered sequence** `[r₁,…,rₙ]`". The
+/// `Vec<Ray>` representation carries an incidental ray order (the index set
+/// `Iϕ`); the *star itself* is the family up to that indexing — i.e. a
+/// finite **multiset** of rays (a ray may legitimately occur with
+/// multiplicity, so this is a multiset, not a set). The canonical key is the
+/// sorted vector of interned ray ids: two stars have equal `star_multiset_key`
+/// iff they are equal as multisets of rays *under term-interning identity*
+/// (hash-consed structurally-identical rays share a `TermId`).
+///
+/// SCOPE (honest): this is multiset equality on **interned identity**, NOT
+/// up to α-equivalence (§48.12/§48.13 quotient `≈α`). Eng considers stars up
+/// to `≈α`; that is a strictly finer quotient and orthogonal to the index
+/// order this key erases. Renaming-invariance is not claimed here and is a
+/// separate (recorded) concern — this key only certifies that ray *index
+/// order* is semantically inert, which is the §48.10 "unordered sequence"
+/// claim.
+pub fn star_multiset_key(star: &Star) -> Vec<u32> {
+    let mut k: Vec<u32> = star.iter().map(|r| r.0).collect();
+    k.sort_unstable();
+    k
+}
+
+/// Canonical **multiset key** of a constellation.
+///
+/// §48.14 verbatim: "A constellation Φ is a countable indexed family of
+/// stars … a finite constellation will be written as a **sum of stars**
+/// `Φ = ϕ₁+…+ϕₙ`". A sum is commutative ⇒ the star order is inert and a
+/// finite constellation is a **multiset of stars**. Key = sorted vector of
+/// per-star multiset keys (so it is invariant under BOTH star permutation
+/// AND, within each star, ray permutation). Same interning-identity scope
+/// caveat as [`star_multiset_key`].
+pub fn constellation_multiset_key(phi: &Constellation) -> Vec<Vec<u32>> {
+    let mut k: Vec<Vec<u32>> = phi.iter().map(star_multiset_key).collect();
+    k.sort_unstable();
+    k
+}
+
+/// Multiset equality of two stars (§48.10): order-of-rays-insensitive,
+/// multiplicity-sensitive.
+pub fn stars_multiset_eq(a: &Star, b: &Star) -> bool {
+    star_multiset_key(a) == star_multiset_key(b)
+}
+
+/// Multiset equality of two constellations (§48.14): order-of-stars and
+/// order-of-rays insensitive, multiplicities preserved.
+pub fn constellations_multiset_eq(a: &Constellation, b: &Constellation) -> bool {
+    constellation_multiset_key(a) == constellation_multiset_key(b)
+}
+
 #[cfg(test)]
 mod eng_classifier_tests {
     //! Conformance battery for the faithful Eng §48.7/§48.10 classifier
@@ -128,13 +203,25 @@ mod eng_classifier_tests {
         let x = mk_var("X");
         // Bare var: uncoloured ⇒ objective.
         assert!(!ray_is_subjective(x));
-        // Uncoloured (neutral) head, even over a coloured arg ⇒ objective
-        // (§48.7: "objective if uncoloured"; subjectivity is defined only
-        // for a *coloured* ray).
-        assert!(!ray_is_subjective(mk_app_str("f", vec![pos_ray("d", vec![x])])));
-        // Colour over uncoloured arguments ⇒ objective.
+        // §48.9 VERBATIM: `f(X,+h(Z))` is a **subjective** ray even though
+        // its head `f` is uncoloured (it is a *coloured ray* — it contains
+        // `+h` — with a coloured argument). This is the §2.1-class pin: the
+        // earlier head-gate (`sym.pol != Neutral`) wrongly called this
+        // objective. Eng's split is on colours nested in args, not head sign
+        // (audit-01 §1.6 ll.66–70). Same shape as `f(+d(X))`.
+        assert!(ray_is_subjective(mk_app_str(
+            "f",
+            vec![x, pos_ray("h", vec![mk_var("Z")])]
+        )));
+        assert!(ray_is_subjective(mk_app_str("f", vec![pos_ray("d", vec![x])])));
+        // Colour over uncoloured arguments ⇒ objective (§48.7 "uncoloured
+        // terms prefixed by a colour"; §48.9 objective examples `+c(X)`).
         assert!(!ray_is_subjective(pos_ray("c", vec![x])));
         assert!(!ray_is_subjective(pos_ray("c", vec![mk_app_str("f", vec![x])])));
+        // §48.9 VERBATIM objective: `f(X,Y)` (uncoloured) and `−d(h(X))`
+        // (colour over uncoloured arg).
+        assert!(!ray_is_subjective(mk_app_str("f", vec![x, mk_var("Y")])));
+        assert!(!ray_is_subjective(neg_ray("d", vec![mk_app_str("h", vec![x])])));
         // Coloured ray with a colour nested in an argument ⇒ subjective.
         assert!(ray_is_subjective(pos_ray("c", vec![pos_ray("d", vec![x])])));
         // Polarity of the nested colour is irrelevant — it is *coloured*.
@@ -144,6 +231,21 @@ mod eng_classifier_tests {
             "c",
             vec![mk_app_str("g", vec![neg_ray("d", vec![x])])]
         )));
+        // §48.9 VERBATIM subjective: `+c(+d,−c(Y))` — head coloured, args
+        // contain a coloured *constant* `+d` and coloured `−c(Y)`. Exercises
+        // the nullary-coloured-leaf path of `term_contains_colour`.
+        assert!(ray_is_subjective(pos_ray(
+            "c",
+            vec![pos_ray("d", vec![]), neg_ray("c", vec![mk_var("Y")])]
+        )));
+        // §48.9 VERBATIM subjective: `+c(−d(+h(X,Y)))`.
+        assert!(ray_is_subjective(pos_ray(
+            "c",
+            vec![neg_ray("d", vec![pos_ray("h", vec![x, mk_var("Y")])])]
+        )));
+        // §48.9 boundary: a coloured *constant* alone, `+d`, is objective
+        // (coloured ray, but it has NO coloured argument — zero args).
+        assert!(!ray_is_subjective(pos_ray("d", vec![])));
     }
 
     #[test]
@@ -186,6 +288,137 @@ mod eng_classifier_tests {
         let t = vec![pos_ray("c", vec![pos_ray("d", vec![mk_var("X")])])];
         assert_eq!(star_kind(&t), StarKind::Objective, "legacy = all-pos");
         assert_eq!(star_kind_eng(&t), StarKind::Subjective, "Eng = nested colour");
+    }
+}
+
+#[cfg(test)]
+mod multiset_semantics_tests {
+    //! Conformance for §48.10 (star = finite multiset of rays, written as an
+    //! "unordered sequence") and §48.14 (finite constellation = "sum of
+    //! stars" ϕ₁+…+ϕₙ ⇒ multiset of stars). Certifies which operations are
+    //! multiset-invariant and records, as a first-class finding, the ones
+    //! that are intentionally index-sensitive (§48.14 `IdRays` keeps the
+    //! star instance). Additive: the `Vec<Ray>`/`Vec<Star>` types are
+    //! untouched; this only adds a canonical key + the invariance proofs.
+    use super::*;
+    use crate::polarised::{neg_ray, pos_ray};
+    use crate::term::mk_var;
+
+    #[test]
+    fn star_key_invariant_under_ray_permutation() {
+        let x = mk_var("X");
+        let y = mk_var("Y");
+        let r1 = pos_ray("a", vec![x]);
+        let r2 = neg_ray("b", vec![y]);
+        let r3 = pos_ray("c", vec![pos_ray("d", vec![x])]);
+        let s_abc = vec![r1, r2, r3];
+        let s_cba = vec![r3, r2, r1];
+        let s_bac = vec![r2, r1, r3];
+        // §48.10 "unordered sequence": every permutation has one key.
+        assert_eq!(star_multiset_key(&s_abc), star_multiset_key(&s_cba));
+        assert_eq!(star_multiset_key(&s_abc), star_multiset_key(&s_bac));
+        assert!(stars_multiset_eq(&s_abc, &s_cba));
+    }
+
+    #[test]
+    fn star_key_is_multiplicity_sensitive_not_a_set() {
+        // §48.10: a *family*/multiset, not a set — a repeated ray counts
+        // with multiplicity. `[r]` ≠ `[r, r]`.
+        let r = pos_ray("a", vec![mk_var("X")]);
+        let one = vec![r];
+        let two = vec![r, r];
+        assert_ne!(star_multiset_key(&one), star_multiset_key(&two));
+        assert!(!stars_multiset_eq(&one, &two));
+        // Permuting a star *with* a repeat is still invariant.
+        let s = vec![r, neg_ray("b", vec![mk_var("Y")]), r];
+        let sp = vec![r, r, neg_ray("b", vec![mk_var("Y")])];
+        assert!(stars_multiset_eq(&s, &sp));
+    }
+
+    #[test]
+    fn constellation_key_invariant_under_star_and_ray_permutation() {
+        let x = mk_var("X");
+        let s1 = vec![pos_ray("a", vec![x]), neg_ray("b", vec![x])];
+        let s2 = vec![pos_ray("c", vec![pos_ray("d", vec![x])])];
+        let s3 = vec![neg_ray("e", vec![x])];
+        let phi = vec![s1.clone(), s2.clone(), s3.clone()];
+        // §48.14 "sum of stars" is commutative ⇒ star order inert …
+        let phi_star_perm = vec![s3.clone(), s1.clone(), s2.clone()];
+        assert!(constellations_multiset_eq(&phi, &phi_star_perm));
+        // … and §48.10 ray order inside each star is also inert.
+        let s1_rev = vec![neg_ray("b", vec![x]), pos_ray("a", vec![x])];
+        let phi_both_perm = vec![s2, s1_rev, s3];
+        assert!(constellations_multiset_eq(&phi, &phi_both_perm));
+        // Multiplicity of stars preserved: Φ ≠ Φ+ϕ₁.
+        let mut phi_dup = phi.clone();
+        phi_dup.push(s1);
+        assert!(!constellations_multiset_eq(&phi, &phi_dup));
+    }
+
+    #[test]
+    fn star_kind_eng_is_multiset_invariant() {
+        // The faithful classifier is `any()`-quantified over rays ⇒ it is a
+        // function of the ray *multiset*, not the index order. This is the
+        // property a §48.10-respecting semantic operator MUST have. Verify
+        // it directly on a mixed (animist) star under every permutation.
+        let x = mk_var("X");
+        let obj = pos_ray("e", vec![x]); // colour over uncoloured ⇒ objective
+        let subj = pos_ray("c", vec![pos_ray("d", vec![x])]); // nested ⇒ subj
+        let perms = [
+            vec![obj, subj],
+            vec![subj, obj],
+            vec![obj, subj, obj],
+            vec![subj, obj, obj],
+        ];
+        for p in &perms {
+            assert_eq!(
+                star_kind_eng(p),
+                StarKind::Animist,
+                "star_kind_eng must depend only on the ray multiset"
+            );
+        }
+        // Legacy census is likewise `any()`-based ⇒ multiset-invariant
+        // (pinned so a future refactor cannot make it order-sensitive).
+        let a = pos_ray("a", vec![x]);
+        let b = neg_ray("a", vec![mk_var("Y")]);
+        assert_eq!(star_kind(&vec![a, b]), star_kind(&vec![b, a]));
+    }
+
+    /// HONEST-NEGATIVE (recorded, by design — not a defect): `IdRays` /
+    /// `+IdRays` / `−IdRays` / `get_ray` are **index-sensitive** and
+    /// therefore NOT multiset-invariant. §48.14 verbatim: `IdRays(Φ)` "keeps
+    /// track of the instance of star from which rays come" — the identifier
+    /// `(i,j)` IS the index, so permuting stars/rays deliberately changes
+    /// these. They are *addressing* operations over the indexed family, not
+    /// semantic operations over the multiset. This test pins that they are
+    /// NOT invariant, so the distinction stays explicit and is never
+    /// "papered" by a future invariance claim.
+    #[test]
+    fn id_rays_is_index_sensitive_by_design_not_multiset_invariant() {
+        let x = mk_var("X");
+        let s1 = vec![pos_ray("a", vec![x])];
+        let s2 = vec![neg_ray("b", vec![x]), pos_ray("c", vec![x])];
+        let phi = vec![s1.clone(), s2.clone()];
+        let phi_perm = vec![s2.clone(), s1.clone()];
+        // Same multiset of stars …
+        assert!(constellations_multiset_eq(&phi, &phi_perm));
+        // … but `get_ray` at the SAME identifier yields a DIFFERENT ray,
+        // because (i,j) addresses the index, per §48.14. This inequality is
+        // the design, not a bug.
+        assert_ne!(get_ray(&phi, (0, 0)), get_ray(&phi_perm, (0, 0)));
+        // And the per-polarity id-ray *sets* differ as index families even
+        // though the underlying ray multiset is identical: +IdRays here is
+        // {(0,0)} vs {(1,0)} after the star permutation.
+        assert_ne!(pos_id_rays(&phi), pos_id_rays(&phi_perm));
+        // (Sanity: the *rays pointed at* are the same multiset — invariance
+        // lives at the key level, addressing does not.)
+        let rays = |p: &Constellation| {
+            let mut v: Vec<u32> =
+                id_rays(p).into_iter().map(|id| get_ray(p, id).0).collect();
+            v.sort_unstable();
+            v
+        };
+        assert_eq!(rays(&phi), rays(&phi_perm));
     }
 }
 
