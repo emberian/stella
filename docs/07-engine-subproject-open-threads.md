@@ -896,3 +896,50 @@ valence / reafference / docs/00 §2 mortal-agent closure. The B/C swarm
 is the *runway* that makes E's results survive scrutiny (faithful
 substrate: classifier conformance, Ex_C/§69 live, confluence observed,
 oracle consolidated, suite CI-locked).
+
+## ⚠ B-const HARVESTED-PENDING-REVERIFY (c9ab43e) — CORRECTNESS FIX to the χ foundation
+
+B-const (worktree-agent-ab2e93e2c6c3d065b, commit 94b3039) cherry-picked
+to dev as **c9ab43e**. It is NOT merely additive — it CORRECTS the
+load-bearing `constellation::ray_is_subjective`:
+- OLD (my step-1 de71654): `sym.pol != Neutral && args.any(contains_colour)`
+  (coloured-HEAD-gated).
+- NEW (faithful): `args.iter().any(|&a| term_contains_colour(a))`
+  (≥1 direct arg contains a colour; head colour inert).
+PRIMARY-SOURCE VERIFIED by parent: Eng §48.9 verbatim (refs/extracted/
+EngExegesis/doc.md:3814) lists `f(X,+h(Z))` (uncoloured head, coloured
+arg) as **subjective**; §48.7 (3792) "a ray is coloured if it contains
+a colour". The old head-gate returned OBJECTIVE for `f(X,+h(Z))` —
+WRONG. New rule reproduces all 6 §48.9 verbatim examples. This is a
+genuine faithfulness CORRECTION the conformance suite was built to
+catch (the accel_detect §G.5-class "capable agent + parent
+forensic-read > spec" lesson, again). Also adds §48.10/§48.14 multiset
+keys (honestly scoped: interned-identity, NOT α — disclaimed) +
+pinned non-invariance of IdRays/get_ray.
+
+**PENDING (CRITICAL — the χ foundation moved):** ray_is_subjective
+underpins the WHOLE χ/valence apparatus. The correction makes MORE
+rays subjective (uncoloured-head-coloured-arg: was objective, now
+subjective). Must RE-VERIFY in the live tree (running →
+/tmp/bconst_reverify.txt): (1) iex byte-identity (engine unaffected —
+ray_is_subjective not on reduction path); (2) eng_classifier_tests
+(§48.9 conformance); (3) idempotence_metatheorem (§49.55 objective Φ
+e.g. Horn-add MUST still classify Objective+idempotent — analysis says
+yes, verify); (4) chi:: + chi_stage01/02 — **does §49.61 still
+χ-EXHIBIT and §49.53 still control-IDEMPOTENT under the corrected
+classifier?** The growth-form χ + §4.6 σu-degree are psi_size/
+provenance-DAG based (not ray_is_subjective-count), so QUALITATIVELY
+robust; but chi_stage01's Stage-0 subjective-COUNT diagnostics (the
+docs/08 §4.9 "subj rays 1→34") were measured under the OLD classifier
+and likely SHIFT. If qualitative result holds (expected) → HONEST
+docs/08 §4.9/4.10 update: "re-verified under the §48.9-corrected
+classifier; conclusion robust; the earlier subj-count diagnostics were
+under the less-faithful head-gate, corrected here". If a qualitative
+result FLIPS → first-class finding, the earlier χ claim was on a
+buggy classifier — surface, do not paper. POST-COMPACT-ME: this
+re-verify + the honest docs/08 update is the #1 priority continuation.
+
+A1 (dense union-find, e7f6b55, worktree-agent-a0cc3ed387555ce46): clean
+perf — 3.48× UF, 20000-case differential fuzz green, iex gates green,
+409/0/13. Straightforward harvest, queued (unify_fast.rs disjoint).
+C (CI+oracle, a13da70): cherry-picked, gate /tmp/cgate.txt pending.
