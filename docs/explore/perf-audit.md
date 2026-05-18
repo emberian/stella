@@ -201,3 +201,29 @@ the prior threads isolated.
    galaxy wall); highest ceiling but the multiplier is `[hypothesis]`
    pending the one-line `T_GET` probe, and it is the largest
    mechanical change — so third.
+
+---
+
+## ADDENDUM — D-W3 attribution MEASURED (sampling profiler, dw3_probe)
+
+D-W3 left the multiplier `[hypothesis]` pending attribution of the 73%
+wall↔kernel gap. Confirmed/refined by `examples/dw3_probe.rs` (90×
+[triple] forces, 45.95 s, 387 990 steps) under macOS `sample`:
+
+The dominant unattributed cost is **NOT** the `TERM_STORE` RwLock
+acquire per se, nor a `TermData` deep-clone (App's `Arc<[TermId]>`
+clone is a refcount bump). It is the **hash-cons intern map**:
+`hashbrown::HashMap<TermData,TermId>::{insert,get}` + `RawTable::
+reserve_rehash` (FxHash of a full `TermData::App(Sym, Arc<[TermId]>)`
+— Sym + every child TermId — on every `mk(data)`; rehash-growth churn
+visibly hot). The RwLock only *gates* this map.
+
+⇒ **#3 re-scoped (measured, not hypothesised):** the lever is the
+hash-cons cost, not "lock-free read" alone. Concretely: (a) `reserve`
+the intern map to kill `reserve_rehash` churn (cheap, value-identical,
+do-first); (b) shard / lock-free the store to remove read/write
+serialization (value-identical — append-only post-intern); (c) avoid
+re-hashing already-interned subterms. A bare lock-free-read would have
+missed (a)/(c). `get(id)` itself is a `Vec` index behind the lock —
+cheap once the lock contention/hashing is addressed. dw3_probe.rs kept
+as reproducible attribution infra (the memory rule: in-repo infra).
