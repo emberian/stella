@@ -28,7 +28,7 @@ use rustc_hash::FxHashMap;
 use crate::constellation::{get_ray, id_rays, Constellation, RayId};
 use crate::dep_graph::{ray_colours, DepEdge, DepGraph};
 use crate::polarised::{matchable, Polarity};
-use crate::term::{get, SymName, TermData};
+use crate::term::{get, SymName, Term, TermData};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Index key helpers
@@ -100,6 +100,205 @@ impl RayIndex {
     pub fn candidates(&self, name: SymName, pol: Polarity) -> &[RayId] {
         let key = partner_key(name, pol);
         self.map.get(&key).map(|v| v.as_slice()).unwrap_or(&[])
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DiscIndex — discrimination (substitution) tree over Φ's pattern rays
+// (perf #4 / strategic-map C-#1)
+//
+// The head/colour `RayIndex` above narrows candidates to a single
+// `(SymName, Polarity)` bucket. For galaxy Φ=405 a head bucket still holds
+// many δ-rays, so `mat_phi_c_accel`/`any_match_accel` run
+// `fp_unifiable`+`matchable_fast` over the whole bucket (~98 % of `find`).
+//
+// `DiscIndex` refines *within each head bucket* by each ray's **depth-1
+// argument signature**: for `±h(a₁,…,a_k)` the discriminant is the
+// per-position top-functor vector `[sig(a₁),…,sig(a_k)]`, where
+// `sig(App(g,_)) = Some(g.name)` and `sig(Var) = None` (a wildcard slot).
+// This is the proven-sound `fp_unifiable` discriminator, *lifted into the
+// index* (built once per Φ) instead of run per-candidate.  The structure
+// is a fixed-depth trie: level `i` branches on argument `i`'s `sig`, so
+// the recursion depth is the head **arity** (≤ a handful), never the term
+// size — no deep recursion, no stack growth with galaxy δ-body depth.
+//
+// ── FAITHFULNESS (the non-negotiable gate) ───────────────────────────────
+// The retrieved set is a **superset** of the true `matchable` set — it
+// never drops a real match.  Proof:
+//
+//   Let `q = ±h(q₁,…,q_k)`, `s = ∓h(s₁,…,s_m)` be App rays in the same
+//   `partner_key` head bucket.  `matchable(q,s)` ⇒ `q`,`s` are
+//   α-unifiable under `PolarisedCompat` ⇒ (i) `k = m` (equal arity — the
+//   `App` rule of unification requires it) and (ii) for every position
+//   `i`, `qᵢ` and `sᵢ` are unifiable.  If both `qᵢ` and `sᵢ` are `App`,
+//   unifiability forces their top functors to be `PolarisedCompat`-
+//   compatible; for non-head (inner) functors `PolarisedCompat` is exactly
+//   `SymName` equality, so `sig(qᵢ) = sig(sᵢ)`.  If either is a `Var`
+//   then the corresponding `sig` is `None` — a wildcard that the query
+//   walk treats as "matches every stored alternative", imposing no
+//   constraint.  Hence:
+//
+//       matchable(q,s)  ⇒  same arity ∧ ∀i. sig(qᵢ)=None ∨ sig(sᵢ)=None
+//                          ∨ sig(qᵢ)=sig(sᵢ)
+//                       ⇒  `s` is visited by `for_each_candidate(q)`.
+//
+//   The converse does NOT hold (occurs-check, variable *linking*, and
+//   sub-argument structure below depth 1 are ignored) — so the result is
+//   a strict *superset*, exactly the sound over-approximation required.
+//   The per-candidate `matchable_fast` stays in the consumer and remains
+//   the sole decider; the index only shrinks *how many* candidates reach
+//   it.  Dropped-match impossibility is fuzz-proven against the reference
+//   `matchable` (`disc_superset_of_matchable_fuzz`, this module) and by
+//   the N-KS byte-identity gate (`iex_fast_*_eq_iex`).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Depth-1 signature of one argument position.
+///
+/// `Sig(name)` for an `App` (top functor — sub-structure ignored, so a
+/// variable *anywhere below* never over-constrains); `Wild` for a `Var`
+/// (a hole that unifies with anything in that slot).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum ArgSig {
+    Sig(SymName),
+    Wild,
+}
+
+#[inline]
+fn arg_sig(t: Term) -> ArgSig {
+    match get(t) {
+        TermData::App(sym, _) => ArgSig::Sig(sym.name),
+        TermData::Var(_) => ArgSig::Wild,
+    }
+}
+
+/// Push the depth-1 argument-signature vector of a ray onto `out`.
+/// `App(_, args)` ⇒ one `ArgSig` per argument (NOT recursive — depth-1
+/// only, so the structure depth is bounded by head arity).  A `Var` ray
+/// cannot reach here (only `App` rays are indexed).
+fn ray_sig(ray: Term, out: &mut Vec<ArgSig>) {
+    if let TermData::App(_, args) = get(ray) {
+        for &a in args.iter() {
+            out.push(arg_sig(a));
+        }
+    }
+}
+
+/// A fixed-depth signature trie node.  Depth = head arity; level `i`'s
+/// edges are argument `i`'s `ArgSig`.  `rays` holds the rays whose full
+/// signature vector ends exactly at this node, in `id_rays` (build) order
+/// (so a path's `(i,j)` come out ascending).
+#[derive(Debug, Clone, Default)]
+struct SigNode {
+    kids: FxHashMap<ArgSig, SigNode>,
+    rays: Vec<RayId>,
+}
+
+impl SigNode {
+    fn insert(&mut self, sig: &[ArgSig], rid: RayId) {
+        match sig.split_first() {
+            None => self.rays.push(rid),
+            Some((s, rest)) => self.kids.entry(*s).or_default().insert(rest, rid),
+        }
+    }
+
+    /// Visit a **superset** of the rays whose stored signature is
+    /// position-wise compatible with the query signature `q[qi..]`.
+    ///
+    /// At level `i` (argument `i`):
+    ///   * stored edge `Wild` ⇒ a stored variable: matches *any* query
+    ///     arg — always followed.
+    ///   * query `q[qi] == Wild` ⇒ a query variable: matches *any* stored
+    ///     arg — follow **every** edge.
+    ///   * else (both concrete) ⇒ follow only the exact `Sig(name)` edge.
+    ///
+    /// Recursion depth = signature length = head arity (bounded; no stack
+    /// growth with term depth).
+    fn query(&self, q: &[ArgSig], qi: usize, cb: &mut impl FnMut(RayId)) {
+        if qi == q.len() {
+            for &r in &self.rays {
+                cb(r);
+            }
+            return;
+        }
+        // A stored `Wild` edge unifies with whatever the query has here.
+        if let Some(kid) = self.kids.get(&ArgSig::Wild) {
+            kid.query(q, qi + 1, cb);
+        }
+        match q[qi] {
+            ArgSig::Wild => {
+                // Query variable: every stored alternative is compatible.
+                for (s, kid) in self.kids.iter() {
+                    if *s != ArgSig::Wild {
+                        kid.query(q, qi + 1, cb);
+                    }
+                }
+            }
+            qs @ ArgSig::Sig(_) => {
+                // Concrete query functor: only the identical stored
+                // functor can unify (Wild already handled above).
+                if let Some(kid) = self.kids.get(&qs) {
+                    kid.query(q, qi + 1, cb);
+                }
+            }
+        }
+    }
+}
+
+/// Per-head depth-1-signature discrimination index: `partner_key` bucket
+/// → fixed-depth signature trie.
+///
+/// Built once per fixed Φ alongside (and consistent with) [`RayIndex`].
+/// The bucket key is identical to `RayIndex`'s (`partner_key`), so the
+/// polarity/colour gate is byte-identical; the trie only sub-divides the
+/// already-correct head bucket by argument signature.
+#[derive(Debug, Clone)]
+pub struct DiscIndex {
+    /// Bucket key → root signature node.  Empty bucket ⇒ absent.
+    buckets: FxHashMap<IndexKey, SigNode>,
+}
+
+impl DiscIndex {
+    /// Build the discrimination index from Φ, restricting to rays whose
+    /// colours ⊆ `c` — the **same** ray set, same key, same `id_rays`
+    /// order as [`RayIndex::build`] (so it is a pure refinement of it).
+    pub fn build(phi: &Constellation, c: &HashSet<String>) -> Self {
+        let mut buckets: FxHashMap<IndexKey, SigNode> = FxHashMap::default();
+        let mut sig: Vec<ArgSig> = Vec::new();
+        for rid in id_rays(phi) {
+            let ray = get_ray(phi, rid);
+            if let TermData::App(sym, _) = get(ray) {
+                if ray_colours(ray).is_subset(c) {
+                    let key = IndexKey(sym.name, sym.pol);
+                    sig.clear();
+                    ray_sig(ray, &mut sig);
+                    buckets.entry(key).or_default().insert(&sig, rid);
+                }
+            }
+        }
+        Self { buckets }
+    }
+
+    /// Visit a **superset** of the rays matchable with a query ray whose
+    /// head is `(name, pol)` and whose term is `q_ray`.
+    ///
+    /// Faithful: the visited set ⊇ `{ rid | matchable(q_ray, ray[rid]) }`
+    /// (module gate).  Callers still confirm with `matchable`/`matchable_fast`.
+    /// Allocation: one small `Vec<ArgSig>` of length = head arity (a
+    /// handful) — orders of magnitude below the bucket scan it replaces.
+    pub fn for_each_candidate(
+        &self,
+        name: SymName,
+        pol: Polarity,
+        q_ray: Term,
+        mut cb: impl FnMut(RayId),
+    ) {
+        let key = partner_key(name, pol);
+        let Some(root) = self.buckets.get(&key) else {
+            return;
+        };
+        let mut sig: Vec<ArgSig> = Vec::new();
+        ray_sig(q_ray, &mut sig);
+        root.query(&sig, 0, &mut cb);
     }
 }
 
@@ -346,5 +545,175 @@ mod tests {
             "dep-graph build n={n}: scan={scan_us}µs  indexed={indexed_us}µs  ratio={ratio:.2}x"
         );
         // We don't assert a ratio — it varies by machine — but we do print it.
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // DiscIndex faithfulness harness (perf #4 — non-negotiable gate).
+    //
+    // The disc-tree candidate set must be a **superset** of the reference
+    // matchable set: for the head/colour bucket of every query ray `q`, the
+    // tree must visit *every* ray `s` with `matchable(q, s)` (it may visit
+    // more — that is the sound over-approximation; it must never visit
+    // fewer — that would silently drop a redex).  Proven by oracle:
+    // disc-tree visited set ⊇ { s | RayIndex.candidates ∧ matchable(q,s) }.
+    // We anchor on `RayIndex` (already oracle-proven == naïve O(n²) scan)
+    // as the reference candidate domain, so this transitively proves
+    // disc ⊇ true-matchable.
+    // ─────────────────────────────────────────────────────────────────────
+    use super::{DiscIndex, RayIndex};
+    use crate::constellation::get_ray;
+    use crate::polarised::matchable;
+    use crate::term::{get, TermData};
+
+    /// For every App ray `q` in Φ: assert
+    ///   { s ∈ RayIndex.candidates(q) : matchable(q,s) }
+    ///       ⊆  DiscIndex.for_each_candidate(q)
+    /// and additionally that DiscIndex ⊆ RayIndex.candidates (same bucket
+    /// domain — a refinement, never a widening of the colour/polarity gate).
+    fn assert_disc_superset(phi: &Constellation) {
+        let cset = all_colours(phi);
+        let ri = RayIndex::build(phi, &cset);
+        let di = DiscIndex::build(phi, &cset);
+
+        for (si, star) in phi.iter().enumerate() {
+            for (ji, &q) in star.iter().enumerate() {
+                let (name, pol) = match get(q) {
+                    TermData::App(sym, _) => (sym.name, sym.pol),
+                    TermData::Var(_) => continue,
+                };
+                // Reference candidate domain (oracle-proven == naïve scan).
+                let ref_bucket: std::collections::HashSet<RayId> =
+                    ri.candidates(name, pol).iter().copied().collect();
+                // True matchable subset of that domain.
+                let mut must_have: std::collections::HashSet<RayId> =
+                    std::collections::HashSet::new();
+                for &rid in &ref_bucket {
+                    if matchable(q, get_ray(phi, rid)) {
+                        must_have.insert(rid);
+                    }
+                }
+                // Disc-tree visited set for this query.
+                let mut got: std::collections::HashSet<RayId> =
+                    std::collections::HashSet::new();
+                di.for_each_candidate(name, pol, q, |rid| {
+                    got.insert(rid);
+                });
+
+                // (1) SUPERSET of the true matchable set — the gate.
+                for rid in &must_have {
+                    assert!(
+                        got.contains(rid),
+                        "DROPPED MATCH: query ray ({si},{ji})={q:?} \
+                         matchable with {rid:?} but disc-tree did not visit it"
+                    );
+                }
+                // (2) Refinement of (not wider than) the head bucket — the
+                // disc-tree must never invent a candidate outside the
+                // already-correct (polarity/colour-gated) RayIndex bucket.
+                for rid in &got {
+                    assert!(
+                        ref_bucket.contains(rid),
+                        "WIDENED: disc-tree visited {rid:?} outside the \
+                         RayIndex bucket for query ({si},{ji})={q:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn disc_superset_horn_add() {
+        let mut phi = add_prog();
+        phi.push(vec![neg_ray("add", vec![nat(3), nat(2), var("R")]), var("R")]);
+        assert_disc_superset(&phi);
+    }
+
+    #[test]
+    fn disc_superset_nfa() {
+        let nfa = eng_fig561_nfa();
+        let phi = nfa_constellation(&nfa, &["0", "0"], 1);
+        assert_disc_superset(&phi);
+    }
+
+    #[test]
+    fn disc_superset_circuits() {
+        let c_star = circuit_constellation(&excluded_middle_circuit_input1());
+        let m_star = bool_module().module_constellation();
+        let mut phi: Constellation = c_star;
+        phi.extend(m_star);
+        assert_disc_superset(&phi);
+    }
+
+    #[test]
+    fn disc_superset_with_variables() {
+        let phi = vec![
+            vec![pos_ray("f", vec![var("X")])],
+            vec![neg_ray("f", vec![c("0")])],
+            vec![neg_ray("f", vec![var("Y")]), var("Y")],
+            vec![pos_ray("f", vec![app("s", vec![var("Z")])])],
+            vec![neg_ray("f", vec![app("s", vec![app("s", vec![c("0")])])])],
+        ];
+        assert_disc_superset(&phi);
+    }
+
+    #[test]
+    fn disc_superset_nested_mixed() {
+        // Deep, var-rich, multi-arity rays in one head bucket — the case
+        // the trie's `Star`/skip-subterm logic must get exactly right.
+        let phi = vec![
+            vec![pos_ray("p", vec![app("g", vec![var("X"), c("a")]), var("Y")])],
+            vec![neg_ray("p", vec![app("g", vec![c("b"), var("W")]), app("h", vec![c("c")])])],
+            vec![neg_ray("p", vec![var("Q"), var("R")])],
+            vec![neg_ray("p", vec![app("g", vec![var("X"), var("X")]), c("z")])],
+            vec![neg_ray("p", vec![app("k", vec![c("a")]), c("d")])],
+            vec![pos_ray("p", vec![var("M"), app("g", vec![c("a"), c("b")])])],
+        ];
+        assert_disc_superset(&phi);
+    }
+
+    /// Deterministic LCG fuzz: random multi-symbol, var-sharing, nested
+    /// constellations.  The disc-tree visited set MUST be a superset of the
+    /// reference `matchable` set on EVERY query ray of EVERY generated Φ.
+    /// A single dropped match here ⇒ the index is unfaithful and must NOT
+    /// ship (it would silently change redex selection — docs/07).
+    #[test]
+    fn disc_superset_of_matchable_fuzz() {
+        struct Lcg(u64);
+        impl Lcg {
+            fn next(&mut self) -> u64 {
+                self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1);
+                self.0 >> 17
+            }
+            fn pick<'a, T>(&mut self, xs: &'a [T]) -> &'a T {
+                &xs[(self.next() as usize) % xs.len()]
+            }
+        }
+        fn gen(rng: &mut Lcg, depth: u32) -> Term {
+            if depth == 0 || rng.next() % 3 == 0 {
+                return *rng.pick(&[var("X"), var("Y"), var("Z")]);
+            }
+            let head = *rng.pick(&["f", "g", "h", "k"]);
+            let ar = (rng.next() % 3) as usize;
+            app(head, (0..ar).map(|_| gen(rng, depth - 1)).collect())
+        }
+        fn gen_ray(rng: &mut Lcg) -> Term {
+            let pos = rng.next() % 2 == 0;
+            let nm = *rng.pick(&["p", "q", "r"]);
+            let ar = 1 + (rng.next() % 3) as usize;
+            let args: Vec<Term> = (0..ar).map(|_| gen(rng, 3)).collect();
+            if pos { pos_ray(nm, args) } else { neg_ray(nm, args) }
+        }
+
+        let mut rng = Lcg(0x9E37_79B9_7F4A_7C15);
+        for _ in 0..400 {
+            let n_stars = 2 + (rng.next() % 8) as usize;
+            let phi: Constellation = (0..n_stars)
+                .map(|_| {
+                    let k = 1 + (rng.next() % 3) as usize;
+                    (0..k).map(|_| gen_ray(&mut rng)).collect()
+                })
+                .collect();
+            assert_disc_superset(&phi);
+        }
     }
 }
