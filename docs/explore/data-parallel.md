@@ -303,3 +303,33 @@ Everywhere else the answer is the serial wall: a single unification
 (#1) and the step-to-step recurrence (#4) are fundamentally serial, and
 the saturated-diagram explosion (#5) is embarrassingly parallel in form
 but a measured dead computation (docs/16 §7.3) not worth accelerating.
+
+---
+
+## MEASURED-NEGATIVE — per-step summand-fan rayon (#5, honest-negative, NOT shipped)
+
+The report's single lever ("rayon over the produce_stars_fast summand
+fan") was built with the HARD constraint of deterministic byte-identity
+(parallel-compute, ordered-commit, prefix-sum-disjoint Var::Idx counter
+bases mirroring the exact sequential progression). **The deterministic
+design SUCCEEDED** — all gates green incl. galaxy Φ=405 steps=371
+BIT-identical before↔after, a new double-run in-process determinism
+test, WIN-1's per-step PsiCS oracle, spec_phi 5/5, Σ(Φ) step-identity.
+
+But the SPEED GOAL FAILED, measured: the per-step candidate fan is
+1–3 cheap `unify_fast`+θ-apply calls; `par_iter` dispatch+join cost
+PER STEP × 10⁵–10⁶ steps dominates the independent work ~10×.
+KS-PROF (steps strictly identical): galaxy/triple fuse 0.0113s →
+0.0155–0.022s; binarith/mul fuse 7.39s → 70.1s, wall 50.5s → 181.3s
+(≈3.6× WORSE). Revert-class even though correct → reverted, nothing
+committed, dev untouched (ae49cae).
+
+⇒ **The data-parallel lever is measured-negative AT THIS GRANULARITY.**
+The serial wall the report itself flagged (per-step dependency,
+sub-rayon-granularity work items) is the binding reality. A profitable
+data-parallel design would need COARSER work items — cross-step /
+batched-region parallelism (a different algorithm, e.g. speculative
+multi-step or whole-subtree parallel reduction), not the per-step fan.
+Recorded so future-us does not re-attempt the per-step form. The
+deterministic-counter-pre-partition technique itself is sound and
+reusable if a coarser parallel site is ever found.
