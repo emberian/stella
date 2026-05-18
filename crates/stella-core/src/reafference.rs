@@ -434,7 +434,7 @@ pub fn reafferent_closure(
         for pair in new_env_stars {
             // Only accumulate if not already recorded.
             if !env_stars_by_round[r].contains(&pair) {
-                env_stars_by_round[r].push(pair.clone());
+                env_stars_by_round[r].push(pair);
             }
         }
 
@@ -477,24 +477,56 @@ pub fn reafferent_closure(
 
 /// Per-round closure-constituent record for §3.1-op `C_r`.
 ///
-/// `round` = `r_prime` — the round at which the §2.2 cycle was detected (the
-/// agent's proper-time tick when the cycle closed).  This is the round at which
-/// `re_closure_r = 1` in `viability_internal_by_round`.
+/// # The two rounds (decided: §49.50-staged labelling question, resolved 2026-05-18)
 ///
-/// `traced_env_star` = the env-modification `StarId` from the earlier round
-/// `r_past < round`, which is the non-triviality guard anchor for ρ: a star in
-/// C_{r+1} must provenance-trace through this id.
+/// A reafference event (§2.2) spans two rounds: the agent's earlier crossing
+/// mints a cross-cut env-modification at `r_past`, and the agent's later
+/// resolution is detected to be conditioned on that modification at `r_prime`
+/// (when the cycle *closes*).  An `r_past != r_prime` event is the normal case
+/// (the loop has temporal extent — it is the "temporally-extended agent" of
+/// `docs/00 §2`).  These records carry **both** rounds explicitly (option (b)
+/// of the staged question — see the loop in `closure_constituents`):
 ///
-/// `stars` = the agent-side `StarId` set on the §2.2 cycle at round `r_prime`,
-/// closed under agent-side provenance-connectivity.
+/// - `round` = `r_prime`: the detection round = the agent's **proper-time tick
+///   when the cycle closed** (`docs/00 §2.6`: time is the agent's own
+///   reafferent proper time, which advances at the re-closure event, not at the
+///   earlier crossing).  The constituent body in `stars` is computed from the
+///   snapshot at this round, and viability/re-closure is evaluated here
+///   (`docs/00 §2.4`): `re_closure_r = 1` at `round` in
+///   `viability_internal_by_round`, which keys `C_r` by exactly this field.
+///   This is the load-bearing label and consumers depend on it.
+/// - `origin_round` = `r_past`: the round at which the agent's earlier crossing
+///   produced the cross-cut env-modification.  Recorded (not dropped) because
+///   the temporal gap `round - origin_round` is the reafference loop's extent —
+///   the quantity the staged §49.50 / temporal-gap work (`docs/04`, `docs/08
+///   §4.10/§5` χ Stage-3) consumes.  It is *not* used to compute `stars`:
+///   doing so would snapshot the agent body *before* the env-modification fed
+///   back, i.e. at an earlier proper-time tick than the closure event, which
+///   contradicts §2.6.  It is carried so the gap need not be re-derived when
+///   that work is picked up.
+///
+/// `traced_env_star` = the env-modification `StarId` minted at `origin_round`,
+/// which is the non-triviality guard anchor for ρ: a star in C_{r+1} must
+/// provenance-trace through this id.
+///
+/// `stars` = the agent-side `StarId` set on the §2.2 cycle at round `r_prime`
+/// (= `round`), closed under agent-side provenance-connectivity.
 ///
 /// This is the operational realisation of `C_r` from
 /// `docs/01-subjective-engine-and-valence.md §3.1-op`.
 #[derive(Debug, Clone)]
 pub struct ClosureConstituents {
-    /// The detection round `r_prime` (the closure's live round r).
+    /// The detection round `r_prime` (the closure's live round r = the
+    /// agent's proper-time tick when the cycle closed).  `C_r` is keyed by
+    /// this field.
     pub round: usize,
-    /// The env-modification StarId (from `r_past < round`).
+    /// The origin round `r_past` (when the agent's earlier crossing minted the
+    /// cross-cut env-modification).  `origin_round <= round`; equality means a
+    /// same-round loop.  The temporal gap `round - origin_round` is the
+    /// reafference loop extent (staged §49.50 / temporal-gap input).  Not used
+    /// to compute `stars` — see the struct doc.
+    pub origin_round: usize,
+    /// The env-modification StarId (minted at `origin_round`).
     /// Non-triviality guard anchor: C_{r+1} stars must trace through this.
     pub traced_env_star: StarId,
     /// The agent-side StarId set on the §2.2 cycle at detection round `r_prime`.
@@ -614,7 +646,7 @@ pub fn closure_constituents(
         let new_env_stars = find_cross_cut_env_stars_at_round(&step, r, &agent_root_ids);
         for pair in new_env_stars {
             if !env_stars_by_round[r].contains(&pair) {
-                env_stars_by_round[r].push(pair.clone());
+                env_stars_by_round[r].push(pair);
             }
         }
 
@@ -643,11 +675,27 @@ pub fn closure_constituents(
         return None;
     }
 
-    // Build ClosureConstituents for each unique round at which a cycle event fires.
-    // `C_r` for round r_past = agent-side live stars at r_past provenance-connected
-    // to the agent_resolution witness found at r_prime.
+    // Build ClosureConstituents for each unique round at which a cycle event
+    // fires.  `C_r` (round r = `r_prime`, the detection round) = agent-side
+    // live stars *at r_prime* provenance-connected to the agent_resolution
+    // witness — closed under agent-side provenance-connectivity.
     let mut result: Vec<ClosureConstituents> = Vec::new();
 
+    // DECIDED (§49.50-staged labelling question, resolved 2026-05-18; was OPEN).
+    // The constituent body is *computed from* and *labelled by* the detection
+    // round `r_prime` (the `cc.round` index below). This is the load-bearing
+    // semantics, not a stopgap: `r_prime` is the agent's proper-time tick at
+    // which the cycle closes (docs/00 §2.6 — reafferent proper time advances at
+    // re-closure, not at the earlier crossing), and viability is evaluated here
+    // (docs/00 §2.4; `viability_internal_by_round` keys `C_r` by `cc.round`).
+    // Computing the body from the `r_past` snapshot would capture the agent
+    // *before* the env-modification fed back — an earlier proper-time tick than
+    // the closure event — so option (a) is rejected. We take option (b): keep
+    // r_prime computation/labelling AND carry `r_past` explicitly as
+    // `origin_round`, so the reafference-loop extent `r_prime - r_past` (the
+    // temporal-gap quantity the staged §49.50 / docs/08 §4.10/§5 χ-Stage-3 work
+    // consumes) is recorded rather than re-derived later. `r_past == r_prime`
+    // is just a same-round loop; no divergence to reconcile.
     for (r_past, env_star_id, r_prime) in &cycle_events {
         // Use the step snapshot at round r_prime (when the cycle was detected).
         let step_at_rprime = match last_step_by_round.get(*r_prime).and_then(|s| s.as_ref()) {
@@ -682,12 +730,13 @@ pub fn closure_constituents(
             }
         }
 
-        // Index by r_prime (the detection/live round).
-        // Avoid duplicates for the same r_prime.
+        // Index by r_prime (the detection/live round); carry r_past as the
+        // origin round. Avoid duplicates for the same r_prime.
         let already = result.iter().any(|cc| cc.round == *r_prime);
         if !already {
             result.push(ClosureConstituents {
                 round: *r_prime,
+                origin_round: *r_past,
                 traced_env_star: *env_star_id,
                 stars,
             });
@@ -987,6 +1036,96 @@ mod tests {
              fragment); got {} witnesses: {:?}",
             witnesses.len(),
             witnesses.iter().map(|w| (w.r, w.r_prime)).collect::<Vec<_>>()
+        );
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Test 3: r_past != r_prime — the §49.50-staged labelling decision.
+    //
+    // The positive fixture (Test 1) mints the cross-cut env star at round 0
+    // (r_past=0) and the agent resolution tracing through it is detected at a
+    // strictly later round (r_prime>=1). This is the normal temporally-extended
+    // loop. We assert the DECIDED option-(b) contract on ClosureConstituents:
+    //
+    //   - `round` (= r_prime, the proper-time tick of re-closure) is what
+    //     viability keys on, and is strictly later than the origin;
+    //   - `origin_round` (= r_past) is carried, not dropped, so the loop extent
+    //     `round - origin_round` is recoverable without re-deriving it;
+    //   - the body in `stars` is the live agent-side set at `round` (non-empty),
+    //     i.e. computed from the r_prime snapshot, NOT the r_past one.
+    //
+    // This locks the comment/code agreement: an r_past != r_prime event is
+    // representable and the two rounds do not get conflated.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn r_past_differs_from_r_prime_is_recorded_not_conflated() {
+        let phi: Constellation = vec![
+            vec![
+                neg_ray("sense", vec![var("X")]),
+                pos_ray("act",   vec![var("X")]),
+            ],
+            vec![
+                neg_ray("act",   vec![var("Y")]),
+                pos_ray("sense", vec![app("f", vec![var("Y")])]),
+            ],
+        ];
+        let psi0: Vec<Star> = vec![
+            vec![pos_ray("sense", vec![app("zero", vec![])])],  // star 0, agent
+            vec![pos_ray("act",   vec![app("zero", vec![])])],  // star 1, env
+        ];
+
+        // Partition {0}: star 0 is the agent (matches Test 1's design).
+        let partition: AgentSet = [0usize].into_iter().collect();
+
+        let ccs = closure_constituents(&phi, psi0, &partition, 5)
+            .expect("closure_constituents must find the §2.2 cycle on the \
+                     positive reafference fixture");
+        assert!(!ccs.is_empty(), "expected >=1 ClosureConstituents record");
+
+        // The fixture mints the env star at round 0 and the cycle closes later,
+        // so at least one record must be a genuine r_past != r_prime event.
+        let divergent = ccs.iter().find(|cc| cc.origin_round != cc.round);
+        let cc = divergent.unwrap_or_else(|| panic!(
+            "expected an r_past != r_prime event; got rounds {:?}",
+            ccs.iter().map(|c| (c.origin_round, c.round)).collect::<Vec<_>>()
+        ));
+
+        // origin_round (r_past) precedes round (r_prime); the gap is the loop
+        // extent and must be a positive, recoverable quantity.
+        assert!(
+            cc.origin_round < cc.round,
+            "origin_round (r_past={}) must precede round (r_prime={})",
+            cc.origin_round, cc.round
+        );
+        assert!(
+            cc.round - cc.origin_round >= 1,
+            "reafference-loop extent must be >=1 for an r_past != r_prime event"
+        );
+        // origin_round is the round the env-mod was minted: 0 for this fixture.
+        assert_eq!(
+            cc.origin_round, 0,
+            "the cross-cut env star is minted at round 0 in this fixture"
+        );
+
+        // The body is the LIVE set at r_prime (option (a) — r_past snapshot —
+        // is rejected): it must be non-empty and contain the agent root.
+        assert!(
+            !cc.stars.is_empty(),
+            "C_r body (computed from the r_prime snapshot) must be non-empty"
+        );
+        assert!(
+            cc.stars.contains(&StarId(0)),
+            "the live agent root (StarId(0)) is on the cycle at r_prime"
+        );
+
+        // viability_internal_by_round keys C_r by `round` (= r_prime), never by
+        // origin_round — guard against a future regression that swaps them.
+        let by_round: std::collections::HashMap<usize, &ClosureConstituents> =
+            ccs.iter().map(|c| (c.round, c)).collect();
+        assert!(
+            by_round.contains_key(&cc.round),
+            "C_r must be addressable by its detection round r_prime"
         );
     }
 }
