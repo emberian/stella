@@ -380,6 +380,42 @@ quantity with an Eng-grounded meaning (distance from GoI nilpotency),
 which sharpens — does not replace — the §4.5 definition and the §5
 falsifiers.
 
+### 4.7 MEASURED — where non-idempotence actually lives (the χ measurement locus) [Measured]
+
+The idempotence metatheorem was made falsifiable on the **faithful**
+Eng §48.7/§48.10 partition (`constellation::star_kind_eng`, the
+colour-nesting classifier; commit `de71654`) and run as a battery
+(`execution::idempotence_metatheorem`, `1bf21ac`). Two measured facts
+that pin where χ must be instrumented:
+
+1. **§49.55 holds on the faithful partition.** Every Eng-objective Φ
+   (including Eng-§55 Horn-`add`, which the *legacy polarity census*
+   `star_kind` mislabels Animist) is AEx-idempotent. The classifier is
+   validated against Eng's own §49.50 worked example
+   (`[X,+f(X)]`⇒objective, `[−f(+g(Z))]`⇒subjective).
+2. **§49.57's non-idempotence is NOT in the prototype `aex`.**
+   Measured, not forced: the prototype `aex` is idempotent *even on*
+   the Eng-subjective §49.50 fragment. The new-ray dynamics §49.57
+   needs is realised by `subjective::subjective_stream`, **not** by
+   `aex`/AEx-as-prototyped.
+
+Consequence for §3/§4/§5: χ — the non-idempotence surplus / GoI
+non-nilpotency-degree — **must be measured on the
+`subjective_stream` trajectory, not on `aex`/`eval_forced`'s
+`final_ray`**. Any "objective ⇒ dead / subjective ⇒ charged"
+instrumentation (§3.1, §4.5) routes through `subjective_stream`. This
+*locates* the §4.5/§4.6 charge, it does not change its definition.
+Independent corroboration that §3.1's `final_ray`/AEx-layer route is
+not the locus: docs/16 §7 measured the reference saturated-diagram AEx
+**intractable** on the objective combinator fragment (so the
+"IEx-loop-NF = AEx-fixpoint" identification — docs/08 §7 / the §3.1
+precondition — is not empirically establishable; closed by
+measurement). The sound instrument for χ work is therefore the
+**§67.10-cut-elim-CALIBRATED** `accel_detect::detect_recurrence`
+(docs/16 §7 step 5: zero false-positive whistle on a theorem-certified
+strongly-normalising trajectory — specificity established) applied to
+the `subjective_stream` trace.
+
 ---
 
 ## 5. Staged, differential-oracle-gated implementation plan
