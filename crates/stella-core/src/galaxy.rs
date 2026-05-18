@@ -884,6 +884,18 @@ thread_local! {
     /// structurally cannot see (the divergence lives in this recursion).
     static LAYER_TRACE: std::cell::RefCell<Option<Vec<TermId>>> =
         const { std::cell::RefCell::new(None) };
+    /// perf-audit D-W2 hoist. `IexAccel` is a pure function of Φ, yet
+    /// `eval_forced`'s loop + the `force_value`/`drive_strict` recursion
+    /// call `iex_fast` ~10²×/outermost-force (measured: 106×/[triple]),
+    /// each rebuilding `IexAccel::build(Φ=405)` (~0.39ms ⇒ ~25% of the
+    /// [triple] wall) — re-deriving a structure that did not change.
+    /// Built ONCE per outermost (`TR_DEPTH==0`) tree — exactly the
+    /// FORCE_MEMO scope (one fixed Φ ⇒ no cross-Φ staleness) — and
+    /// consulted via `iex_fast_with_accel`, PROVEN byte-identical to
+    /// `iex_fast` (`iex_fast_with_accel_eq_iex_fast`). Value-identical by
+    /// the existing proof; zero faithfulness risk (a pure hoist).
+    static GALAXY_ACCEL: std::cell::RefCell<Option<crate::interactive::IexAccel>> =
+        const { std::cell::RefCell::new(None) };
 }
 
 /// Install a fresh per-layer trace sink (docs/08 Stage-1). Measurement
@@ -935,6 +947,10 @@ pub fn eval_forced(phi: &Constellation, prog: TermId, fuel: usize, max_forcings:
     // valid only for THIS Φ/forcing tree (docs/11 Lever C scope).
     if TR_DEPTH.with(|c| c.get()) == 0 {
         FORCE_MEMO.with(|m| m.borrow_mut().clear());
+        // Same scope as the memo: build the Φ-pure accel ONCE for this
+        // outermost forcing tree (perf-audit D-W2).
+        let a = crate::interactive::build_accel(phi);
+        GALAXY_ACCEL.with(|g| *g.borrow_mut() = Some(a));
     }
     // State = the process Ψ (preserving the KAM stack across resumes).
     let mut psi: Vec<Star> = vec![vec![pp(st(prog, cst("eps")))]];
@@ -942,7 +958,16 @@ pub fn eval_forced(phi: &Constellation, prog: TermId, fuel: usize, max_forcings:
     let mut forcings = 0usize; // isnil resolutions
     let mut arith_ops = 0usize; // numeric resolutions
     loop {
-        let res = crate::interactive::iex_fast(phi, psi.clone(), fuel);
+        // D-W2: reuse the once-built Φ-pure accel (set at TR_DEPTH==0;
+        // nested force_value/drive_strict re-entries inherit it — same Φ
+        // throughout the tree). iex_fast_with_accel ≡ iex_fast (proven).
+        let res = GALAXY_ACCEL.with(|g| {
+            let gb = g.borrow();
+            let accel = gb
+                .as_ref()
+                .expect("GALAXY_ACCEL built at the TR_DEPTH==0 outermost");
+            crate::interactive::iex_fast_with_accel(accel, phi, psi.clone(), fuel)
+        });
         total += res.steps;
         let ray = match single_ray(&res.psi) {
             Some(r) => r,
