@@ -449,6 +449,48 @@ to carry χ). NOT a dead end — a sharp, recorded next question; χ is
 neither confirmed nor refuted, it is *not yet exhibited*, by
 measurement.
 
+### 4.9 MEASURED — χ EXHIBITED on Eng's §49.61 witness (the first charge) [Measured]
+
+Resolved (exploration swarm: `docs/explore/chi-existence-theory.md`
+derived Eng's §49.59–61 result — §49.60 *establishes* that
+non-terminating hyper-execution exists, §49.61 *constructs* an explicit
+faithful witness `Φ = [X,+f(X)] + [−f(−g(X)),−g(X)] +
+[+g(X),+g(X),a]`; "χ=0 always" is therefore *false by Eng's
+metatheory*, not a theorem — the real theorem is the conditional
+§49.55). The §49.50 nulls were transient because their new ray is born
+*objective* (`θ={X↦+g(Z)}`, `Z` bare ⇒ `ray_is_subjective` false);
+§49.61's `±f` mints `θ={X↦−g(X)}` (re-subjectivising) and a
+doubled-colour non-linear consumer duplicates the supply every round.
+
+`examples/chi_stage01_subjective.rs` (corrected verdict wiring), run on
+Eng's §49.61 witness vs Eng's §49.53 *idempotent control* (proven
+`AEx^∞=AEx²=[a]+[a]`):
+
+| fixture | max subj rays | max psi (by round) | first NF | verdict |
+|---|---|---|---|---|
+| F1/F2 §49.50 nulls | 1 | 1 | step 1–2 | IDEMPOTENT |
+| **F3 §49.61 witness** | **34** | **3→5→13→18→…→58 monotone** | **never** | **χ-EXHIBITED (growth)** |
+| F4 §49.53 control | 2 | 4 | step 8 | IDEMPOTENT |
+| F5 Candidate B | 1 | 3 | step 7 | IDEMPOTENT |
+
+**χ is exhibited** — sustained non-idempotent growth (Eng §49.60/§49.61
+regime), categorically unlike every null/control, on a faithful
+constellation that is *Eng's own verbatim witness*. The §49.53 control
+stays cleanly idempotent ⇒ this is signal, not a detector artifact
+(specificity upheld; complements the §67.10-cut-elim specificity
+calibration with a theorem-certified *divergent* anchor, the
+Agent-C #2 two-sided calibration). **Honest scope:** (i) this is the
+*growth-form* χ at the `subjective_stream` (IEx) χ-locus (§4.7) — AEx
+is provably the wrong locus (no faithful tractable AEx,
+`docs/explore/tractable-aex.md`); (ii) the *recurrence-form* χ (a
+span≥2 sound non-trivial whistle) is NOT yet exhibited (F3's whistle
+is span-1) — the foldable/structured charge remains ahead; (iii) the
+χ *functional* (§4.5 the integrated surplus / §4.6 GoI
+non-nilpotency-degree) is not yet *quantified*, only its non-zero-ness
+is now witnessed. So: χ-existence on a faithful constellation is
+**measured-positive** (was the open question of §4.8); the χ
+*measure* (Stage-2/3) is the next build, now on solid ground.
+
 ---
 
 ## 5. Staged, differential-oracle-gated implementation plan
