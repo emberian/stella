@@ -255,3 +255,29 @@ rebuild every step — fired across combinator/binarith/Horn) + spec_phi
 oracle-checked, zero underflow/unaccounted/panic). Byte-identity vs
 reference `iex` holds; the incremental set equals the full rebuild
 step-for-step on every gate corpus including the real 405-star galaxy.
+
+---
+
+## WIN-4 (C-#1) LANDED & live-verified — discrimination-tree on `find`
+
+`c158b6d` (#4, forensic-harvested; the agent self-caught a stack-overflow
+first cut — the gate working — replaced with a bounded-depth (=head
+arity) signature trie, re-proven). `DiscIndex` in index.rs subdivides
+each correct head bucket by a depth-1 argument signature (the proven
+`fp_unifiable` discriminator lifted into the per-Φ `IexAccel` index),
+consumed by `mat_phi_c_accel`/`any_match_accel`.
+
+Faithfulness PROVEN by parent in the live tree (not the agent's word):
+the NON-NEGOTIABLE `disc_superset_*` + `disc_superset_of_matchable_fuzz`
+(400 random var-sharing/nested constellations) — disc-tree visited set
+⊇ true matchable set ⇒ never drops a real match ⇒ redex selection
+unchanged; iex_fast/tabled/spec/accel _result_eq_iex byte-identity
+green (incl. iex_spec — the test the 1st cut overflowed — clean here);
+index:: 15/15 (8 untouched RayIndex oracle-equiv); spec_phi galaxy
+Φ=405 5/5. Steps bit-identical across all benches.
+
+Measured (agent KS-PROF, steps strictly identical): binarith/mul
+(500000 steps) find 5.3–6.8s → 2.27s, matchable abs ~5× (3.6–4.6s →
+0.73s), wall 65s → 50s; binarith/add ~4–5× on matchable. galaxy
+[triple] entry is fuse-bound (find ~ms) — honestly not attributable
+there; the collapse is large where `find` actually dominates.
