@@ -897,7 +897,7 @@ is the *runway* that makes E's results survive scrutiny (faithful
 substrate: classifier conformance, Ex_C/§69 live, confluence observed,
 oracle consolidated, suite CI-locked).
 
-## ⚠ B-const HARVESTED-PENDING-REVERIFY (c9ab43e) — CORRECTNESS FIX to the χ foundation
+## ✓ B-const HARVESTED + RE-VERIFIED (c9ab43e) — CORRECTNESS FIX to the χ foundation [RESOLVED ae2c6fe]
 
 B-const (worktree-agent-ab2e93e2c6c3d065b, commit 94b3039) cherry-picked
 to dev as **c9ab43e**. It is NOT merely additive — it CORRECTS the
@@ -917,27 +917,27 @@ forensic-read > spec" lesson, again). Also adds §48.10/§48.14 multiset
 keys (honestly scoped: interned-identity, NOT α — disclaimed) +
 pinned non-invariance of IdRays/get_ray.
 
-**PENDING (CRITICAL — the χ foundation moved):** ray_is_subjective
-underpins the WHOLE χ/valence apparatus. The correction makes MORE
-rays subjective (uncoloured-head-coloured-arg: was objective, now
-subjective). Must RE-VERIFY in the live tree (running →
-/tmp/bconst_reverify.txt): (1) iex byte-identity (engine unaffected —
-ray_is_subjective not on reduction path); (2) eng_classifier_tests
-(§48.9 conformance); (3) idempotence_metatheorem (§49.55 objective Φ
-e.g. Horn-add MUST still classify Objective+idempotent — analysis says
-yes, verify); (4) chi:: + chi_stage01/02 — **does §49.61 still
-χ-EXHIBIT and §49.53 still control-IDEMPOTENT under the corrected
-classifier?** The growth-form χ + §4.6 σu-degree are psi_size/
-provenance-DAG based (not ray_is_subjective-count), so QUALITATIVELY
-robust; but chi_stage01's Stage-0 subjective-COUNT diagnostics (the
-docs/08 §4.9 "subj rays 1→34") were measured under the OLD classifier
-and likely SHIFT. If qualitative result holds (expected) → HONEST
-docs/08 §4.9/4.10 update: "re-verified under the §48.9-corrected
-classifier; conclusion robust; the earlier subj-count diagnostics were
-under the less-faithful head-gate, corrected here". If a qualitative
-result FLIPS → first-class finding, the earlier χ claim was on a
-buggy classifier — surface, do not paper. POST-COMPACT-ME: this
-re-verify + the honest docs/08 update is the #1 priority continuation.
+**RESOLVED (ae2c6fe — re-verified in the live tree, χ foundation HOLDS).**
+Battery run post-compact under the corrected classifier:
+- (1) iex byte-identity: `iex_fast/tabled/spec_eq_iex` + `with_accel` all
+  GREEN (classifier off the reduction path, as analysed).
+- (2) §48.9 conformance: `constellation` suite 26/26 (incl. the rewritten
+  `ray_objective_vs_subjective_eng`).
+- (3) idempotence-metatheorem: `objective_constellations_are_aex_idempotent`
+  2/2 + `subjective_fragment_aex_idempotence_is_measured` 1/1 + chi:: 14/14
+  + `subjective_profile` 2/2.
+- (4) chi_stage01/02 RE-RUN: F3 §49.61 STILL χ-EXHIBITED (34 subj-rays /
+  58 psi / never-NF — *identical* to the pre-correction figures);
+  Stage-2 STILL χ=14 (max_chain 15) vs §49.53 χ=2 (max_chain 3),
+  theorem-SEPARATED; F1/F2/F4/F5 STILL IDEMPOTENT (specificity upheld).
+**Qualitative result robust AND quantitative figures stable** — the
+§49.61 witness's subjective rays all carry non-Neutral coloured heads,
+so the old head-gate and the corrected §48.9 rule *agree on this
+fixture* (the correction restores faithfulness for the general
+neutral-head/coloured-arg case without disturbing the measured χ
+story). docs/08 §4.9/4.10 annotated honestly with the
+`[Re-verified — classifier correction c9ab43e]` note (ae2c6fe); no
+number changed. The #1 post-compact priority is CLOSED.
 
 A1 (dense union-find, e7f6b55, worktree-agent-a0cc3ed387555ce46): clean
 perf — 3.48× UF, 20000-case differential fuzz green, iex gates green,
