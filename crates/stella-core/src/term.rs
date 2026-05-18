@@ -252,10 +252,22 @@ struct TermStore {
 
 impl TermStore {
     fn new() -> Self {
+        // #3-step-1 (perf-audit D-W3, measured: hashbrown reserve_rehash on
+        // the hash-cons map is visibly hot — galaxy/binarith intern 10⁵–10⁶
+        // nodes from zero capacity ⇒ ~16+ doubling rehashes, each an
+        // O(current_size) copy). Pre-size to skip that churn. **Value-
+        // identical**: `TermId` = `vec.len()` (capacity-independent),
+        // hash-cons semantics unchanged — purely fewer reallocations.
+        // A *modest constant-factor* first increment; the substantial
+        // D-W3 win is step-2 (lock-free / sharded store removing the
+        // RwLock read/write serialisation). 64Ki ≈ a few MB upfront —
+        // negligible for small uses, kills the early-rehash burst that
+        // dominates the medium/large reductions.
+        const CAP: usize = 1 << 16;
         Self {
-            map: FxHashMap::default(),
-            vec: Vec::new(),
-            ground: Vec::new(),
+            map: FxHashMap::with_capacity_and_hasher(CAP, Default::default()),
+            vec: Vec::with_capacity(CAP),
+            ground: Vec::with_capacity(CAP),
         }
     }
 
