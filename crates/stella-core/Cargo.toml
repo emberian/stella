@@ -8,6 +8,14 @@ open-hypergraphs = "=0.3.1"
 open-hypergraphs-dot = "=0.2.4"
 lasso = { version = "=0.7.3", features = ["multi-threaded"] }
 rustc-hash = "=1.1.0"
+# perf #3-step-2 (D-W3): grow-only, lock-free append-only arena for the
+# hash-cons id→Node read path. Vetted, loom-model-checked (boxcar ships
+# `src/loom.rs` + `#[cfg(loom)]` permutation tests); `push` does a
+# `Release` store on a per-entry `active` flag *after* the slot is written,
+# and `get` does an `Acquire` load and only reads the slot if `active` — a
+# documented publish-after-init happens-before that makes a torn read
+# impossible. ONE well-scoped dependency; honest-marked.
+boxcar = "=0.2.14"
 
 [dev-dependencies]
 criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }
