@@ -96,12 +96,15 @@ fn battery() -> Vec<Case> {
     }
 
     // ⊗/⅋ cut (Fig. 66.2 shape). The cut is between a Tensor output and a Par
-    // output (not two axiom endpoints). The cut-reduction TRAJECTORY is still
-    // correct — ⊗/⅋ splits Cut(7,8) into Cut(4,3)+Cut(6,5), which then ax/cut-
-    // splice down to the surviving conclusion axiom Ax(1,2). But the present
-    // `phi_ax`/`addr` + AEx engine path does not certify §67.10 for a
-    // connective-output cut, so this is REPORTED, not asserted (measure, don't
-    // guess; honest where the engine is inconclusive).
+    // output (not two axiom endpoints). The cut-reduction TRAJECTORY splits
+    // Cut(7,8) into Cut(4,3)+Cut(6,5), which then ax/cut-splice down to the
+    // surviving conclusion axiom Ax(1,2). NOW §67.10-CERTIFIED: the earlier
+    // inconclusive was located precisely — the §67.9 par/tensor case
+    // *duplicates* the cut, so AEx leaves zero-ray residue stars beside the
+    // correct content star, and the old strict length check in
+    // `constellations_equiv` rejected on star count. §67.7's `≃_S` is a
+    // bijection over diagram-bearing stars (a 0-ray star is no diagram), so
+    // the residue-faithful reading certifies it. Hard differential gate.
     v.push(Case {
         name: "⊗/⅋ cut (Fig 66.2 shape — connective-output cut)".into(),
         r: ps(vec![
@@ -113,8 +116,65 @@ fn battery() -> Vec<Case> {
             cut(7, 8),
         ]),
         s: ps(vec![ax(1, 2)]),
-        engine_certifies: false,
+        engine_certifies: true,
     });
+
+    // Two independent ⊗/⅋ connective-output cuts (mix-style net). Non-monotone
+    // cut profile 2→3→4→3→2→1→0 — a theorem-certified GROW-THEN-SHRINK
+    // trajectory (the two-sided calibration shape the docs/08 §4.10 caveat
+    // wanted; every prior certified trajectory strictly shrank).
+    v.push(Case {
+        name: "two parallel ⊗/⅋ blocks (non-monotone, mix-style)".into(),
+        r: ps(vec![
+            ax(1, 2),
+            ax(3, 4),
+            ax(5, 6),
+            par(3, 5, 7),
+            tensor(4, 6, 8),
+            cut(7, 8),
+            ax(11, 12),
+            ax(13, 14),
+            ax(15, 16),
+            par(13, 15, 17),
+            tensor(14, 16, 18),
+            cut(17, 18),
+        ]),
+        s: ps(vec![ax(1, 2), ax(11, 12)]),
+        engine_certifies: true,
+    });
+
+    // ⊗/⅋ connective-output cut composed with an ax/cut chain (§67.9 par/
+    // tensor feeding §67.1 ax/cut). Cut profile 2→3→2→1→0.
+    v.push(Case {
+        name: "⊗/⅋ then ax/cut chain (composed shape)".into(),
+        r: ps(vec![
+            ax(1, 2),
+            ax(3, 4),
+            ax(5, 6),
+            par(3, 5, 7),
+            tensor(4, 6, 8),
+            cut(7, 8),
+            cut(2, 9),
+            ax(9, 10),
+        ]),
+        s: ps(vec![ax(1, 10)]),
+        engine_certifies: true,
+    });
+
+    // Deep pure ax/cut chain at the MEASURED certified boundary (n = 7). The
+    // ax/cut chain engine-certifies for n ≤ 7; at n ≥ 8 the AEx fixpoint
+    // (seminaive AND the aex_full oracle agree) halts the cut/vehicle
+    // alternation early — a pre-existing engine saturation-depth limit,
+    // distinct from the connective-output residue, NOT asserted past n=7.
+    {
+        let (r, s) = ax_chain(7);
+        v.push(Case {
+            name: "deep ax-chain n=7 (certified boundary; n≥8 = engine limit)".into(),
+            r,
+            s,
+            engine_certifies: true,
+        });
+    }
 
     v
 }
@@ -208,11 +268,18 @@ fn main() {
     for case in &battery() {
         let trace = cut_elim_trace(&case.r, 256);
         let states = trace_states(&trace);
+        // Measured: is the cut-count profile monotone-decreasing or does it
+        // grow then shrink? (The ⊗/⅋ par/tensor case duplicates the cut, so
+        // the connective-output trajectories are NON-MONOTONE.)
+        let prof: Vec<usize> = trace.iter().map(|s| s.cuts_remaining).collect();
+        let non_monotone = prof.windows(2).any(|w| w[1] > w[0]);
+        let shape = if non_monotone {
+            "non-monotone (grow-then-shrink) SN reduction"
+        } else {
+            "strictly-shrinking SN reduction"
+        };
         match detect_recurrence(&states) {
-            None => println!(
-                "   {:<48} no whistle  (correct: strictly-shrinking SN reduction)",
-                case.name
-            ),
+            None => println!("   {:<48} no whistle  (correct: {shape})", case.name),
             Some(w) => {
                 let inst = &states[w.earlier..=w.later];
                 let sound = is_sound_generalization(w.generalization, inst);
@@ -276,11 +343,15 @@ fn main() {
     println!(
         " RESULT: {certified_count} battery trajectories ENDPOINT-CERTIFIED by §67.10\n\
          \x20        (hard differential gate; ground truth is a THEOREM, not an\n\
-         \x20        engine re-run). {reported_count} connective-output-cut net reported\n\
-         \x20        honestly as engine-inconclusive (trajectory still correct).\n\
+         \x20        engine re-run). {reported_count} reported-only nets remaining: the\n\
+         \x20        ⊗/⅋ connective-output cut is now CERTIFIED (residue-faithful\n\
+         \x20        §67.7 ≃_S). The only characterised honest-negative is the AEx\n\
+         \x20        saturation-depth limit on ax/cut chains of n≥8 (engine, not\n\
+         \x20        the §67.9 residue; pinned by a dedicated negative test).\n\
          \x20 CALIBRATION: detect_recurrence raises NO false-positive whistle on\n\
-         \x20        any §67.10-certified strongly-normalising trajectory — the\n\
-         \x20        soundness property the open-ended data[0] probe could not test."
+         \x20        any §67.10-certified strongly-normalising trajectory —\n\
+         \x20        including the NON-MONOTONE (grow-then-shrink) ⊗/⅋ ones,\n\
+         \x20        the two-sided shape the docs/08 §4.10 caveat wanted."
     );
     println!("══════════════════════════════════════════════════════════════════");
 }
