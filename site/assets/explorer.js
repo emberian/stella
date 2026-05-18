@@ -3,13 +3,18 @@
 // stella-core, compiled to wasm32, runs interactive execution (IEx) entirely
 // in the browser. This module renders a constellation as it resolves — stars
 // and rays, the redex that fires, the most general unifier — and also offers a
-// dependency-graph view and a free-form editor. It is a tool; the reading on
-// the model is static and stands without it.
+// dependency-graph view and a free-form editor.
 
 // This module lives at /assets/explorer.js; the WASM bundle is /pkg/ and the
 // vendored viz.js is /assets/vendor/.
 const WASM_URL = new URL("../pkg/stella_viz_wasm.js", import.meta.url).href;
 const VIZ_URL = new URL("./vendor/viz-standalone.js", import.meta.url).href;
+
+// The Stella visual kit — star-and-ray glyphs, fields, verdict chips,
+// closure + proof-structure plates. Renders exact engine output; no inference.
+import * as DGM from "./diagram.js";
+// Schema-driven structured spec editor (form-primary, raw-JSON round-trip).
+import { SpecForm } from "./specform.js";
 
 let wasmReady = null;
 let vizReady = null;
@@ -40,6 +45,7 @@ function loadViz() {
   }
   return vizReady;
 }
+
 
 const esc = (s) =>
   String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -227,6 +233,7 @@ const TEMPLATE_IDE = `
     <button class="stx-iconbtn" data-role="wsimport" title="Import workspaces JSON">import</button>
     <input type="file" data-role="wsfile" accept="application/json" hidden />
     <button class="stx-iconbtn" data-role="construct" title="Build a constellation from a machine / proof spec">＋ build</button>
+    <button class="stx-iconbtn" data-role="logic" title="Orthogonality, behaviours, proof-net correctness">⊥ logic</button>
     <button class="stx-iconbtn" data-role="copytrace" title="Copy the whole step-by-step trace">⧉ trace</button>
     <a class="stx-permalink" data-role="permalink" href="#" title="Copy a sharable link">↪ share</a>
   </div>
@@ -250,13 +257,46 @@ const TEMPLATE_IDE = `
         <span class="stx-bar__spacer"></span>
         <button class="stx-iconbtn" data-role="cclose">✕</button>
       </div>
-      <textarea class="stx-ta" data-role="cspec" spellcheck="false" wrap="off" rows="14"></textarea>
+      <div class="sf-split">
+        <div class="sf-host" data-role="cform"></div>
+        <div class="sf-preview" data-role="cprev"><span class="sf-preview__lab">live preview</span></div>
+      </div>
       <div class="stx-modal__row">
-        <button class="st-btn st-btn--sm" data-role="cbuild">Build → editor</button>
+        <button class="st-btn st-btn--sm" data-role="cbuild">Build → editor&nbsp;<span class="stx-kbd">⌘↵</span></button>
+        <button class="st-btn st-btn--secondary st-btn--sm" data-role="cexample">Load example</button>
         <span class="stx-error" data-role="cerr"></span>
         <span class="stx-bar__spacer"></span>
-        <span class="stx-syntax">The encoder is Eng-faithful; the result is editable source.</span>
+        <span class="stx-syntax">Builds an editable Φ ⊢ Ψ from the spec.</span>
       </div>
+    </div>
+  </div>
+
+  <div class="stx-modal" data-role="lpanel" hidden>
+    <div class="stx-modal__box">
+      <div class="stx-modal__head">
+        <span>Logic workbench</span>
+        <select class="stx-select stx-select--light" data-role="lclass" aria-label="Tool">
+          <option value="ortho">Orthogonality — Φ₁ ⊥ Φ₂</option>
+          <option value="proofnet">Proof net — correctness + Φ_comp</option>
+          <option value="behaviour">Behaviour / type — A^⊥⊥</option>
+          <option value="compare">Compare — same result? ω delta</option>
+        </select>
+        <span class="stx-bar__spacer"></span>
+        <button class="stx-iconbtn" data-role="lclose">✕</button>
+      </div>
+      <div class="sf-split">
+        <div class="sf-host" data-role="lform"></div>
+        <div class="sf-preview" data-role="lprev"><span class="sf-preview__lab">live preview</span></div>
+      </div>
+      <div class="stx-modal__row">
+        <button class="st-btn st-btn--sm" data-role="lrun">Run&nbsp;<span class="stx-kbd">⌘↵</span></button>
+        <button class="st-btn st-btn--secondary st-btn--sm" data-role="lexample">Load example</button>
+        <button class="st-btn st-btn--secondary st-btn--sm" data-role="lload" hidden>Φ_comp → editor</button>
+        <span class="stx-error" data-role="lerr"></span>
+        <span class="stx-bar__spacer"></span>
+        <span class="stx-syntax">A type is a behaviour; membership is orthogonality; proofs validated by the stellar/DR/Girard criterion.</span>
+      </div>
+      <div class="stx-lout" data-role="lout"></div>
     </div>
   </div>
 
@@ -436,6 +476,31 @@ const CSPEC = {
 }`,
 };
 
+// Worked templates for the Logic workbench.
+const LSPEC = {
+  ortho: `{
+  "phi1": "[+a(X)]",
+  "phi2": "[-a(X), R]"
+}`,
+  proofnet: `{
+  "kind": "mll",
+  "links": [
+    {"kind":"ax","left":0,"right":1}
+  ]
+}`,
+  behaviour: `{
+  "members": ["[+a(X)]"],
+  "universe": ["[+a(X)]", "[-a(X), R]"],
+  "orth": "roots"
+}`,
+  compare: `{
+  "phiA": "[+add(0, Y, Y)] + [-add(X, Y, Z), +add(s(X), Y, s(Z))]",
+  "psiA": "[-add(s(0), s(0), R), R]",
+  "phiB": "[+add(0, Y, Y)] + [-add(X, Y, Z), +add(s(X), Y, s(Z))]",
+  "psiB": "[-add(s(s(0)), 0, R), R]"
+}`,
+};
+
 const LIBRARY = [
   { group: "Logic programming", items: [
     { name: "Addition — 2 + 2", note: "Peano addition; watch the request peel one s each step.",
@@ -549,10 +614,9 @@ export async function mountExplorer(root, opts = {}) {
       elObs.classList.toggle("is-final", isFinal);
     }
 
-    // The EXACT §51.9 decomposition: one step fires a *sum* of summands,
-    // each with the real θ the engine applied (authoritative, not
-    // reconstructed). Fall back to the single-mgu phrasing only if the
-    // exact summands are absent (the primer's fuel-replay capture).
+    // §51.9 decomposition: one step fires a sum of summands, each with the
+    // θ the engine applied (not reconstructed). Fall back to the single-mgu
+    // phrasing only if the summands are absent (the fuel-replay capture).
     const sums = snap.summands || [];
     if (sums.length && nextRedex) {
       const plural = sums.length > 1;
@@ -827,21 +891,44 @@ export async function mountExplorer(root, opts = {}) {
     try { res = JSON.parse(mod.ex_run(phi, psi, k, fuelVal())); }
     catch (e) { body.innerHTML = `<p class="reader-status error">engine error: ${esc(e.message)}</p>`; return; }
     if (!res.ok) { body.innerHTML = `<p class="reader-status error">${esc(res.error)}</p>`; return; }
-    const set = (arr) => arr.length
-      ? arr.map((s) => `<span class="stx-obs__s">${esc(s)}</span>`).join("")
-      : `<span class="stx-obs__none">∅</span>`;
-    const badge = res.order_independent
-      ? `<span class="stx-ex__ok">✓ strategy-independent — same ɟ under the default and an alternate firing order (exact engine)</span>`
-      : `<span class="stx-ex__no">≠ different ɟ under another order — non-confluent here, or fuel exhausted</span>`;
-    body.innerHTML =
-      `<div class="stx-ex__row">${badge}</div>` +
-      `<div class="stx-ex__grp"><span class="stx-obs__lab">the result — ɟ(IEx), exact (Stage 0)</span>` +
-      `<div class="stx-ex__set">${set(res.result)}</div></div>` +
-      `<div class="stx-ex__grp"><span class="stx-obs__lab">ɟ under an alternate firing order (exact)</span>` +
-      `<div class="stx-ex__set">${set(res.alt)}</div></div>` +
-      `<div class="stx-ex__grp"><span class="stx-obs__lab">raw CEx cross-check · copy budget k=${res.cex_k} (renamed copies; research aid)</span>` +
-      `<div class="stx-ex__set">${set(res.cex)}</div></div>` +
-      `<p class="stx-ex__note">${esc(res.note)}</p>`;
+    body.textContent = "";
+    body.appendChild(DGM.chip(
+      res.order_independent ? "strategy-independent ɟ" : "order-sensitive ɟ",
+      res.order_independent ? "ok" : "no",
+      res.order_independent
+        ? "same ɟ under the default and an alternate firing order"
+        : "different ɟ under another order — non-confluent here, or fuel exhausted"));
+    body.appendChild(DGM.setField(res.result, { title: "the result — ɟ(IEx)" }));
+    body.appendChild(DGM.setField(res.alt, { title: "ɟ under an alternate firing order" }));
+    body.appendChild(DGM.setField(res.cex, {
+      title: `raw CEx cross-check · copy budget k=${res.cex_k} (renamed copies; research aid)`,
+    }));
+    body.appendChild(DGM.legend());
+    const note = document.createElement("p");
+    note.className = "stx-ex__note";
+    note.textContent = res.note;
+    body.appendChild(note);
+    // Quantitative strip (ω-weight §79, visibility, counts) as stat tiles.
+    try {
+      const m = JSON.parse(mod.lc_measures(phi, psi));
+      if (m.ok) {
+        const mw = document.createElement("div");
+        mw.className = "stx-ex__grp";
+        const lab = document.createElement("span");
+        lab.className = "stx-obs__lab";
+        lab.textContent = "measures — ω-weight §79, visibility, structure";
+        mw.appendChild(lab);
+        mw.appendChild(DGM.tiles([
+          { k: "ω(Φ⊎Ψ)", v: m.omega_cfg },
+          { k: "ω(Φ)", v: m.omega_phi },
+          { k: "ω(Ψ)", v: m.omega_psi, tone: "warm" },
+          { k: "visible", v: m.visible ? "yes" : "no", tone: "cool" },
+          { k: "Φ ★/rays", v: `${m.stars_phi}/${m.rays_phi}` },
+          { k: "Ψ ★/rays", v: `${m.stars_psi}/${m.rays_psi}`, tone: "warm" },
+        ]));
+        body.appendChild(mw);
+      }
+    } catch (_) { /* measures are a nicety; never block the Ex view */ }
   }
 
   // A preset is now just an editable example: pull its Display source.
@@ -923,27 +1010,257 @@ export async function mountExplorer(root, opts = {}) {
       if (e.key === "Enter") { e.preventDefault(); computeEx(); }
     });
 
-    // Construction lab: spec → Eng-faithful constellation → editable source.
-    const cpanel = $("cpanel"), cclass = $("cclass"), cspec = $("cspec"),
-      cerr = $("cerr");
-    const setSpec = () => { cspec.value = CSPEC[cclass.value] || "{}"; cerr.textContent = ""; };
-    $("construct").addEventListener("click", () => {
-      if (!cspec.value.trim()) setSpec();
-      cpanel.hidden = false;
+    // ── Shared spec helpers ────────────────────────────────────────────────
+    const SPEC_KEY = (m, k) => `stella.spec.${m}.${k}`;
+    const parseCheck = (src) => {
+      if (!src || !src.trim()) return true;
+      try { return JSON.parse(mod.parse_check(src, "")).ok !== false; }
+      catch { return false; }
+    };
+    const prevReset = (host) => {
+      host.textContent = "";
+      host.appendChild(
+        Object.assign(document.createElement("span"),
+          { className: "sf-preview__lab", textContent: "live preview" }));
+      return host;
+    };
+    // Live diagram preview from the in-progress form value.
+    function renderSpecPreview(kind, v, host) {
+      prevReset(host);
+      try {
+        if (kind === "mll" || kind === "mll2i" || kind === "proofnet") {
+          host.appendChild(DGM.proofStructure(v.kind || kind, v.links || []));
+        } else if (kind === "ortho") {
+          host.appendChild(DGM.field(v.phi1 || "", { title: "Φ₁" }));
+          host.appendChild(DGM.field(v.phi2 || "", { title: "Φ₂" }));
+        } else if (kind === "compare") {
+          host.appendChild(DGM.field(v.phiA || "", { title: "ΦA" }));
+          host.appendChild(DGM.field(v.psiA || "", { title: "ΨA" }));
+          host.appendChild(DGM.field(v.phiB || "", { title: "ΦB" }));
+          host.appendChild(DGM.field(v.psiB || "", { title: "ΨB" }));
+        } else if (kind === "behaviour") {
+          host.appendChild(DGM.setField(v.members || [], { title: "A — members" }));
+          host.appendChild(DGM.setField(v.universe || [], { title: "universe" }));
+        } else if (kind === "nfta") {
+          host.appendChild(DGM.field((v.rules || []).map((r) =>
+            `[${r.state}, ${r.symbol}(${(r.successors || []).join(",")})]`).join(" + "),
+            { title: `${(v.rules || []).length} rules` }));
+        } else if (kind === "circuit") {
+          host.appendChild(DGM.field((v.gates || []).map((g) =>
+            `[${g.label}(${(g.inputs || []).join(",")})${g.is_output ? ", out" : ""}]`).join(" + "),
+            { title: `${(v.gates || []).length} gates` }));
+        } else if (kind === "nfa" || kind === "npda" || kind === "ntm" ||
+                   kind === "atm" || kind === "nfst") {
+          // a real laid-out state graph via the vendored Graphviz; the
+          // async render is sequence-guarded so rapid edits never race.
+          const seq = (host.__seq = (host.__seq || 0) + 1);
+          const cap = document.createElement("div");
+          cap.className = "sf-preview__lab";
+          cap.textContent = "rendering state graph…";
+          host.appendChild(cap);
+          const dot = DGM.automatonDot(kind, v);
+          loadViz().then((viz) => {
+            if (host.__seq !== seq) return;
+            if (!viz) { cap.textContent = "graph renderer unavailable"; return; }
+            // viz-standalone's renderSVGElement may return the element
+            // synchronously or as a promise — normalise with Promise.resolve.
+            return Promise.resolve(viz.renderSVGElement(dot)).then((sv) => {
+              if (host.__seq !== seq) return;
+              styleSvg(sv);
+              sv.classList.add("sf-prev-graph");
+              cap.textContent = "automaton — Φ encodes this machine";
+              host.appendChild(sv);
+            });
+          }).catch(() => { cap.textContent = "graph unavailable"; });
+        } else {
+          // tiles — a compact structural snapshot
+          const box = document.createElement("div");
+          box.className = "dgm-tiles";
+          const tile = (label, val) => {
+            const d = document.createElement("div"); d.className = "dgm-tile";
+            d.appendChild(Object.assign(document.createElement("div"),
+              { className: "dgm-tile__v", textContent: String(val) }));
+            d.appendChild(Object.assign(document.createElement("div"),
+              { className: "dgm-tile__k", textContent: label }));
+            box.appendChild(d);
+          };
+          if (v.tile_types) tile("tile types", v.tile_types.length);
+          if (v.positions) tile("positions", v.positions.length);
+          if (v.tau != null && v.tau !== "") tile("τ", v.tau);
+          host.appendChild(box);
+        }
+      } catch (_) { /* preview is best-effort; never block editing */ }
+    }
+
+    // Construction lab — schema-driven form → constellation source.
+    const cpanel = $("cpanel"), cclass = $("cclass"), cerr = $("cerr");
+    const cForm = new SpecForm($("cform"), {
+      parseCheck,
+      onChange: (v) => {
+        try { localStorage.setItem(SPEC_KEY("c", cclass.value), JSON.stringify(v)); } catch (_) {}
+        renderSpecPreview(cclass.value, v, $("cprev"));
+      },
     });
-    $("cclose").addEventListener("click", () => { cpanel.hidden = true; });
-    cpanel.addEventListener("click", (e) => { if (e.target === cpanel) cpanel.hidden = true; });
-    cclass.addEventListener("change", setSpec);
-    setSpec();
-    $("cbuild").addEventListener("click", () => {
+    const cSetSchema = (useExample) => {
+      cerr.textContent = "";
+      let init = null;
+      if (!useExample) {
+        try { init = JSON.parse(localStorage.getItem(SPEC_KEY("c", cclass.value))); } catch (_) {}
+      }
+      if (!init) { try { init = JSON.parse(CSPEC[cclass.value] || "{}"); } catch (_) {} }
+      cForm.setSchema(cclass.value, init);
+    };
+    const cBuild = () => {
       cerr.textContent = "";
       let res;
-      try { res = JSON.parse(mod.build_machine(cclass.value, cspec.value)); }
+      try { res = JSON.parse(mod.build_machine(cclass.value, cForm.json())); }
       catch (e) { cerr.textContent = "engine error: " + e.message; return; }
       if (!res.ok) { cerr.textContent = res.error || "build failed"; return; }
       cpanel.hidden = true;
       choicePath = [];
       loadIntoEditor(res.phi, res.psi || "");
+    };
+    $("construct").addEventListener("click", () => {
+      if (!cForm.schemaKey) cSetSchema(false);
+      cpanel.hidden = false;
+      cpanel.querySelector(".sf-in,.sf-sel,.sf-add")?.focus();
+    });
+    $("cclose").addEventListener("click", () => { cpanel.hidden = true; });
+    cpanel.addEventListener("click", (e) => { if (e.target === cpanel) cpanel.hidden = true; });
+    cpanel.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") cpanel.hidden = true;
+      else if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); cBuild(); }
+    });
+    cclass.addEventListener("change", () => cSetSchema(false));
+    $("cexample").addEventListener("click", () => cSetSchema(true));
+    $("cbuild").addEventListener("click", cBuild);
+    cSetSchema(false);
+
+    // ── Logic workbench ────────────────────────────────────────────────────
+    const lpanel = $("lpanel"), lclass = $("lclass"),
+      lerr = $("lerr"), lout = $("lout"), lload = $("lload");
+    let lastPhiComp = "";
+    const lForm = new SpecForm($("lform"), {
+      parseCheck,
+      onChange: (v) => {
+        try { localStorage.setItem(SPEC_KEY("l", lclass.value), JSON.stringify(v)); } catch (_) {}
+        renderSpecPreview(lclass.value, v, $("lprev"));
+      },
+    });
+    const lSetSchema = (useExample) => {
+      lerr.textContent = ""; lout.textContent = ""; lload.hidden = true;
+      let init = null;
+      if (!useExample) {
+        try { init = JSON.parse(localStorage.getItem(SPEC_KEY("l", lclass.value))); } catch (_) {}
+      }
+      if (!init) { try { init = JSON.parse(LSPEC[lclass.value] || "{}"); } catch (_) {} }
+      lForm.setSchema(lclass.value, init);
+    };
+    $("logic").addEventListener("click", () => {
+      if (!lForm.schemaKey) lSetSchema(false);
+      lpanel.hidden = false;
+      lpanel.querySelector(".sf-in,.sf-sel,.sf-add")?.focus();
+    });
+    $("lclose").addEventListener("click", () => { lpanel.hidden = true; });
+    lpanel.addEventListener("click", (e) => { if (e.target === lpanel) lpanel.hidden = true; });
+    lpanel.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") lpanel.hidden = true;
+      else if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); $("lrun").click(); }
+    });
+    lclass.addEventListener("change", () => lSetSchema(false));
+    $("lexample").addEventListener("click", () => lSetSchema(true));
+    lSetSchema(false);
+    lload.addEventListener("click", () => {
+      if (!lastPhiComp) return;
+      lpanel.hidden = true; choicePath = []; loadIntoEditor(lastPhiComp, "");
+    });
+    $("lrun").addEventListener("click", () => {
+      lerr.textContent = ""; lout.innerHTML = ""; lload.hidden = true;
+      const spec = lForm.value();
+      let res;
+      try {
+        if (lclass.value === "ortho") {
+          res = JSON.parse(mod.lc_ortho(spec.phi1 || "", spec.phi2 || ""));
+        } else if (lclass.value === "proofnet") {
+          res = JSON.parse(mod.lc_proofnet(spec.kind || "mll",
+            JSON.stringify({ links: spec.links || [] })));
+        } else if (lclass.value === "compare") {
+          res = JSON.parse(mod.lc_compare(spec.phiA || "", spec.psiA || "",
+            spec.phiB || "", spec.psiB || "", fuelVal()));
+        } else {
+          res = JSON.parse(mod.lc_behaviour(lForm.json()));
+        }
+      } catch (e) { lerr.textContent = "engine error: " + e.message; return; }
+      if (!res.ok) { lerr.textContent = res.error || "failed"; return; }
+
+      lout.textContent = "";
+      const lgrp = (labTxt, node) => {
+        const g = document.createElement("div");
+        g.className = "stx-ex__grp";
+        const l = document.createElement("span");
+        l.className = "stx-obs__lab";
+        l.textContent = labTxt;
+        g.appendChild(l);
+        g.appendChild(node);
+        return g;
+      };
+      const lnote = (t) => {
+        const p = document.createElement("p");
+        p.className = "stx-ex__note";
+        p.textContent = t;
+        return p;
+      };
+      const lrow = (...chips) => {
+        const r = document.createElement("div");
+        r.className = "stx-ex__set";
+        chips.forEach((c) => r.appendChild(c));
+        return r;
+      };
+
+      if (lclass.value === "ortho") {
+        lout.appendChild(lgrp("Φ₁ ⊥ Φ₂ — the three orthogonality relations",
+          lrow(
+            DGM.chip("⊥fin", res.fin ? "ok" : "no", "finite — the interaction normalises"),
+            DGM.chip("⊥1", res.one ? "ok" : "no", "single-component (proof-net ⊥¹)"),
+            DGM.chip("⊥R", res.roots ? "ok" : "no", "root-based (⊥ᴿ)"))));
+        if (spec.phi1) lout.appendChild(DGM.field(spec.phi1, { title: "Φ₁" }));
+        if (spec.phi2) lout.appendChild(DGM.field(spec.phi2, { title: "Φ₂" }));
+      } else if (lclass.value === "proofnet") {
+        lastPhiComp = res.phi || "";
+        lload.hidden = !lastPhiComp;
+        const state = res.verdict === true ? "ok" : res.verdict === false ? "no" : "na";
+        lout.appendChild(lrow(DGM.chip(esc(res.verdict_name) + " criterion", state,
+          res.verdict === true ? "correct" : res.verdict === false ? "not correct" : "not applicable")));
+        lout.appendChild(lnote(res.verdict_note));
+        lout.appendChild(lgrp("proof-structure — your spec · axiom arcs above, cut below",
+          DGM.proofStructure(spec.kind || "mll", spec.links || [])));
+        lout.appendChild(lgrp("Φ_comp (editable, runnable)", DGM.field(res.phi, { title: "Φ_comp" })));
+        if (res.diagrams && res.diagrams.length) {
+          lout.appendChild(lgrp("saturated diagrams",
+            lrow(...res.diagrams.map((d, i) =>
+              DGM.chip(`δ${i} · ${d.vertices}v/${d.edges}e`, d.correct ? "ok" : "no",
+                `${d.connected ? "connected" : "disconnected"}${d.actualised ? " · ↓" + d.actualised : ""}`)))));
+        }
+        lout.appendChild(lnote(res.diag_note));
+      } else if (lclass.value === "compare") {
+        lout.appendChild(lrow(DGM.chip(
+          res.same ? "same observable" : "different observables",
+          res.same ? "ok" : "no",
+          res.same ? "A and B compute the same result" : "A and B diverge")));
+        lout.appendChild(lgrp(`A — ɟ · ω = ${res.omega_a}`, DGM.setField(res.obs_a)));
+        lout.appendChild(lgrp(`B — ɟ · ω = ${res.omega_b}`, DGM.setField(res.obs_b)));
+        lout.appendChild(DGM.tiles([
+          { k: "ω(A)", v: res.omega_a },
+          { k: "ω(B)", v: res.omega_b, tone: "warm" },
+          { k: "Δω", v: res.omega_b - res.omega_a, tone: "cool" },
+        ]));
+      } else {
+        lout.appendChild(lgrp(`bi-orthogonal closure  (⊥${res.orth})`,
+          DGM.closure(res.a, res.a_perp, res.a_biperp, res.is_behaviour)));
+        lout.appendChild(lnote(
+          "A type, in transcendental syntax, is exactly a behaviour: a set fixed by " +
+          "bi-orthogonal closure. Membership of a Φ is orthogonality to every test."));
+      }
     });
 
     const ct = $("copytrace");

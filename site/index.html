@@ -31,6 +31,7 @@
       <a class="site-nav__link is-active" href="index.html">The model</a>
       <a class="site-nav__link" href="r/primer.html">A first reading</a>
       <a class="site-nav__link" href="r/eng-ch8.html">The exegesis</a>
+      <a class="site-nav__link" href="r/internals.html">The engine</a>
       <a class="site-nav__link" href="explore.html">Explore</a>
     </div>
   </nav>
@@ -64,7 +65,7 @@
         <p>
           Stellar resolution comes out of Girard's <em>transcendental syntax</em>: an
           attempt to give logic a foundation in computation rather than the other way
-          round. Its objects are deliberately spare. A <strong>ray</strong> is a first-order
+          round. Its objects are spare. A <strong>ray</strong> is a first-order
           term, optionally carrying a polarity. A <strong>star</strong> is a finite
           collection of rays. A <strong>constellation</strong> is a finite collection of
           stars. Nothing else is primitive.
@@ -160,16 +161,46 @@
       </div>
     </section>
 
-    <section class="section section--tight wrap">
+    <section class="section wrap">
       <div class="section__eyebrow"><img src="assets/stella/glyphs/grove.svg" alt="" /> The engine</div>
+      <h2>And the program that runs it.</h2>
+      <div class="prose-col" style="margin-bottom:24px">
+        <p>
+          <code>stella-core</code> is a Rust implementation of the operational
+          semantics. The engine pages are about that implementation — the techniques
+          that make it fast, the discipline that keeps fast from redefining correct,
+          and one research question that is still open. Every technical claim links to
+          the exact source line it rests on.
+        </p>
+      </div>
+      <div class="index-grid">
+        <a class="entry entry--framed" href="r/internals.html">
+          <div class="entry__eyebrow">The engine</div>
+          <div class="entry__title">How the engine is built</div>
+          <p class="entry__snip">The near-linear unifier, the Σ(Φ) Futamura projection, verified speculation, and the KAM reducer — each anchored to its source line.</p>
+        </a>
+        <a class="entry entry--framed" href="r/visualize.html">
+          <div class="entry__eyebrow">Illustration</div>
+          <div class="entry__title">Watch a step, by hand</div>
+          <p class="entry__snip">A dependency-free animation of one fusion step and one KAM Push / δ step. Illustrative — hand-fed, not the live engine.</p>
+        </a>
+        <a class="entry entry--framed" href="r/measure.html">
+          <div class="entry__eyebrow">Research narrative</div>
+          <div class="entry__title">Measure, don't guess</div>
+          <p class="entry__snip">A conclusion reached, written down, and retracted because the next measurement overruled it. The question is still open; the retraction is the method.</p>
+        </a>
+      </div>
+    </section>
+
+    <section class="section section--tight wrap">
+      <div class="section__eyebrow"><img src="assets/stella/glyphs/star.svg" alt="" /> Interactive</div>
       <h2>Or watch a constellation resolve.</h2>
       <div class="prose-col">
         <p>
-          <code>stella-core</code> is a small Rust implementation of the operational
-          semantics, compiled to WebAssembly and run in the browser. Pick a constellation
-          — a Horn program, an automaton — and step through interactive execution: the
-          dependency graph at each step, the stars, the next pair that will fire.
-          It is a tool, not part of the text; the reading stands without it.
+          The same <code>stella-core</code>, compiled to WebAssembly and run in the
+          browser. Pick a constellation — a Horn program, an automaton — and step
+          through interactive execution: the dependency graph at each step, the stars,
+          the next pair that will fire. It is a tool, not part of the text.
         </p>
         <p style="margin-top:8px">
           <a class="st-btn st-btn--secondary" href="explore.html">Open the explorer</a>
