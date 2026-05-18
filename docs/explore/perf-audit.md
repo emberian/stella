@@ -227,3 +227,31 @@ re-hashing already-interned subterms. A bare lock-free-read would have
 missed (a)/(c). `get(id)` itself is a `Vec` index behind the lock —
 cheap once the lock contention/hashing is addressed. dw3_probe.rs kept
 as reproducible attribution infra (the memory rule: in-repo infra).
+
+---
+
+## WIN-1 LANDED & LIVE-VERIFIED (D-W1, the biggest measured single win)
+
+`3a49c0f` (P1, forensic-harvested, never trusted-on-the-green). The
+per-step `psi_csyms(&Ψ)` O(|Ψ|) rebuild in `iex_fast_inner` is replaced
+by an incrementally-maintained colour **multiset** `PsiCS`
+(interactive.rs:449–545): seeded once, updated only from the per-step
+`−selected`/`+produced` delta. Multiset (count per `Sym`) so removing
+the last bearer of a colour shrinks the set exactly — the audit's
+colour-shrinking hazard, handled.
+
+Measured (agent KS-PROF, binarith add 999999+888888): steps STRICTLY
+IDENTICAL 6594→6594 (the per-step-lever proof); psics phase
+0.40s(81%)→~0(0%); wall ~6.5× (0.51s→0.079s) on `iex_fast`, ~6.2× on
+`iex_spec`. O(steps²)→O(steps). Parent re-confirmed steps=6594 in
+release.
+
+Faithfulness PROVEN by parent in the live tree (not the agent's word —
+the agent SIGTERM'd its own slow debug suite): all 4 iex differential
+gates green IN DEBUG (so the `cfg!(debug_assertions)` per-step
+`PsiCS::assert_eq_full` oracle — incremental == full `psi_csyms`
+rebuild every step — fired across combinator/binarith/Horn) + spec_phi
+5/5 incl. exhaustive galaxy Φ=405 under iex_spec (38 s, every step
+oracle-checked, zero underflow/unaccounted/panic). Byte-identity vs
+reference `iex` holds; the incremental set equals the full rebuild
+step-for-step on every gate corpus including the real 405-star galaxy.
