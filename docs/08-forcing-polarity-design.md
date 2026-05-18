@@ -416,6 +416,39 @@ measurement). The sound instrument for χ work is therefore the
 strongly-normalising trajectory — specificity established) applied to
 the `subjective_stream` trace.
 
+### 4.8 MEASURED — χ Stage-0/1 first run (the instrument exists; χ not yet exhibited) [Measured]
+
+The first past-Eng measurement (`examples/chi_stage01_subjective.rs`,
+read-only):
+
+- **Stage-0 (`is_subjective` §48.7 kill-switch): PASS.** The faithful
+  colour-nesting `ray_is_subjective` *does* fire — Eng's §49.50 query
+  `[−f(+g(Z))]` is a genuine subjective ray at the seed. The
+  forcing≡subjective-ray grounding is **not** falsified (the cheapest
+  decisive kill, audit 03, does not trip).
+- **Stage-1 (calibrated recurrence on the `subjective_stream`
+  χ-locus): measured-negative on canonical fixtures.** Eng's own
+  §49.50 example and a naïve self-feeding variant both:
+  `max subjective rays in any Ψ_k = 1` (only the seed's), first NF at
+  step 1–2, then idle (trace len 400, **distinct = 2–3**; only a
+  degenerate span-1 whistle). Eng's §49.50 new-ray dynamics produce a
+  **transient single** subjective ray that resolves to an *objective*
+  NF (`+g(_)` is objective). **χ — accumulating non-idempotence — is
+  NOT exhibited** by the canonical fixtures. Consistent with §4.7's
+  §49.57 boundary and sharpens it: even at the measured χ-locus the
+  §49.50 example is idempotent-fast.
+
+**Status of the χ programme (honest):** the apparatus now *exists and
+is theorem-calibrated*; Stage-0 holds; and the open question is
+reduced to one concrete target — **does any *faithful* constellation
+sustain non-idempotent subjective dynamics, or is Eng's own
+§49.59–60 flag (whether non-terminating hyperexecution exists at all)
+the actual ceiling?** Next infra: a *sustained-non-idempotent*
+faithful subjective fixture (the canonical §49.50 one is too trivial
+to carry χ). NOT a dead end — a sharp, recorded next question; χ is
+neither confirmed nor refuted, it is *not yet exhibited*, by
+measurement.
+
 ---
 
 ## 5. Staged, differential-oracle-gated implementation plan
