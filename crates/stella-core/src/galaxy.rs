@@ -688,18 +688,26 @@ fn force_value(
     fuel: usize,
     budget: usize,
 ) -> (ForcedValue, usize) {
-    if budget == 0 {
-        return (ForcedValue::Residual, 0);
-    }
     // Memo lookup — ONLY for closed terms (soundness gate, docs/11 §G:
     // an open term's NF depends on ambient substitution; galaxy process
     // terms are var-free so this is the common, sound case). A hit pays
-    // no fuel/budget — the reduction was already performed once.
+    // no fuel/budget — the reduction was already performed once — so it
+    // MUST be consulted *before* the budget-exhaustion bail. The earlier
+    // ordering (budget==0 → Residual *then* memo) discarded an
+    // already-known value precisely at the depth frontier where galaxy's
+    // massively-shared image payload re-enters an already-forced subterm
+    // (KG6c diagnosis) — self-defeating the one lever built for it.
+    // Returning a cached value-identical NF at budget==0 is sound and
+    // strictly more terminating; the budget stop only applies when there
+    // is genuinely no prior result to reuse.
     let cacheable = crate::term::is_ground(term);
     if cacheable {
         if let Some(hit) = FORCE_MEMO.with(|m| m.borrow().get(&term).copied()) {
             return hit;
         }
+    }
+    if budget == 0 {
+        return (ForcedValue::Residual, 0);
     }
     TR_DEPTH.with(|c| c.set(c.get() + 1));
     let f = eval_forced(phi, term, fuel, budget - 1); // strictly smaller
