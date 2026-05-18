@@ -927,6 +927,87 @@ thread_local! {
     // Sub-split of T_FUSE to find the real per-fuse cost (unify vs subst).
     static T_UNIFY: std::cell::Cell<f64> = const { std::cell::Cell::new(0.0) };
     static T_SUBST: std::cell::Cell<f64> = const { std::cell::Cell::new(0.0) };
+    /// docs/16 §3.2 / docs/12 §C.2 H1 tap — redex-FAMILY duplication probe.
+    /// **Pure observation, behaviour-preserving.** At every committed
+    /// resolution step `iex_fast_inner` pushes `(head_sym, canonical_redex)`
+    /// of the *selected* redex here *iff a measurement harness installed a
+    /// sink* (`h1_tap_begin`). The pair is `(spine_head(focus), canonical of
+    /// the whole selected star)`: the head names the resolvable rule (the
+    /// harness classifies it Splice `s/b/c/…` vs Delta `:N` vs other against
+    /// Φ); the canonical `TermId` is the α-equivalence key for the
+    /// distinct-vs-duplicated redex-family count. Production and the test
+    /// suite never install one ⇒ `None` ⇒ a single branch, byte-identical to
+    /// the un-instrumented `iex_fast`. The reference `iex` path is untouched.
+    static H1_TAP: std::cell::RefCell<Option<H1Sink>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// H1 redex-family tap sink: a capped log of `(resolved-head,
+/// α-canonical-redex)` pairs. The `cap` keeps the harness self-bounding —
+/// recording becomes a cheap no-op once `cap` redexes are seen, so the
+/// measurement is over a *bounded prefix* of the reduction (the H1
+/// duplicated/distinct ratio is a property of that prefix at increasing
+/// depth — exactly the docs/16 §3.2 metric — and does not require running
+/// the divergent `data[0]` reduction to completion).
+pub struct H1Sink {
+    log: Vec<(crate::term::SymName, crate::term::TermId)>,
+    cap: usize,
+}
+
+/// Install a fresh H1 redex-family tap sink (docs/16 §3.2), capped at `cap`
+/// recorded redexes (after which recording is a cheap no-op — the harness's
+/// self-bounding mechanism). Measurement harnesses only — see [`H1_TAP`].
+/// The reference/`iex_fast`/production paths never call this ⇒ the tap
+/// stays `None` ⇒ behaviour-identical.
+pub fn h1_tap_begin(cap: usize) {
+    H1_TAP.with(|t| {
+        *t.borrow_mut() = Some(H1Sink {
+            log: Vec::new(),
+            cap,
+        })
+    });
+}
+/// Take the accumulated `(resolved-head, canonical-redex)` log (in
+/// resolution order, truncated at the cap) and clear the sink.
+pub fn h1_tap_take() -> Vec<(crate::term::SymName, crate::term::TermId)> {
+    H1_TAP.with(|t| t.borrow_mut().take().map(|s| s.log).unwrap_or_default())
+}
+/// Has the installed sink reached its cap? (`false` if no sink.) Lets a
+/// harness stop a rung's `eval_forced` early once enough redexes are
+/// observed — keeping each rung wall-bounded without touching the engine.
+pub fn h1_tap_capped() -> bool {
+    H1_TAP.with(|t| {
+        t.borrow()
+            .as_ref()
+            .map(|s| s.log.len() >= s.cap)
+            .unwrap_or(false)
+    })
+}
+
+/// `M` inside a `±P(st(M, π))` ray, then its KAM spine head atom (the
+/// resolvable head — exactly `galaxy::spine_head`'s leftmost atom). Pure
+/// read; used only by the H1 tap. `None` if the ray is not a process ray
+/// or the focus has no atom head (a var/strict shape).
+fn h1_resolved_head(ray: crate::term::TermId) -> Option<crate::term::SymName> {
+    use crate::term::{get, TermData};
+    let TermData::App(p, pa) = get(ray) else { return None };
+    if p.name.as_str() != "P" || pa.len() != 1 {
+        return None;
+    }
+    let TermData::App(s2, sa) = get(pa[0]) else { return None };
+    if s2.name.as_str() != "st" || sa.len() != 2 {
+        return None;
+    }
+    // Leftmost spine atom of the focus `M` (KAM head; mirrors
+    // `galaxy::spine_head` exactly — `a(_,_)` left-descent to an atom).
+    let mut t = sa[0];
+    loop {
+        match get(t) {
+            TermData::App(s, args) if s.name.as_str() == "a" && args.len() == 2 => t = args[0],
+            TermData::App(s, args) if args.is_empty() => return Some(s.name),
+            _ => return None,
+        }
+    }
 }
 
 #[inline(always)]
@@ -1315,6 +1396,24 @@ fn iex_fast_inner(
             }
             Some((i, j)) => {
                 let selected = psi.remove(i);
+                // docs/16 §3.2 H1 tap: record the resolved head + the
+                // α-canonical key of this redex. No-op (one `with` + `is_none`
+                // branch) unless a measurement harness installed the sink ⇒
+                // byte-identical to un-instrumented `iex_fast`. Observation
+                // only; never alters `selected`, `psi`, or the step.
+                H1_TAP.with(|t| {
+                    let mut b = t.borrow_mut();
+                    if let Some(sink) = b.as_mut() {
+                        if sink.log.len() < sink.cap {
+                            if let Some(h) = h1_resolved_head(selected[j]) {
+                                let canon = crate::antiunify::canonical(
+                                    crate::term::mk_app_str("\u{22c6}redex", selected.clone()),
+                                );
+                                sink.log.push((h, canon));
+                            }
+                        }
+                    }
+                });
                 let produced =
                     produce_stars_fast(accel, phi, &selected, j, &mut counter, &psi_cs, spec);
                 if tabling {
