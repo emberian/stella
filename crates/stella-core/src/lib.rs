@@ -46,6 +46,7 @@ pub mod unify_fast;
 pub mod spec_phi;
 pub mod viz;
 pub mod omega_weight;
+pub mod chi;
 
 #[cfg(test)]
 mod engine_tests;
