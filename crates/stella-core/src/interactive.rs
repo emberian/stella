@@ -80,7 +80,7 @@ use crate::polarised::{matchable, matchable_fast, ray_polarity, underlying_term,
 use crate::subst::{freshen, Substitution};
 use crate::term::{get, mk_app, mk_var_interned, Term, TermData, Var};
 use crate::unify::{unify, Equation};
-use crate::index::RayIndex;
+use crate::index::DiscIndex;
 use crate::spec_phi::{spec_star, SelPhi, Transition as SpecTr};
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::HashSet;
@@ -250,16 +250,21 @@ fn mat_self(star: &Star, j: usize) -> Vec<usize> {
 //
 // FAITHFULNESS: `mat_phi_c_accel` returns the **identical** `Vec<(i,j)>` as the
 // reference `mat_phi_c` (same set, same order). Justification:
-//  * `RayIndex::build(phi, all_colours(phi))` keeps *every* App ray of Φ — each
-//    Φ-ray's own colours ⊆ all_colours(phi) trivially, so the build-time
-//    colour filter never drops a Φ ray.
-//  * Every `mat_phi_c` match is necessarily in the single `partner_key` bucket
-//    (matchable ⇒ same SymName, opposite/neutral polarity); `id_rays` order
-//    makes each bucket (i,j)-ascending — `mat_phi_c`'s full scan only ever
-//    pushes from that same bucket in that same order.
+//  * `DiscIndex::build(phi, all_colours(phi))` keeps *every* App ray of Φ
+//    (same ray set / key / `id_rays` order as `RayIndex::build` — it is a
+//    pure refinement of the head bucket) — each Φ-ray's own colours ⊆
+//    all_colours(phi) trivially, so the build-time colour filter never
+//    drops a Φ ray.
+//  * `DiscIndex::for_each_candidate` visits a **superset** of the
+//    `partner_key`-bucket rays that are `matchable` with the query (the
+//    discrimination tree only rejects rays *provably* non-unifiable by
+//    first-order term structure — variables never prune; fuzz-proven
+//    `disc_superset_of_matchable_fuzz` + the N-KS gate). So every
+//    `mat_phi_c` match is still visited; the per-candidate `matchable_fast`
+//    (unchanged) remains the sole decider — same match set.
 //  * The exact same per-ray filters (neutral skip, `cr ⊆ c_set`,
-//    `crj ⊆ c_set`, `matchable`) are re-applied here; `sort_unstable` is a
-//    defensive guarantee of identical order.
+//    `crj ⊆ c_set`, `matchable`) are re-applied here; `sort_unstable`
+//    restores the canonical (i,j) order regardless of trie visit order.
 // The reference engine (`iex`/`mat_phi_c`/`interaction_step`) is left UNTOUCHED
 // as the differential oracle (spec §8 N-KS): see `iex_fast` equivalence tests.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -280,7 +285,17 @@ fn ray_csym(r: Term) -> Option<crate::term::Sym> {
 /// `phi_csyms` is `all_colours(phi)` as an interned-`Sym` set (bijective with
 /// the `String` display-names) — built once, queried `O(1)`, zero allocation.
 pub struct IexAccel {
-    idx: RayIndex,
+    /// Discrimination (substitution) tree over Φ's pattern rays
+    /// (perf #4 / strategic-map C-#1). Replaces the head/colour
+    /// [`RayIndex`] in the per-step candidate scan: it sub-divides each
+    /// already-correct `partner_key` head bucket by first-order argument
+    /// structure, so a resolvable head yields ≈1 candidate instead of the
+    /// whole δ-bucket. Faithful by construction — the visited set is a
+    /// **superset** of the matchable set (`index.rs` module gate +
+    /// `disc_superset_of_matchable_fuzz`); `matchable_fast` stays the sole
+    /// decider. `RayIndex` remains in `index.rs` as the oracle reference
+    /// (`DepGraph::build_indexed`, oracle-equiv tests).
+    idx: DiscIndex,
     phi_csyms: FxHashSet<crate::term::Sym>,
     /// Σ(Φ) residual, parallel to `phi` by star index: the precomputed
     /// closed [`SpecTr`] + its negative-ray index for each specialisable
@@ -303,7 +318,7 @@ impl IexAccel {
         let phi_colours = all_colours(phi);
         // c = all_colours(phi) ⇒ every App ray of Φ is retained (its own
         // colours ⊆ all_colours(phi) by construction).
-        let idx = RayIndex::build(phi, &phi_colours);
+        let idx = DiscIndex::build(phi, &phi_colours);
         let mut phi_csyms = FxHashSet::default();
         for star in phi {
             for &ray in star {
@@ -346,15 +361,20 @@ fn mat_phi_c_accel(
         _ => return Vec::new(),
     };
     let mut result: Vec<(usize, usize)> = Vec::new();
-    for &(i, j) in accel.idx.candidates(name, pol) {
+    // Disc-tree visits a SUPERSET of the matchable `partner_key`-bucket
+    // rays (index.rs gate); `fp_unifiable`+`matchable_fast` stay the sole
+    // decider, so the accepted set is identical to the old full-bucket
+    // scan. `sort_unstable` restores canonical (i,j) order regardless of
+    // trie visit order.
+    accel.idx.for_each_candidate(name, pol, r, |(i, j)| {
         let ray = phi[i][j];
         if ray_polarity(ray) == Polarity::Neutral {
-            continue;
+            return;
         }
         if fp_unifiable(r, ray) && matchable_fast(r, ray) {
             result.push((i, j));
         }
-    }
+    });
     result.sort_unstable();
     result
 }
@@ -381,19 +401,30 @@ fn any_match_accel(
         TermData::App(sym, _) => (sym.name, sym.pol),
         _ => return false,
     };
-    for &(i, j) in accel.idx.candidates(name, pol) {
+    // Existence-only: stop deciding once a match is found. The disc-tree
+    // visits a SUPERSET of the matchable bucket rays (index.rs gate), so
+    // `found` becomes true on exactly the same condition as the old
+    // full-bucket early-exit scan — same boolean, fewer `matchable_fast`
+    // calls. (`for_each_candidate` keeps visiting after `found`, but the
+    // residual visits are a cheap `Polarity`/branch — no `matchable_fast`,
+    // no `T_MATCH` time — so the measured matchable phase still shrinks.)
+    let mut found = false;
+    accel.idx.for_each_candidate(name, pol, r, |(i, j)| {
+        if found {
+            return;
+        }
         let ray = phi[i][j];
         if ray_polarity(ray) == Polarity::Neutral {
-            continue;
+            return;
         }
         let tm = std::time::Instant::now();
         let m = fp_unifiable(r, ray) && matchable_fast(r, ray);
         ks_add(&T_MATCH, tm.elapsed());
         if m {
-            return true;
+            found = true;
         }
-    }
-    false
+    });
+    found
 }
 
 /// Sound one-level argument-discrimination pre-filter for `matchable`.
