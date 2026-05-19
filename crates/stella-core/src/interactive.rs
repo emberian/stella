@@ -515,7 +515,7 @@ fn any_match_accel_in(
                 }
             }
         }
-        let tm = std::time::Instant::now();
+        let tm = kst::now();
         let m = fp_unifiable(r, ray) && matchable_fast(r, ray);
         ks_add(&T_MATCH, tm.elapsed());
         if m {
@@ -746,12 +746,12 @@ fn fuse_theta_with(
 ) -> Option<(Star, Substitution)> {
     let r1 = underlying_term(phi1[j]);
     let r2 = underlying_term(phi2_renamed[j_prime]);
-    let tun = std::time::Instant::now();
+    let tun = kst::now();
     let theta = solve(vec![Equation::new(r1, r2)]);
     ks_add(&T_UNIFY, tun.elapsed());
     let theta = theta?;
 
-    let tsb = std::time::Instant::now();
+    let tsb = kst::now();
     let mut result: Star = phi1
         .iter()
         .enumerate()
@@ -1433,6 +1433,41 @@ fn h1_resolved_head(ray: crate::term::TermId) -> Option<crate::term::SymName> {
     }
 }
 
+// KS perf-instrumentation clock. The KS/KG timing accumulators (`T_*`,
+// fed via `ks_add`) are a *native-only diagnostic* — gated by `KS_PROF`
+// (off by default) and never read by reduction/`psi`/byte-identity.
+// `wasm32-unknown-unknown` has no clock: `std::time::Instant::now()`
+// panics there ("time not implemented"), compiling to a wasm
+// `unreachable` trap that kills the in-browser engine on its first
+// interaction step. `kst` keeps the native path *byte-identical*
+// (literally the same `Instant`) while making the wasm timer inert —
+// it reads zero, the honest statement of "no clock on this target".
+// Semantics are provably unchanged on both targets (timing only ever
+// flows into the `T_*` `Cell<f64>`s, never into a control decision).
+#[cfg(not(target_arch = "wasm32"))]
+mod kst {
+    pub type Stamp = std::time::Instant;
+    #[inline(always)]
+    pub fn now() -> Stamp {
+        std::time::Instant::now()
+    }
+}
+#[cfg(target_arch = "wasm32")]
+mod kst {
+    #[derive(Clone, Copy)]
+    pub struct Stamp;
+    impl Stamp {
+        #[inline(always)]
+        pub fn elapsed(&self) -> std::time::Duration {
+            std::time::Duration::ZERO
+        }
+    }
+    #[inline(always)]
+    pub fn now() -> Stamp {
+        Stamp
+    }
+}
+
 #[inline(always)]
 fn ks_add(slot: &'static std::thread::LocalKey<std::cell::Cell<f64>>, dt: std::time::Duration) {
     if *KS_PROF {
@@ -1609,10 +1644,10 @@ fn produce_stars_fast(
                 }
             }
         }
-        let tf = std::time::Instant::now();
+        let tf = kst::now();
         let phi_star_renamed = alpha_rename_star_fast(&phi[ik], counter);
         ks_add(&T_FRESH, tf.elapsed());
-        let tu = std::time::Instant::now();
+        let tu = kst::now();
         // Fast tier (iex_fast/iex_tabled): the near-linear unifier. The
         // reference iex path keeps `fuse`/`unify` — this is the entire
         // accelerated-vs-reference seam (docs/09 §C, exactly 2 call sites).
@@ -1882,7 +1917,7 @@ fn iex_fast_inner(
     }
 
     while steps < fuel {
-        let tp = std::time::Instant::now();
+        let tp = kst::now();
         // Faithfulness oracle (debug-only; compiled out of release): the
         // incrementally-maintained set MUST equal the full `psi_csyms`
         // rebuild on *every* step — proven, not argued (task gate #2).
@@ -1897,7 +1932,7 @@ fn iex_fast_inner(
             _ => 0,
         };
 
-        let ts = std::time::Instant::now();
+        let ts = kst::now();
         let mut found_step = None;
         'outer: for i in start..psi.len() {
             let star = &psi[i];
