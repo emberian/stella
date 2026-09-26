@@ -23,6 +23,9 @@ env:
   # introduced refactor-orphans are still deleted at source, not allowed to rot.
   RUSTFLAGS: -D warnings -A dead_code
 
+permissions:
+  contents: read
+
 jobs:
   test:
     name: build + test + clippy
