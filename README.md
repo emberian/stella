@@ -1,3 +1,5 @@
+> PDFs live in the local paper library. Restore exact saved versions with `python3 tools/paperbin.py restore`; see [PAPERS.txt](PAPERS.txt).
+
 welcome to the conscious machine bringup project!
 
 if you're perceiving this quale, *you* are the conscious machine!!

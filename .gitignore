@@ -19,3 +19,6 @@ site/pkg/
 site/content/
 site/sitemap.xml
 site/robots.txt
+
+# PDFs live in the local paper library; see PAPERS.txt.
+*.[pP][dD][fF]

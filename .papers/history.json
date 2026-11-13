@@ -1,0 +1,130 @@
+[
+  {
+    "repo": "stella",
+    "oid": "e2b6946e447a7e792dad8f0ffd79e58863f9f8ea",
+    "sha256": "3457d087eddd61dcf898ac89151d8f66e26622ca70b163aa3a4a108847dcc3b9",
+    "bytes": 5008269,
+    "library_path": "repo-rescue-2026-11-13/papers/3457d087eddd61dc--AutodidacticUniverse.pdf",
+    "valid_pdf": true,
+    "reused_existing_library_copy": true,
+    "original_paths": [
+      "refs/originals/AutodidacticUniverse.pdf"
+    ],
+    "observed_commits": [
+      "6cb5da468bd006591127362d42ca5f383311dbda",
+      "ad1b194e82ee86e4991bb83d53f6752d312f15ee"
+    ]
+  },
+  {
+    "repo": "stella",
+    "oid": "6478811c5b568489a80e9c2198fe59644b3d1ce4",
+    "sha256": "4961ba791d10dcbcb24c9f02a73dfdbec19b8039760a0791a6781b12049be45b",
+    "bytes": 6688319,
+    "library_path": "repo-rescue-2026-11-13/papers/4961ba791d10dcbc--ConsciousMachines.pdf",
+    "valid_pdf": true,
+    "reused_existing_library_copy": true,
+    "original_paths": [
+      "refs/originals/ConsciousMachines.pdf"
+    ],
+    "observed_commits": [
+      "6cb5da468bd006591127362d42ca5f383311dbda",
+      "ad1b194e82ee86e4991bb83d53f6752d312f15ee"
+    ]
+  },
+  {
+    "repo": "stella",
+    "oid": "4767162f50012f8e6677e76630b4474cc21fb5ff",
+    "sha256": "b8f00e505138fb9b8eb4217839ca85cddd1cbe2e0a7ffc7ed3735c956fb73209",
+    "bytes": 3978879,
+    "library_path": "repo-rescue-2026-11-13/papers/b8f00e505138fb9b--EngExegesis.pdf",
+    "valid_pdf": true,
+    "reused_existing_library_copy": false,
+    "original_paths": [
+      "refs/originals/EngExegesis.pdf"
+    ],
+    "observed_commits": [
+      "6cb5da468bd006591127362d42ca5f383311dbda",
+      "ad1b194e82ee86e4991bb83d53f6752d312f15ee"
+    ]
+  },
+  {
+    "repo": "stella",
+    "oid": "0c153df4680419ec7175bc7ba05ba5cc70b220c2",
+    "sha256": "3f7c2d315c740430423dca74eb55990e0165f130e5d2f9c5bc8b35b077518b1a",
+    "bytes": 2846518,
+    "library_path": "repo-rescue-2026-11-13/papers/3f7c2d315c740430--PainfulIntelligence.pdf",
+    "valid_pdf": true,
+    "reused_existing_library_copy": true,
+    "original_paths": [
+      "refs/originals/PainfulIntelligence.pdf"
+    ],
+    "observed_commits": [
+      "6cb5da468bd006591127362d42ca5f383311dbda",
+      "ad1b194e82ee86e4991bb83d53f6752d312f15ee"
+    ]
+  },
+  {
+    "repo": "stella",
+    "oid": "190f1b7b34d6832ab250763bbe22fc97583adfcd",
+    "sha256": "b3a94db2d3622bde09137b52145b44e10f8649484a86d7ff10bb08c5b15b05d6",
+    "bytes": 319831,
+    "library_path": "repo-rescue-2026-11-13/papers/b3a94db2d3622bde--ProofProducingReflection.pdf",
+    "valid_pdf": true,
+    "reused_existing_library_copy": false,
+    "original_paths": [
+      "refs/originals/ProofProducingReflection.pdf"
+    ],
+    "observed_commits": [
+      "6cb5da468bd006591127362d42ca5f383311dbda",
+      "ad1b194e82ee86e4991bb83d53f6752d312f15ee"
+    ]
+  },
+  {
+    "repo": "stella",
+    "oid": "4c890f769aa0230273241f3a4383320360e4f7ac",
+    "sha256": "ae6559582ac2adf962efce935fd77228f2f0ed3770d4334fd604611608f6b764",
+    "bytes": 632224,
+    "library_path": "repo-rescue-2026-11-13/papers/ae6559582ac2adf9--SelfFormalization.pdf",
+    "valid_pdf": true,
+    "reused_existing_library_copy": false,
+    "original_paths": [
+      "refs/originals/SelfFormalization.pdf"
+    ],
+    "observed_commits": [
+      "6cb5da468bd006591127362d42ca5f383311dbda",
+      "ad1b194e82ee86e4991bb83d53f6752d312f15ee"
+    ]
+  },
+  {
+    "repo": "stella",
+    "oid": "5993c0e04eac7603ab7ca350e2a04671b14f7f6d",
+    "sha256": "db3ce390088a858d327b2ce3ed67ab90f6fc4124efc4eaffc164c0849e8a6f78",
+    "bytes": 421685,
+    "library_path": "repo-rescue-2026-11-13/papers/db3ce390088a858d--TranscendentalForLinearLogician.pdf",
+    "valid_pdf": true,
+    "reused_existing_library_copy": false,
+    "original_paths": [
+      "refs/originals/TranscendentalForLinearLogician.pdf"
+    ],
+    "observed_commits": [
+      "6cb5da468bd006591127362d42ca5f383311dbda",
+      "ad1b194e82ee86e4991bb83d53f6752d312f15ee"
+    ]
+  },
+  {
+    "repo": "stella",
+    "oid": "52d8ee8ac1627c1211e9986a062bc518c2f4fc23",
+    "sha256": "89351dbcff6fdb6dacc43283ba5d4bd003336a1d872a095601cd6adfd3d55cfe",
+    "bytes": 108391,
+    "library_path": "repo-rescue-2026-11-13/papers/89351dbcff6fdb6d--transcendental_syntax.pdf",
+    "valid_pdf": true,
+    "reused_existing_library_copy": false,
+    "original_paths": [
+      "refs/originals/transcendental_syntax.pdf"
+    ],
+    "observed_commits": [
+      "6cb5da468bd006591127362d42ca5f383311dbda",
+      "ad1b194e82ee86e4991bb83d53f6752d312f15ee"
+    ]
+  }
+]
